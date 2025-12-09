@@ -1,0 +1,6 @@
+[submodule "ext/C-sharp-console-gui-framework"]
+	path = ext/C-sharp-console-gui-framework
+	url = https://github.com/allisterb/C-sharp-console-gui-framework.git
+[submodule "ext/spectre.console"]
+	path = ext/spectre.console
+	url = https://github.com/spectreconsole/spectre.console.git
