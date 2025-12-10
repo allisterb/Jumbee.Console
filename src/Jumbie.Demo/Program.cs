@@ -9,7 +9,7 @@ using Spectre.Console;
 using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
-class Program
+class Program : IInputListener
 {
     static void Main(string[] args)
     {
@@ -26,7 +26,7 @@ class Program
         table.AddRow("Spectre.Console", "Widgets & Styling", "[green]Integrated[/]");
         table.AddRow("ConsoleGUI", "Layout & Windowing", "[blue]Integrated[/]");
         table.AddRow("Jumbie", "The Bridge", "[bold red]Working![/]");
-        table.Border(TableBorder.Rounded);
+        table.Border(TableBorder.Double);
         table.Expand();
 
         // Wrap it in our control
@@ -49,7 +49,7 @@ class Program
             FillingControl = new DockPanel
             {
                 Placement = DockPanel.DockedControlPlacement.Bottom,
-                DockedControl = new TextBlock { Text = "Press Ctrl+C to exit" },
+                DockedControl = new TextBlock { Text = "Press any key to exit" },
                 FillingControl = new Margin
                 {
                     Offset = new Offset(2, 1, 2, 1),
@@ -68,16 +68,25 @@ class Program
 
                             // Just dummy input reading to keep window responsive if controls used it
 
-                            //ConsoleManager.ReadInput(new IInputListener[] { });
+                            ConsoleManager.ReadInput([new InputListener()]);
 
                             Thread.Sleep(50);
 
                         }
 
                     }
+    public void OnInput(InputEvent inputEvent) => Environment.Exit(0);
 
-                }
+}
 
-                
+public class InputListener : IInputListener
+{
+    public void OnInput(InputEvent inputEvent)
+    {
+        Environment.Exit(0);    
+    }
+}
 
-        
+
+
+    

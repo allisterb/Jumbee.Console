@@ -81,18 +81,16 @@ public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
                 
                 if (c == '\r') continue;
 
+                var width = c.ToString().GetCellWidth();
+                if (width <= 0) continue; // Skip zero-width chars
+
                 var position = new Position(_cursorX, _cursorY);
                 if (IsValidPosition(position))
                 {
                     _console.Write(position, new Character(c, fg, bg));
                 }
                 
-                _cursorX++;
-                if (_cursorX >= _console.Size.Width)
-                {
-                    _cursorX = 0;
-                    _cursorY++;
-                }
+                _cursorX += width;
             }
         }
     }
