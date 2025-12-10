@@ -10,6 +10,7 @@ using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 using ConsoleGuiColor = ConsoleGUI.Data.Color;
 using LayoutGrid = ConsoleGUI.Controls.Grid;
+using Jumbie.Console.Prompts;
 
 class Program
 {
@@ -17,11 +18,9 @@ class Program
     {
         // Setup ConsoleGUI
         ConsoleManager.Setup();
-        // Resize to a large enough area to hold our grid
         ConsoleManager.Resize(new ConsoleGuiSize(120, 40));
 
         // --- Spectre.Console Controls ---
-
         // 1. Table
         var table = new Table();
         table.Title("[bold yellow]Jumbie Console[/]");
@@ -51,14 +50,24 @@ class Program
         var quux = root.AddNode("Quux");
         quux.AddNode("Corgi");
         
-        // --- Wrap them ---
-        // Note: We don't need to specify size here, SpectreWidgetControl should adapt to container.
+        // --- Wrap Spectre.Console Controls for ConsoleGUI ---
         var tableControl = new SpectreWidgetControl(table);
         var chartControl = new SpectreWidgetControl(barChart);
         var treeControl = new SpectreWidgetControl(root);
 
-        // --- ConsoleGUI Layout ---
+        // --- ConsoleGUI Controls ---
+        // The TextBlock to echo input to
+        var infoTextBlock = new TextBlock { Text = "Spectre + ConsoleGUI = <3" };
+
+        // The TextPrompt control
+        var prompt = new ConsoleGuiTextPrompt<string>("[yellow]What is your name?[/]");
         
+        prompt.Committed += (sender, name) => 
+        {
+            infoTextBlock.Text = $"Hello, [green]{name}[/]!"; // Use Spectre markup for echo
+        };
+        
+        // --- ConsoleGUI Layout ---
         // Use a Grid for layout
         var grid = new LayoutGrid
         {
@@ -74,34 +83,16 @@ class Program
             }
         };
 
-        // Top Left: Table (0,0)
-        grid.AddChild(0, 0, new Margin 
-        { 
-            Offset = new Offset(1, 1, 1, 1), 
-            Content = tableControl 
-        });
-
-        // Top Right: Tree (1,0)
-        grid.AddChild(1, 0, new Margin 
-        { 
-            Offset = new Offset(1, 1, 1, 1), 
-            Content = treeControl 
-        });
-
-        // Bottom Left: Bar Chart (0,1)
-        grid.AddChild(0, 1, new Margin 
-        { 
-            Offset = new Offset(1, 1, 1, 1), 
-            Content = chartControl 
-        });
-
-        // Bottom Right: Info (1,1)
-        grid.AddChild(1, 1, new Box
-        {
-            HorizontalContentPlacement = Box.HorizontalPlacement.Center,
-            VerticalContentPlacement = Box.VerticalPlacement.Center,
-            Content = new TextBlock { Text = "Spectre + ConsoleGUI = <3" }
-        });
+        // Add controls to grid
+        //grid.AddChild(0, 0, new Margin { Offset = new Offset(1, 1, 1, 1), Content = tableControl }); // Top Left
+        //grid.AddChild(1, 0, new Margin { Offset = new Offset(1, 1, 1, 1), Content = treeControl });  // Top Right
+        grid.AddChild(0, 1, new Margin { Offset = new Offset(1, 1, 1, 1), Content = prompt }); // Bottom Left
+        //grid.AddChild(1, 1, new Box // Bottom Right
+        //{
+        //    HorizontalContentPlacement = Box.HorizontalPlacement.Center,
+        //    VerticalContentPlacement = Box.VerticalPlacement.Center,
+        //    Content = infoTextBlock
+        //});
 
         // Main Layout with DockPanel
         var mainLayout = new DockPanel
@@ -120,12 +111,15 @@ class Program
             FillingControl = new DockPanel
             {
                 Placement = DockPanel.DockedControlPlacement.Bottom,
-                DockedControl = new TextBlock { Text = "Press any key to exit..." },
-                FillingControl = new Background
+                DockedControl = new Margin // Prompt at the bottom
                 {
-                    Color = new ConsoleGuiColor(10, 10, 10), // Dark gray background for grid
-                    Content = grid 
-                }
+                    Offset = new Offset(2, 0, 2, 1),
+                    Content = infoTextBlock
+                },
+                FillingControl = new Background // Grid fills the rest
+                {
+                    Color = new ConsoleGuiColor(10, 10, 10),
+                    Content = prompt                }
             }
         };
 
@@ -134,7 +128,7 @@ class Program
         // Main loop
         while (true)
         {
-            ConsoleManager.ReadInput([new InputListener()]);
+            ConsoleManager.ReadInput([prompt]);
             Thread.Sleep(50);
         }
     }
@@ -142,5 +136,11 @@ class Program
 
 public class InputListener : IInputListener
 {
-    public void OnInput(InputEvent inputEvent) => Environment.Exit(0);    
+    public void OnInput(InputEvent inputEvent)
+    {
+        if (!inputEvent.Handled)
+        {
+            Environment.Exit(0);
+        }
+    }
 }
