@@ -31,7 +31,6 @@ namespace Jumbie.Console.Prompts
         private int _inputStartX = 0;
         private int _inputStartY = 0;
         
-        private Timer? _cursorBlinkTimer;
         private bool _blinkState = true;
 
         public event EventHandler<T>? Committed;
@@ -59,22 +58,25 @@ namespace Jumbie.Console.Prompts
             DefaultValue = new DefaultPromptValue<T>(value);
         }
 
-        public ConsoleGuiTextPrompt(string prompt, StringComparer? comparer = null)
+        public ConsoleGuiTextPrompt(string prompt, StringComparer? comparer = null, bool enableCursorBlink = false)
         {
             _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
             _comparer = comparer;
             _bufferConsole = new BufferConsole();
             _ansiConsole = new ConsoleGuiAnsiConsole(_bufferConsole);
             
-            _cursorBlinkTimer = new Timer(OnCursorBlink, null, 500, 500);
+            if (enableCursorBlink)
+            {
+                ConsoleGuiTimer.Tick += OnCursorBlink;
+                ConsoleGuiTimer.Start();
+            }
         }
         
-        private void OnCursorBlink(object? state)
+        private void OnCursorBlink(object? sender, EventArgs e)
         {
             lock (_lock)
             {
                 _blinkState = !_blinkState;
-                // Only redraw if we are actually showing cursor, to avoid unnecessary updates
                 if (ShowCursor)
                 {
                     Redraw();
@@ -84,8 +86,7 @@ namespace Jumbie.Console.Prompts
 
         public void Dispose()
         {
-            _cursorBlinkTimer?.Dispose();
-            _cursorBlinkTimer = null;
+            ConsoleGuiTimer.Tick -= OnCursorBlink;
         }
 
         public override Cell this[Position position]
@@ -209,10 +210,7 @@ namespace Jumbie.Console.Prompts
                 
                 // Reset blink state on input
                 _blinkState = true;
-                if (_cursorBlinkTimer != null)
-                {
-                    _cursorBlinkTimer.Change(500, 500);
-                }
+                // Note: We cannot reset the global timer easily, but resetting blink state is usually enough.
 
                 switch (inputEvent.Key.Key)
                 {

@@ -14,7 +14,6 @@ namespace Jumbie.Console.Controls
         private readonly object _lock = new object();
         private readonly BufferConsole _bufferConsole;
         private readonly ConsoleGuiAnsiConsole _ansiConsole;
-        private Timer? _timer;
         
         private Spinner _spinner = Spinner.Known.Default;
         private Style _style = Style.Plain;
@@ -71,7 +70,8 @@ namespace Jumbie.Console.Controls
                 _isRunning = true;
                 _lastUpdate = DateTime.UtcNow;
                 _accumulated = TimeSpan.Zero;
-                _timer = new Timer(OnTick, null, 50, 50);
+                ConsoleGuiTimer.Tick += OnTick;
+                ConsoleGuiTimer.Start();
                 Render();
             }
         }
@@ -80,10 +80,10 @@ namespace Jumbie.Console.Controls
         {
              lock(_lock)
              {
+                 if (!_isRunning) return;
                  _isRunning = false;
-                 _timer?.Dispose();
-                 _timer = null;
-                 Render(); // Render static state
+                 ConsoleGuiTimer.Tick -= OnTick;
+                 Render();
              }
         }
 
@@ -92,7 +92,7 @@ namespace Jumbie.Console.Controls
             Stop();
         }
 
-        private void OnTick(object? state)
+        private void OnTick(object? sender, EventArgs e)
         {
             lock(_lock)
             {
@@ -143,23 +143,17 @@ namespace Jumbie.Console.Controls
 
         private void Render()
         {
-            // Assumes lock is held
             if (Size.Width <= 0 || Size.Height <= 0) return;
             
             _ansiConsole.Clear(true);
             
             var frame = _spinner.Frames[_frameIndex % _spinner.Frames.Count];
-            
-            // Render Frame
-            // We use Markup for frame? SpinnerColumn uses frame.EscapeMarkup() + Style.
-            // _ansiConsole.Markup allows us to apply style easily.
             var frameMarkup = $"[{_style.ToMarkup()}]{Markup.Escape(frame)}[/]";
             _ansiConsole.Markup(frameMarkup);
             
-            // Render Text
             if (!string.IsNullOrEmpty(_text))
             {
-                _ansiConsole.Write(" "); // Spacer
+                _ansiConsole.Write(" ");
                 _ansiConsole.Markup(_text);
             }
             
