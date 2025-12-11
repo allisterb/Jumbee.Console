@@ -67,7 +67,7 @@ class Program
         spinner.Start();
 
         // The TextPrompt control
-        var prompt = new ConsoleGuiTextPrompt<string>("[yellow]What is your name?[/]");
+        var prompt = new ConsoleGuiTextPrompt<string>("[yellow]What is your name?[/]", enableCursorBlink: true);
         prompt.Committed += (sender, name) => 
         {
             spinner.Text = $"Hello, [blue]{name}[/]!";
@@ -134,6 +134,9 @@ class Program
         };
         */
         ConsoleManager.Content = grid;
+
+        // Start the global animation timer
+        ConsoleGuiTimer.Start();
 
         // Main loop
         while (true)

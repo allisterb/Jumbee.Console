@@ -11,6 +11,7 @@ namespace Jumbie.Console.Controls
 {
     public class ConsoleGuiSpinner : Control, IDisposable
     {
+        private static readonly Cell _emptyCell = new Cell(Character.Empty);
         private readonly BufferConsole _bufferConsole;
         private readonly ConsoleGuiAnsiConsole _ansiConsole;
         
@@ -70,7 +71,6 @@ namespace Jumbie.Console.Controls
                 _lastUpdate = DateTime.UtcNow;
                 _accumulated = TimeSpan.Zero;
                 ConsoleGuiTimer.Tick += OnTick;
-                ConsoleGuiTimer.Start();
                 Render();
             }
         }
@@ -93,28 +93,21 @@ namespace Jumbie.Console.Controls
 
         private void OnTick(object? sender, ConsoleGuiTimerEventArgs e)
         {
-            if (Monitor.TryEnter(e.LockObject))
+            lock (e.LockObject)
             {
-                try
+                if (!_isRunning) return;
+                
+                var now = DateTime.UtcNow;
+                var delta = now - _lastUpdate;
+                _lastUpdate = now;
+                
+                _accumulated += delta;
+                
+                if (_accumulated >= _spinner.Interval)
                 {
-                    if (!_isRunning) return;
-                    
-                    var now = DateTime.UtcNow;
-                    var delta = now - _lastUpdate;
-                    _lastUpdate = now;
-                    
-                    _accumulated += delta;
-                    
-                    if (_accumulated >= _spinner.Interval)
-                    {
-                        _accumulated = TimeSpan.Zero;
-                        _frameIndex = (_frameIndex + 1) % _spinner.Frames.Count;
-                        Render();
-                    }
-                }
-                finally
-                {
-                    Monitor.Exit(e.LockObject);
+                    _accumulated = TimeSpan.Zero;
+                    _frameIndex = (_frameIndex + 1) % _spinner.Frames.Count;
+                    Render();
                 }
             }
         }
@@ -125,8 +118,8 @@ namespace Jumbie.Console.Controls
             {
                 lock(ConsoleGuiTimer.AnimationLock)
                 {
-                    if (_bufferConsole.Buffer == null) return new Cell(Character.Empty);
-                    if (position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height) return new Cell(Character.Empty);
+                    if (_bufferConsole.Buffer == null) return _emptyCell;
+                    if (position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height) return _emptyCell;
                     return _bufferConsole.Buffer[position.X, position.Y];
                 }
             }
@@ -146,7 +139,6 @@ namespace Jumbie.Console.Controls
                 Render();
             }
         }
-
 
         private void Render()
         {

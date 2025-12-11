@@ -49,18 +49,7 @@ namespace Jumbie.Console
         {
             if (Monitor.TryEnter(AnimationLock))
             {
-                try
-                {
-                    // We don't hold the lock while firing events to avoid deadlocks if subscribers take time.
-                    // But we ensure the lock is *available* before firing.
-                    // However, we immediately release it.
-                    // The subscribers will then try to acquire it.
-                }
-                finally
-                {
-                    Monitor.Exit(AnimationLock);
-                }
-
+                Monitor.Exit(AnimationLock);
                 Tick?.Invoke(null, new ConsoleGuiTimerEventArgs(AnimationLock));
             }
         }

@@ -67,25 +67,17 @@ namespace Jumbie.Console.Prompts
             if (enableCursorBlink)
             {
                 ConsoleGuiTimer.Tick += OnCursorBlink;
-                ConsoleGuiTimer.Start();
             }
         }
         
         private void OnCursorBlink(object? sender, ConsoleGuiTimerEventArgs e)
         {
-            if (Monitor.TryEnter(e.LockObject))
+            lock (e.LockObject)
             {
-                try
+                _blinkState = !_blinkState;
+                if (ShowCursor)
                 {
-                    _blinkState = !_blinkState;
-                    if (ShowCursor)
-                    {
-                        Redraw();
-                    }
-                }
-                finally
-                {
-                    Monitor.Exit(e.LockObject);
+                    Redraw();
                 }
             }
         }
@@ -95,13 +87,17 @@ namespace Jumbie.Console.Prompts
             ConsoleGuiTimer.Tick -= OnCursorBlink;
         }
 
+        private static readonly Cell _emptyCell = new Cell(Character.Empty);
+        private static readonly ConsoleGUI.Data.Color _cursorBackgroundColor = new ConsoleGUI.Data.Color(100, 100, 100);
+        private static readonly Cell _cursorEmptyCell = new Cell(' ').WithBackground(_cursorBackgroundColor);
+
         public override Cell this[Position position]
         {
             get
             {
                 lock (ConsoleGuiTimer.AnimationLock)
                 {
-                    Cell cell = new Cell(Character.Empty);
+                    Cell cell = _emptyCell;
                     if (_bufferConsole.Buffer != null && 
                         position.X >= 0 && position.X < Size.Width && 
                         position.Y >= 0 && position.Y < Size.Height)
@@ -116,9 +112,9 @@ namespace Jumbie.Console.Prompts
                     {
                         if (cell.Content == null || cell.Content == '\0')
                         {
-                             return new Cell(' ').WithBackground(new ConsoleGUI.Data.Color(100, 100, 100));
+                             return _cursorEmptyCell;
                         }
-                        return cell.WithBackground(new ConsoleGUI.Data.Color(100, 100, 100));
+                        return cell.WithBackground(_cursorBackgroundColor);
                     }
 
                     return cell;
