@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
-namespace Jumbie.Console.Prompts;
+namespace Jumbee.Console.Prompts;
 
 internal static class TypeConverterHelper
 {

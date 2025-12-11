@@ -6,7 +6,7 @@ using ConsoleGUI.Space;
 using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
-namespace Jumbie.Console;
+namespace Jumbee.Console;
 
 public class SpectreWidgetControl : Control
 {

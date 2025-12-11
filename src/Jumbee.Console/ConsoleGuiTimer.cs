@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace Jumbie.Console
+namespace Jumbee.Console
 {
     public class ConsoleGuiTimerEventArgs : EventArgs
     {

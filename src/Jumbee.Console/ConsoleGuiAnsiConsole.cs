@@ -9,7 +9,7 @@ using ConsoleGUI.Space;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace Jumbie.Console;
+namespace Jumbee.Console;
 
 public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
 {

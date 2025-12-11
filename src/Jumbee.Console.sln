@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36603.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbie.Console", "Jumbie.Console\Jumbie.Console.csproj", "{7B6E8F93-BF85-49B1-AC10-0B325BBC3E0A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console", "Jumbee.Console\Jumbee.Console.csproj", "{7B6E8F93-BF85-49B1-AC10-0B325BBC3E0A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External", "External", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 EndProject
@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleGUI", "..\ext\C-shar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Spectre.Console", "..\ext\spectre.console\src\Spectre.Console\Spectre.Console.csproj", "{5D091ADC-734A-965F-1D1B-E1B33540D2D6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbie.Console.TestDemo", "Jumbie.Console.TestDemo\Jumbie.Console.TestDemo.csproj", "{6FE2DE0E-97C9-4486-B664-90E8B45BC4CD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.TestDemo", "Jumbee.Console.TestDemo\Jumbee.Console.TestDemo.csproj", "{6FE2DE0E-97C9-4486-B664-90E8B45BC4CD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

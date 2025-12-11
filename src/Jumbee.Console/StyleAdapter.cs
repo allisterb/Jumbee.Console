@@ -1,7 +1,7 @@
 using Spectre.Console;
 using ConsoleGUIColor = ConsoleGUI.Data.Color;
 
-namespace Jumbie.Console;
+namespace Jumbee.Console;
 
 internal static class StyleAdapter
 {

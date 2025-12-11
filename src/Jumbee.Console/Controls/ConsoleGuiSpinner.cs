@@ -5,9 +5,9 @@ using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using Spectre.Console;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
-using Jumbie.Console;
+using Jumbee.Console;
 
-namespace Jumbie.Console.Controls
+namespace Jumbee.Console.Controls
 {
     public class ConsoleGuiSpinner : Control, IDisposable
     {

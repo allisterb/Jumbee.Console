@@ -13,9 +13,9 @@ using ConsoleGUI.Space;
 using ConsoleGUI.Utils;
 using Spectre.Console;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
-using Jumbie.Console;
+using Jumbee.Console;
 
-namespace Jumbie.Console.Prompts
+namespace Jumbee.Console.Prompts
 {
     public class ConsoleGuiTextPrompt<T> : Control, IInputListener, IDisposable
     {

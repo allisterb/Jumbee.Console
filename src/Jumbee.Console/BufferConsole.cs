@@ -4,7 +4,7 @@ using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
-namespace Jumbie.Console;
+namespace Jumbee.Console;
 
 internal class BufferConsole : IConsole
 {

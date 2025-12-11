@@ -4,14 +4,14 @@ using ConsoleGUI;
 using ConsoleGUI.Controls;
 using ConsoleGUI.Space;
 using ConsoleGUI.Input;
-using Jumbie.Console;
+using Jumbee.Console;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 using ConsoleGuiColor = ConsoleGUI.Data.Color;
 using LayoutGrid = ConsoleGUI.Controls.Grid;
-using Jumbie.Console.Prompts;
-using Jumbie.Console.Controls;
+using Jumbee.Console.Prompts;
+using Jumbee.Console.Controls;
 
 class Program
 {
@@ -24,13 +24,13 @@ class Program
         // --- Spectre.Console Controls ---
         // 1. Table
         var table = new Table();
-        table.Title("[bold yellow]Jumbie Console[/]");
+        table.Title("[bold yellow]Jumbee Console[/]");
         table.AddColumn("Library");
         table.AddColumn("Role");
         table.AddColumn("Status");
         table.AddRow("Spectre.Console", "Widgets & Styling", "[green]Integrated[/]");
         table.AddRow("ConsoleGUI", "Layout & Windowing", "[blue]Integrated[/]");
-        table.AddRow("Jumbie", "The Bridge", "[bold red]Working![/]");
+        table.AddRow("Jumbee", "The Bridge", "[bold red]Working![/]");
         table.Border(TableBorder.Rounded);
 
         // 2. Bar Chart
@@ -114,7 +114,7 @@ class Program
                 {
                     HorizontalContentPlacement = Box.HorizontalPlacement.Center,
                     VerticalContentPlacement = Box.VerticalPlacement.Center,
-                    Content = new TextBlock { Text = "Jumbie Console Advanced Demo - Grid Layout" }
+                    Content = new TextBlock { Text = "Jumbee Console Advanced Demo - Grid Layout" }
                 }
             },
             FillingControl = new DockPanel
