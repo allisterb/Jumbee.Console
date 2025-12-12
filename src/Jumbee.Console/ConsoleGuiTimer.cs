@@ -5,11 +5,11 @@ namespace Jumbee.Console
 {
     public class ConsoleGuiTimerEventArgs : EventArgs
     {
-        public object LockObject { get; }
+        public readonly object Lock;
 
         public ConsoleGuiTimerEventArgs(object lockObject)
         {
-            LockObject = lockObject;
+            Lock = lockObject;
         }
     }
 

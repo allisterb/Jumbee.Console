@@ -31,7 +31,7 @@ class Program
         table.AddRow("Spectre.Console", "Widgets & Styling", "[green]Integrated[/]");
         table.AddRow("ConsoleGUI", "Layout & Windowing", "[blue]Integrated[/]");
         table.AddRow("Jumbee", "The Bridge", "[bold red]Working![/]");
-        table.Border(TableBorder.Rounded);
+        table.Border(TableBorder.DoubleEdge);
 
         // 2. Bar Chart
         var barChart = new BarChart()
@@ -86,53 +86,18 @@ class Program
             Rows = new[]
             {
                 new LayoutGrid.RowDefinition(15),
-                new LayoutGrid.RowDefinition(20)
+                new LayoutGrid.RowDefinition(20),
+                new LayoutGrid.RowDefinition(40)
             }
         };
 
         // Add controls to grid
         grid.AddChild(0, 1, new Margin { Offset = new Offset(1, 1, 1, 1), Content = prompt }); // Top Left
         grid.AddChild(0, 0, new Margin { Offset = new Offset(1, 1, 1, 1), Content = spinner });  // Top Right
-        //grid.AddChild(0, 1, new Margin { Offset = new Offset(1, 1, 1, 1), Content = chartControl }); // Bottom Left
-        /*
-        grid.AddChild(1, 1, new Box // Bottom Right
-        {
-            HorizontalContentPlacement = Box.HorizontalPlacement.Center,
-            VerticalContentPlacement = Box.VerticalPlacement.Center,
-            Content = spinner
-        });
-        */
-        // Main Layout with DockPanel
-        /*
-        var mainLayout = new DockPanel
-        {
-            Placement = DockPanel.DockedControlPlacement.Top,
-            DockedControl = new Background
-            {
-                Color = new ConsoleGuiColor(0, 0, 100),
-                Content = new Box
-                {
-                    HorizontalContentPlacement = Box.HorizontalPlacement.Center,
-                    VerticalContentPlacement = Box.VerticalPlacement.Center,
-                    Content = new TextBlock { Text = "Jumbee Console Advanced Demo - Grid Layout" }
-                }
-            },
-            FillingControl = new DockPanel
-            {
-                Placement = DockPanel.DockedControlPlacement.Bottom,
-                DockedControl = new Margin // Prompt at the bottom
-                {
-                    Offset = new Offset(2, 0, 2, 1),
-                    Content = prompt
-                },
-                FillingControl = new Background // Grid fills the rest
-                {
-                    Color = new ConsoleGuiColor(10, 10, 10),
-                    Content = grid 
-                }
-            }
-        };
-        */
+        grid.AddChild(1, 0, new Margin { Offset = new Offset(1, 1, 1, 1), Content = chartControl }); // Bottom Left
+        grid.AddChild(1, 1, new Margin { Offset = new Offset(1, 1, 1, 1), Content = tableControl }); // Bottom Left
+        grid.AddChild(1, 2, new Margin { Offset = new Offset(1, 1, 1, 1), Content = treeControl }); // Bottom Left
+        
         ConsoleManager.Content = grid;
 
         // Start the global animation timer

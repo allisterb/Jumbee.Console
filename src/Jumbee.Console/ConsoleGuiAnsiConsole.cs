@@ -1,28 +1,20 @@
+namespace Jumbee.Console;
+
 using System;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
 using ConsoleGUI.Api;
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace Jumbee.Console;
-
 public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
 {
-    private readonly IConsole _console;
-    private readonly ConsoleGuiCursor _cursor;
-    private readonly ConsoleGuiInput _input;
-    private readonly ConsoleGuiExclusivityMode _exclusivityMode;
-    private readonly RenderPipeline _pipeline;
-    private readonly Profile _profile;
-
-    private int _cursorX;
-    private int _cursorY;
-
+    #region Constructors
     public ConsoleGuiAnsiConsole(IConsole console)
     {
         _console = console ?? throw new ArgumentNullException(nameof(console));
@@ -43,6 +35,9 @@ public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
         _cursorY = 0;
     }
 
+    #endregion
+
+    #region Properties
     public Profile Profile => _profile;
     public IAnsiConsoleCursor Cursor => _cursor;
     public IAnsiConsoleInput Input => _input;
@@ -51,7 +46,9 @@ public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
     
     internal int CursorX => _cursorX;
     internal int CursorY => _cursorY;
+    #endregion
 
+    #region Methods
     public void Clear(bool home)
     {
         _console.Initialize(); 
@@ -119,6 +116,19 @@ public class ConsoleGuiAnsiConsole : IAnsiConsole, IDisposable
         return position.X >= 0 && position.X < _console.Size.Width &&
                position.Y >= 0 && position.Y < _console.Size.Height;
     }
+    #endregion
+
+    #region Fields
+    private readonly IConsole _console;
+    private readonly ConsoleGuiCursor _cursor;
+    private readonly ConsoleGuiInput _input;
+    private readonly ConsoleGuiExclusivityMode _exclusivityMode;
+    private readonly RenderPipeline _pipeline;
+    private readonly Profile _profile;
+
+    private int _cursorX;
+    private int _cursorY;
+    #endregion
 }
 
 internal class ConsoleGuiOutput : IAnsiConsoleOutput

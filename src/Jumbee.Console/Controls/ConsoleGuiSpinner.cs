@@ -93,7 +93,7 @@ namespace Jumbee.Console.Controls
 
         private void OnTick(object? sender, ConsoleGuiTimerEventArgs e)
         {
-            lock (e.LockObject)
+            lock (e.Lock)
             {
                 if (!_isRunning) return;
                 

@@ -1,17 +1,21 @@
+namespace Jumbee.Console;
+
 using System;
 using ConsoleGUI.Api;
+
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
-namespace Jumbee.Console;
-
 internal class BufferConsole : IConsole
 {
+    #region Properties
     public Cell[,]? Buffer { get; private set; }
     public ConsoleGuiSize Size { get; set; }
     public bool KeyAvailable => false;
+    #endregion
 
+    #region Methods
     public void Initialize()
     {
         if (Buffer != null)
@@ -46,4 +50,5 @@ internal class BufferConsole : IConsole
         Buffer = new Cell[size.Width, size.Height];
         Initialize();
     }
+    #endregion
 }

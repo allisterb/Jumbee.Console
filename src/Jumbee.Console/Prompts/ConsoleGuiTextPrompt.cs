@@ -72,7 +72,7 @@ namespace Jumbee.Console.Prompts
         
         private void OnCursorBlink(object? sender, ConsoleGuiTimerEventArgs e)
         {
-            lock (e.LockObject)
+            lock (e.Lock)
             {
                 _blinkState = !_blinkState;
                 if (ShowCursor)

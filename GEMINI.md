@@ -29,10 +29,16 @@ Your output must be a well-formatted markdown response containing two distinct s
 
 NOTE: If in plan mode, do not implement the plan. You are only allowed to plan. Confirmation comes from a user message.
 
-# Jumbee.Console project
+# About this project
 The project Jumbee.Console at @src/Jumbee.Console is a .NET library for building advanced console user interfaces. It is intended to be a combination of the layout and windowing features from the retained-mode ConsoleGUI library at @ext/C-sharp-console-gui-framework/ConsoleGUI/  
-and the styling and formatting and widget features and controls from the immediate-mode Spectre.Console library at @ext/spectre.console/src/Spectre.Console. The initial plan created a bridge between the two libraries by implementing IAnsiConsole from Spectre.Console in
-the ConsoleGuiAnsiConsole class to store Spectre.Console control output instead of writing it to the console immediately, and a SpectreWidgetControl class for wrapping Spectre.Console controls to be used with ConsoleGUI layout and windows.
+and the styling and formatting and widget features and controls from the immediate-mode Spectre.Console library at @ext/spectre.console/src/Spectre.Console. 
+
+The initial plan created a bridge between the two libraries by implementing IAnsiConsole from Spectre.Console in the ConsoleGuiAnsiConsole class to store Spectre.Console control output instead of writing it to the console immediately, 
+and a SpectreWidgetControl class for wrapping Spectre.Console controls as ConsoleGUI IControls to be used with ConsoleGUI layout and windows.
+
+Support for animated controls was added by using a single background thread running a timer that fires events at regular intervals that animated controls use to update
+their state. Drawing conflicts and deadlocks are mitigated by using a single lock object that gets passed to all animated controls in timer events to synchronize access to their internal state
+so that they can be properly updated and drawn by ConsoleGUI. Timer events are only raised when the lock is not held by any control.
 
 ## Coding instructions:
 - When generating new C# code, please follow the existing coding style.
@@ -43,5 +49,5 @@ the ConsoleGuiAnsiConsole class to store Spectre.Console control output instead 
 
 ## Coding Style:
 - Use 2 spaces for indentation.
-- Use camel-case for method and property names. Begin method names with a verb and capital letter.
-- Use camel-case for class fields. Beging field-names with lower-case letters and avoid using underscores.
+- Use camel-case for method and property names. Method and property names should begin with a capital letter.
+- Use camel-case for class fields. Field names should begin with lower-case letters and avoid using underscores.
