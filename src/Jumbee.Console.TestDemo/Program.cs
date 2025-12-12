@@ -9,6 +9,7 @@ using Spectre.Console;
 using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 using ConsoleGuiColor = ConsoleGUI.Data.Color;
+using SpectreColor = Spectre.Console.Color;
 using LayoutGrid = ConsoleGUI.Controls.Grid;
 using Jumbee.Console.Prompts;
 using Jumbee.Console.Controls;
@@ -38,9 +39,9 @@ class Program
             .Width(50)
             .Label("[green bold]Activity[/]")
             .CenterLabel()
-            .AddItem("Planning", 12, Color.Yellow)
-            .AddItem("Coding", 54, Color.Green)
-            .AddItem("Testing", 33, Color.Red);
+            .AddItem("Planning", 12, SpectreColor.Yellow)
+            .AddItem("Coding", 54, SpectreColor.Green)
+            .AddItem("Testing", 33, SpectreColor.Red);
 
         // 3. Tree
         var root = new Tree("Root");
@@ -52,9 +53,9 @@ class Program
         quux.AddNode("Corgi");
         
         // --- Wrap Spectre.Console Controls for ConsoleGUI ---
-        var tableControl = new SpectreControl(table);
-        var chartControl = new SpectreControl(barChart);
-        var treeControl = new SpectreControl(root);
+        var tableControl = new SpectreControl<Spectre.Console.Table>(table);
+        var chartControl = new SpectreControl<Spectre.Console.BarChart>(barChart);
+        var treeControl = new SpectreControl<Spectre.Console.Tree>(root);
 
         // --- ConsoleGUI Controls ---
         // Spinner

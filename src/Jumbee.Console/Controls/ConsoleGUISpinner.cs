@@ -13,7 +13,7 @@ namespace Jumbee.Console.Controls
     {
         private static readonly Cell _emptyCell = new Cell(Character.Empty);
         private readonly BufferConsole _bufferConsole;
-        private readonly ConsoleGUIAnsiConsole _ansiConsole;
+        private readonly AnsiConsoleBuffer _ansiConsole;
         
         private Spinner _spinner = Spinner.Known.Default;
         private Style _style = Style.Plain;
@@ -28,7 +28,7 @@ namespace Jumbee.Console.Controls
         public ConsoleGuiSpinner()
         {
             _bufferConsole = new BufferConsole();
-            _ansiConsole = new ConsoleGUIAnsiConsole(_bufferConsole);
+            _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
         }
 
         public Spinner Spinner 

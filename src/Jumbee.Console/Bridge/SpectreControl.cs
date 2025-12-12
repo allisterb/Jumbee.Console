@@ -11,24 +11,24 @@ using ConsoleGuiSize = ConsoleGUI.Space.Size;
 using ConsoleGUIColor = ConsoleGUI.Data.Color;
 using SpectreConsoleColor = Spectre.Console.Color;
 
-public class SpectreControl : Control
+public class SpectreControl<T> : Control where T : IRenderable
 {   
     #region Constructors
-    public SpectreControl(IRenderable content)
+    public SpectreControl(T control)
     {
-        _content = content ?? throw new ArgumentNullException(nameof(content));
+        _control = control;
         _bufferConsole = new BufferConsole();
-        _ansiConsole = new ConsoleGUIAnsiConsole(_bufferConsole);
+        _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
     }
     #endregion
 
     #region Properties
     public IRenderable Content 
     {
-        get => _content;
+        get => _control;
         set 
         {
-            _content = value;
+            _control = value;
             Redraw();
         }
     }
@@ -74,24 +74,14 @@ public class SpectreControl : Control
         _ansiConsole.Clear(true);
         // We probably want to render with the full width of the control
         // Spectre will look at the Profile.Width which comes from the IConsole.Size (BufferConsole.Size)
-        _ansiConsole.Write(_content);
-    }
-
-    public static ConsoleGUIColor? ToConsoleColor(SpectreConsoleColor color)
-    {
-        if (color == SpectreConsoleColor.Default)
-        {
-            return null;
-        }
-
-        return new ConsoleGUIColor(color.R, color.G, color.B);
+        _ansiConsole.Write(_control);
     }
     #endregion
 
     #region Fields
     private readonly BufferConsole _bufferConsole;
-    private readonly ConsoleGUIAnsiConsole _ansiConsole;
-    private IRenderable _content;
+    private readonly AnsiConsoleBuffer _ansiConsole;
+    private IRenderable _control;
     private static readonly Cell _emptyCell = new Cell(Character.Empty);
     #endregion
 }

@@ -12,10 +12,13 @@ using ConsoleGUI.Space;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-public class ConsoleGUIAnsiConsole : IAnsiConsole, IDisposable
+/// <summary>
+/// An implementation of Spectre.Console.IAnsiConsole that writes to a BufferConsole.
+/// </summary>
+public class AnsiConsoleBuffer : IAnsiConsole, IDisposable
 {
     #region Constructors
-    public ConsoleGUIAnsiConsole(IConsole console)
+    public AnsiConsoleBuffer(IConsole console)
     {
         _console = console ?? throw new ArgumentNullException(nameof(console));
         _cursor = new ConsoleGUICursor(this);
@@ -67,8 +70,8 @@ public class ConsoleGUIAnsiConsole : IAnsiConsole, IDisposable
             if (segment.IsControlCode) continue;
 
             var style = segment.Style;
-            var fg = SpectreControl.ToConsoleColor(style.Foreground);
-            var bg = SpectreControl.ToConsoleColor(style.Background);
+            var fg = Color.ToConsoleGUIColor(style.Foreground);
+            var bg = Color.ToConsoleGUIColor(style.Background);
 
             foreach (char c in segment.Text)
             {
@@ -147,9 +150,9 @@ internal class ConsoleGUIOutput : IAnsiConsoleOutput
 
 internal class ConsoleGUICursor : IAnsiConsoleCursor
 {
-    private readonly ConsoleGUIAnsiConsole _parent;
+    private readonly AnsiConsoleBuffer _parent;
 
-    public ConsoleGUICursor(ConsoleGUIAnsiConsole parent) => _parent = parent;
+    public ConsoleGUICursor(AnsiConsoleBuffer parent) => _parent = parent;
 
     public void Show(bool show) { } // StandardConsole manages this partially, but we might not have control via IConsole interface easily without casting. StandardConsole hides it by default.
 
