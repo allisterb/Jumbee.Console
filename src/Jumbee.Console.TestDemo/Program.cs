@@ -1,3 +1,5 @@
+namespace Jumbee.Console.TestDemo;
+
 using System;
 using System.Threading;
 
@@ -6,9 +8,8 @@ using ConsoleGUI.Controls;
 using ConsoleGUI.Space;
 using ConsoleGUI.Input;
 using Jumbee.Console;
-using Jumbee.Console.Controls;
+
 using Spectre.Console;
-using Spectre.Console.Rendering;
 using Jumbee.Console.Prompts;
 
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
@@ -39,7 +40,7 @@ class Program
         table.Border(TableBorder.DoubleEdge);
 
         // 2. Bar Chart
-        var barChart = new Jumbee.Console.Controls.BarChart()
+        var barChart = new Jumbee.Console.BarChart()
             .AddItem("Planning", 12, SpectreColor.Yellow)
             .AddItem("Coding", 54, SpectreColor.Green)
             .AddItem("Testing", 33, SpectreColor.Red);

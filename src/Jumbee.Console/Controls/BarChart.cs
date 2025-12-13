@@ -1,4 +1,4 @@
-namespace Jumbee.Console.Controls;
+namespace Jumbee.Console;
 
 using System;
 using System.Collections.Generic;
@@ -6,9 +6,7 @@ using Spectre.Console;
 
 public class BarChart : SpectreControl<Spectre.Console.BarChart>
 {
-    public BarChart() : base(new Spectre.Console.BarChart())
-    {
-    }
+    public BarChart() : base(new Spectre.Console.BarChart()) {}
 
     public int? Width
     {
@@ -16,7 +14,7 @@ public class BarChart : SpectreControl<Spectre.Console.BarChart>
         set
         {
             Content.Width = value;
-            RequestRender();
+            Invalidate();
         }
     }
 
@@ -26,7 +24,7 @@ public class BarChart : SpectreControl<Spectre.Console.BarChart>
         set
         {
             Content.Label = value;
-            RequestRender();
+            Invalidate();
         }
     }
     
@@ -36,7 +34,7 @@ public class BarChart : SpectreControl<Spectre.Console.BarChart>
         set
         {
             Content.LabelAlignment = value ? Justify.Center : Justify.Left;
-            RequestRender();
+            Invalidate();
         }
     }
 

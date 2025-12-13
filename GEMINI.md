@@ -38,7 +38,12 @@ and a SpectreControl class for wrapping Spectre.Console controls as ConsoleGUI I
 
 Support for animated controls was added by using a single background thread started by the UIUpdate class running a timer that fires Tick events at regular intervals that animated controls use to update
 their state. Drawing conflicts during updates are mitigated by using a single lock object that gets passed to all animated controls in Tick events to synchronize access to their internal state
-so that they can be properly updated and drawn by ConsoleGUI. Tick events are only raised when the lock is not held by any control.
+so that they can be properly rendered and drawn by ConsoleGUI. Tick events are only raised when the lock is not held by any control.
+
+## SpectreControl class
+The SpectreControl class is a generic class that wraps a Spectre.Console IRenderable control as a ConsoleGUI IControl. It uses the AnsiConsoleBuffer to render the Spectre control to a buffer, 
+which is used by ConsoleGUI to draw the control to the console screen.
+When deriving from this class, any public properties or methods that change the visual state of the control should call the Invalidate() method to notify ConsoleGUI that the control needs to be re-rendered.
 
 ## Coding instructions:
 - When generating new C# code, please follow the existing coding style.
