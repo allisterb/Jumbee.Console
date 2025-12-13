@@ -44,6 +44,7 @@ so that they can be properly rendered and drawn by ConsoleGUI. Tick events are o
 The SpectreControl class is a generic class that wraps a Spectre.Console IRenderable control as a ConsoleGUI IControl. It uses the AnsiConsoleBuffer to render the Spectre control to a buffer, 
 which is used by ConsoleGUI to draw the control to the console screen.
 When deriving from this class, any public properties or methods that change the visual state of the control should call the Invalidate() method to notify ConsoleGUI that the control needs to be re-rendered.
+*Do not acquire the UIUpdate lock in public properties or methods* 
 
 ## Coding instructions:
 - When generating new C# code, please follow the existing coding style.

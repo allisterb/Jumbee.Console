@@ -10,7 +10,7 @@ using ConsoleGuiSize = ConsoleGUI.Space.Size;
 /// <summary>
 /// A ConsoleGUI.IConsole implementation that writes to a buffer.
 /// </summary>
-public class BufferConsole : IConsole
+public class ConsoleBuffer : IConsole
 {
     #region Properties
     public Cell[,]? Buffer { get; private set; }

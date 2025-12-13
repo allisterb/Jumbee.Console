@@ -11,11 +11,12 @@ using Spectre.Console.Rendering;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
 /// <summary>
-/// Wraps a Spectre IRenderable control for use with ConsoleGUI layout types. 
-/// Uses an @AnsiConsoleBuffer to render the control to a buffer.
-/// Public property setters that affect a control's visual state should request a re-render on the next UI update tick.
-/// The control is rendered to a buffer on each UI update tick if an update has been requested.
+/// Wraps a Spectre <see cref="IRenderable"/> control for use with ConsoleGUI layout types. 
 /// </summary>
+/// <remarks>
+/// Uses an <see cref="AnsiConsoleBuffer"/> to render the control to a buffer.
+/// Public property setters and methods that affect a control's visual state should call <see cref="Invalidate"/> to request a re-render on the next UI update tick.
+/// </remarks>
 /// <typeparam name="T"></typeparam>
 public class SpectreControl<T> : Control, IDisposable where T : IRenderable
 {
@@ -23,7 +24,7 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
     public SpectreControl(T content)
     {
         _content = content;
-        _bufferConsole = new BufferConsole();
+        _bufferConsole = new ConsoleBuffer();
         _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
         UIUpdate.Tick += OnTick;
     }
@@ -36,7 +37,7 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
         set 
         {
             _content = value;
-            Interlocked.Increment(ref _rendersRequested);
+            Invalidate();
         }
     }
     #endregion
@@ -148,7 +149,7 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
     #endregion
 
     #region Fields
-    private readonly BufferConsole _bufferConsole;
+    private readonly ConsoleBuffer _bufferConsole;
     private readonly AnsiConsoleBuffer _ansiConsole;
     private T _content;
     private uint _rendersRequested;

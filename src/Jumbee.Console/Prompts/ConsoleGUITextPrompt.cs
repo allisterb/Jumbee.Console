@@ -26,7 +26,7 @@ public class ConsoleGUITextPrompt<T> : Control, IInputListener, IDisposable wher
     {
         _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
         _comparer = comparer;
-        _bufferConsole = new BufferConsole();
+        _bufferConsole = new ConsoleBuffer();
         _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
 
         if (enableCursorBlink)
@@ -319,7 +319,7 @@ public class ConsoleGUITextPrompt<T> : Control, IInputListener, IDisposable wher
     #region Fields
     private readonly string _prompt;
     private readonly StringComparer? _comparer;
-    private readonly BufferConsole _bufferConsole;
+    private readonly ConsoleBuffer _bufferConsole;
     private readonly AnsiConsoleBuffer _ansiConsole;
 
     private string _input = string.Empty;

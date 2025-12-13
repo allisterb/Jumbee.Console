@@ -120,7 +120,7 @@ class Program
             var newTesting = (double)random.Next(20, 40);
 
             // Update existing items using the bulk-update indexer
-            barChart["Planning", "Coding", "Testing"] = new[] { newPlanning, newCoding, newTesting };
+            barChart["Planning", "Coding", "Testing"] = [newPlanning, newCoding, newTesting];
 
         }, null, 0, 100);
 
