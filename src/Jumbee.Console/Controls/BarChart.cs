@@ -1,5 +1,6 @@
 namespace Jumbee.Console.Controls;
 
+using System;
 using System.Collections.Generic;
 using Spectre.Console;
 
@@ -91,6 +92,50 @@ public class BarChart : SpectreControl<Spectre.Console.BarChart>
             else
             {
                 newChart.Data.Add(new BarChartItem(label, value, null));
+            }
+            Content = newChart;
+        }
+    }
+
+    public double[] this[params string[] labels]
+    {
+        get
+        {
+            var values = new double[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                var label = labels[i];
+                var item = Content.Data.Find(item => item.Label == label);
+                if (item == null) throw new KeyNotFoundException($"Item with label '{label}' not found.");
+                values[i] = item.Value;
+            }
+            return values;
+        }
+        set
+        {
+            if (labels.Length != value.Length)
+            {
+                throw new ArgumentException("The number of values must match the number of labels.");
+            }
+
+            var newChart = CloneContent();
+            newChart.Data.AddRange(Content.Data);
+
+            for (int i = 0; i < labels.Length; i++)
+            {
+                var label = labels[i];
+                var val = value[i];
+                var index = newChart.Data.FindIndex(item => item.Label == label);
+
+                if (index != -1)
+                {
+                    var oldItem = newChart.Data[index];
+                    newChart.Data[index] = new BarChartItem(label, val, oldItem.Color);
+                }
+                else
+                {
+                    newChart.Data.Add(new BarChartItem(label, val, null));
+                }
             }
             Content = newChart;
         }

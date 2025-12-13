@@ -114,14 +114,12 @@ class Program
         var chartTimer = new Timer(_ => 
         {
             // The SpectreControl.Content setter will acquire the lock internally
-            var newPlanning = random.Next(10, 30);
-            var newCoding = random.Next(40, 70);
-            var newTesting = random.Next(20, 40);
+            var newPlanning = (double)random.Next(10, 30);
+            var newCoding = (double)random.Next(40, 70);
+            var newTesting = (double)random.Next(20, 40);
 
-            // Update existing items using the indexer
-            barChart["Planning"] = newPlanning;
-            barChart["Coding"] = newCoding;
-            barChart["Testing"] = newTesting;
+            // Update existing items using the bulk-update indexer
+            barChart["Planning", "Coding", "Testing"] = new[] { newPlanning, newCoding, newTesting };
 
         }, null, 0, 100);
 
