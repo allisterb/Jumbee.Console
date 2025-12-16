@@ -19,7 +19,7 @@ using Spectre.Console;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 using Jumbee.Console;
 
-public class TextPrompt<T> : Control, IInputListener, IDisposable where T : IConvertible
+public class TextPrompt<T> : ConsoleGUI.Common.Control, IInputListener, IDisposable where T : IConvertible
 {
     #region Constructors
     public TextPrompt(string prompt, bool enableCursorBlink = false, StringComparer ? comparer = null)

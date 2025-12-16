@@ -42,16 +42,16 @@ public class Spinner : AnimatedControl
     {
         if (Size.Width <= 0 || Size.Height <= 0) return;
 
-        _ansiConsole.Clear(true);
+        ansiConsole.Clear(true);
 
         var frame = _spinner.Frames[frameIndex % _spinner.Frames.Count];
         var frameMarkup = $"[{_style.ToMarkup()}]{Markup.Escape(frame)}[/]";
-        _ansiConsole.Markup(frameMarkup);
+        ansiConsole.Markup(frameMarkup);
 
         if (!string.IsNullOrEmpty(_text))
         {
-            _ansiConsole.Write(" ");
-            _ansiConsole.Markup(_text);
+            ansiConsole.Write(" ");
+            ansiConsole.Markup(_text);
         }   
     }
     #endregion

@@ -24,7 +24,7 @@ public enum BorderStyle
 /// <summary>
 /// Draws a border around a control.
 /// </summary>
-public sealed class Border : Control, IDrawingContextListener
+public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener
 {
     #region Constructors
     public Border(IControl content, BorderStyle borderStyle, Color? fgColor = null, Color? bgColor = null)

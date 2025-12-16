@@ -18,15 +18,15 @@ using ConsoleGuiSize = ConsoleGUI.Space.Size;
 /// Public property setters and methods that affect a control's visual state should call <see cref="Invalidate"/> to request a re-render on the next UI update tick.
 /// </remarks>
 /// <typeparam name="T"></typeparam>
-public class SpectreControl<T> : Control, IDisposable where T : IRenderable
+public class SpectreControl<T> : Control where T : IRenderable
 {
     #region Constructors
-    public SpectreControl(T content)
+    public SpectreControl(T content) : base()
     {
         _content = content;
-        _bufferConsole = new ConsoleBuffer();
-        _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
-        UI.Paint += OnPaint;
+        consoleBuffer = new ConsoleBuffer();
+        ansiConsole = new AnsiConsoleBuffer(consoleBuffer);
+        
     }
     #endregion
     
@@ -49,25 +49,20 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
         {
             lock (UI.Lock)
             {
-                if (_bufferConsole.Buffer == null || position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height)
+                if (consoleBuffer.Buffer == null || position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height)
                 {
                     return _emptyCell;
                 }
                 else
                 {
-                    return _bufferConsole.Buffer[position.X, position.Y];
+                    return consoleBuffer.Buffer[position.X, position.Y];
                 }
             }
         }
     }
     #endregion
 
-    #region Methods
-    public void Dispose()
-    {
-        UI.Paint -= OnPaint;
-    }
-
+    #region Methods    
     protected sealed override void Initialize()
     {
         lock (UI.Lock)
@@ -83,18 +78,12 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
             Resize(targetSize);
 
             // Resize buffer using safe dimensions (Size can be negative if Min/Max limits are invalid)
-            _bufferConsole.Resize(new ConsoleGuiSize(Math.Max(0, Size.Width), Math.Max(0, Size.Height)));
+            consoleBuffer.Resize(new ConsoleGuiSize(Math.Max(0, Size.Width), Math.Max(0, Size.Height)));
 
-            Render();
-            Redraw();
+            Paint();
         }
     }
-
-    /// <summary>
-    /// Indicates the control should be repainted on the next UI update tick.
-    /// </summary>
-    protected void Invalidate() => Interlocked.Increment(ref paintRequests);
-
+    
     /// <summary>
     /// Creates a copy of the current instance's control content.
     /// </summary>
@@ -105,26 +94,7 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
     /// <exception cref="NotImplementedException">Thrown if the method is not overridden in a derived class.</exception>
     protected virtual T CloneContent() => throw new NotImplementedException($"Cloning not implemented for type {typeof(T).Name}. Override CloneContent() in derived class.");
 
-    /// <summary>
-    /// Handles the pain event triggered by the UI timer.
-    /// </summary>
-    /// <remarks>This method tries to implement thread-safe rendering by locking on the provided synchronization object.
-    /// If one or more render requests are pending, it triggers the rendering process and resets the render request
-    /// count.</remarks>
-    /// <param name="sender">The source of the event. This parameter can be <see langword="null"/>.</param>
-    /// <param name="e">An instance of <see cref="PaintEventArgs"/> containing event data, including a synchronization lock.</param>
-    private void OnPaint(object? sender, UI.PaintEventArgs e)
-    {
-        lock (e.Lock)
-        {
-            if (paintRequests > 0)
-            {
-                Render();
-                Redraw();
-                Interlocked.Exchange(ref paintRequests, 0u);
-            }
-        }
-    }
+   
 
     /// <summary>
     /// Renders the control's content to the console buffer.
@@ -135,7 +105,7 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
     /// This does not actually draw to the console screen, it just updates the buffer. The ConsoleGUI <see cref="ConsoleGUI.ConsoleManager"/> 
     /// handles drawing the buffer on the console screen.
     /// </remarks>
-    private void Render()
+    protected override void Render()
     {
         if (Size.Width <= 0 || Size.Height <= 0)
         {
@@ -143,18 +113,16 @@ public class SpectreControl<T> : Control, IDisposable where T : IRenderable
         }
         
         // Render Spectre content to buffer
-        _ansiConsole.Clear(true);
+        ansiConsole.Clear(true);
         // We probably want to render with the full width of the control
         // Spectre will look at the Profile.Width which comes from the IConsole.Size (BufferConsole.Size)
-        _ansiConsole.Write(_content);        
+        ansiConsole.Write(_content);        
     }
     #endregion
 
     #region Fields
-    private readonly ConsoleBuffer _bufferConsole;
-    private readonly AnsiConsoleBuffer _ansiConsole;
+    private readonly ConsoleBuffer consoleBuffer;
+    private readonly AnsiConsoleBuffer ansiConsole;
     private T _content;
-    private uint paintRequests;
-    private static readonly Cell _emptyCell = new Cell(Character.Empty);
     #endregion
 }

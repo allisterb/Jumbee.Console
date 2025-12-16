@@ -1,13 +1,9 @@
-﻿
+﻿namespace Jumbee.Console;
+
 using ConsoleGUI;
-using ConsoleGUI.Api;
 using ConsoleGUI.Common;
-using ConsoleGUI.Input;
-using System.Runtime.CompilerServices;
 
-namespace Jumbee.Console;
-
-public abstract class Layout<T> where T:Control, IDrawingContextListener
+public abstract class Layout<T> where T:ConsoleGUI.Common.Control, IDrawingContextListener
 {
     public Layout(T control)
     {

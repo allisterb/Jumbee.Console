@@ -9,14 +9,13 @@ using Spectre.Console;
 
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
 
-public abstract class AnimatedControl : Control, IDisposable
+public abstract class AnimatedControl : Control
 {
     #region Constructors
-    public AnimatedControl()
+    public AnimatedControl() : base()   
     {
-        _bufferConsole = new ConsoleBuffer();
-        _ansiConsole = new AnsiConsoleBuffer(_bufferConsole);
-        UI.Paint += OnPaint;
+        bufferConsole = new ConsoleBuffer();
+        ansiConsole = new AnsiConsoleBuffer(bufferConsole);
     }
     #endregion
 
@@ -27,9 +26,9 @@ public abstract class AnimatedControl : Control, IDisposable
         {
             lock (UI.Lock)
             {
-                if (_bufferConsole.Buffer == null) return _emptyCell;
+                if (bufferConsole.Buffer == null) return _emptyCell;
                 if (position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height) return _emptyCell;
-                return _bufferConsole.Buffer[position.X, position.Y];
+                return bufferConsole.Buffer[position.X, position.Y];
             }
         }
     }
@@ -50,9 +49,9 @@ public abstract class AnimatedControl : Control, IDisposable
         isRunning = false;
     }
 
-    public void Dispose()
+    public override void Dispose()
     {
-        UI.Paint -= OnPaint;
+        base.Dispose();
         Stop();
     }
     
@@ -66,15 +65,12 @@ public abstract class AnimatedControl : Control, IDisposable
             if (targetSize.Width > 1000) targetSize = new ConsoleGuiSize(1000, targetSize.Height);
             if (targetSize.Height > 1000) targetSize = new ConsoleGuiSize(targetSize.Width, 1000);
             Resize(targetSize);
-            _bufferConsole.Resize(new ConsoleGuiSize(Math.Max(0, Size.Width), Math.Max(0, Size.Height)));
-            Render();
-            Redraw();
+            bufferConsole.Resize(new ConsoleGuiSize(Math.Max(0, Size.Width), Math.Max(0, Size.Height)));
+            Paint();
         }
     }
 
-    protected abstract void Render();
-
-    private void OnPaint(object? sender, UI.PaintEventArgs e)
+    protected sealed override void OnPaint(object? sender, UI.PaintEventArgs e)
     {
         lock (e.Lock)
         {
@@ -88,17 +84,15 @@ public abstract class AnimatedControl : Control, IDisposable
             {
                 accumulated = TimeSpan.Zero;
                 frameIndex = (frameIndex + 1) % frameCount;
-                Render();
-                Redraw();
+                Paint();
             }
         }
     }
     #endregion
 
     #region Fields
-    protected static readonly Cell _emptyCell = new Cell(Character.Empty);
-    protected readonly ConsoleBuffer _bufferConsole;
-    protected readonly AnsiConsoleBuffer _ansiConsole;
+    protected readonly ConsoleBuffer bufferConsole;
+    protected readonly AnsiConsoleBuffer ansiConsole;
     protected int frameCount = 0;
     protected int frameIndex = 0;    
     protected DateTime lastUpdate;

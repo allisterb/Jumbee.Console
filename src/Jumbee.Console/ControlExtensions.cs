@@ -48,19 +48,19 @@ public static class ControlExtensions
         return result;
     }
         
-    public static Margin WithMargin(this Control control, int left, int top, int right, int bottom) => new Margin
+    public static Margin WithMargin(this ConsoleGUI.Common.Control control, int left, int top, int right, int bottom) => new Margin
     {
         Offset = new Offset(left, top, right, bottom),
         Content = control
     };
 
-    public static Margin WithMargin(this Control control, int offset) => new Margin
+    public static Margin WithMargin(this ConsoleGUI.Common.Control control, int offset) => new Margin
     {
         Offset = new Offset(offset, offset, offset, offset),
         Content = control
     };
 
-    public static Border WithBorder(this Control control, BorderStyle style) => new Border(control, style);
+    public static Border WithBorder(this ConsoleGUI.Common.Control control, BorderStyle style) => new Border(control, style);
         
     public static Border WithBorderColor(this Border border, Color? fgColor = null, Color? bgColor = null)
     {
@@ -75,17 +75,17 @@ public static class ControlExtensions
         return border;
     }
 
-    public static Border WithAsciiBorder(this Control control) => new Border(control, BorderStyle.Ascii);  
+    public static Border WithAsciiBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Ascii);  
 
-    public static Border WithDoubleBorder(this Control control) => new Border(control, BorderStyle.Double);
+    public static Border WithDoubleBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Double);
 
-    public static Border WithHeavyBorder(this Control control) => new Border(control, BorderStyle.Heavy);
+    public static Border WithHeavyBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Heavy);
 
-    public static Border WithRoundedBorder(this Control control) => new Border(control, BorderStyle.Rounded);
+    public static Border WithRoundedBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Rounded);
 
-    public static Border WithSquareBorder(this Control control) => new Border(control, BorderStyle.Square);
+    public static Border WithSquareBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Square);
 
-    public static VerticalScrollPanel WithVerticalScrollBar(this Control control) => new VerticalScrollPanel
+    public static VerticalScrollPanel WithVerticalScrollBar(this ConsoleGUI.Common.Control control) => new VerticalScrollPanel
     {
         Content = control
     };  
