@@ -21,6 +21,9 @@ public enum BorderStyle
     Square
 }
 
+/// <summary>
+/// Draws a border around a control.
+/// </summary>
 public sealed class Border : Control, IDrawingContextListener
 {
     #region Constructors
@@ -51,6 +54,17 @@ public sealed class Border : Control, IDrawingContextListener
             if (_content == value) return;
             _content = value;
             BindContent();
+        }
+    }
+
+    public string? Title
+    {
+        get => _title;
+        set
+        {
+            if (_title == value) return;
+            _title = value;
+            Initialize();
         }
     }
 
@@ -134,6 +148,38 @@ public sealed class Border : Control, IDrawingContextListener
             if (position.Y == Size.Height - 1 && BorderPlacement.HasBorder(BorderPlacement.Bottom))
                 return GetCell(BoxBorderPart.Bottom);
 
+            if (!string.IsNullOrEmpty(Title) && BorderPlacement.HasBorder(BorderPlacement.Top))
+            {
+                if (position.Y == 1)
+                {
+                    var startX = BorderPlacement.HasBorder(BorderPlacement.Left) ? 1 : 0;
+                    var titleIndex = position.X - startX;
+
+                    if (titleIndex >= 0 && titleIndex < Title.Length)
+                    {
+                        var character = new Character(Title[titleIndex]);
+                        if (_foreground.HasValue) character = character.WithForeground(_foreground.Value);
+                        if (_background.HasValue) character = character.WithBackground(_background.Value);
+                        return new Cell(character);
+                    }
+                }
+                else if (position.Y == 2)
+                {
+                    if (position.X == 0) // Start character for separator
+                    {
+                        return GetCell(BoxBorderPart.TopLeft);
+                    }
+                    else if (position.X == Size.Width - 1) // End character for separator
+                    {
+                        return GetCell(BoxBorderPart.TopRight);
+                    }
+                    else // Middle characters for separator
+                    {
+                        return GetCell(BoxBorderPart.Top);
+                    }
+                }
+            }
+
             return Character.Empty;
         }
     }
@@ -157,8 +203,11 @@ public sealed class Border : Control, IDrawingContextListener
         using (Freeze())
         {
             var offset = BorderPlacement.AsOffset();
+
+            if (!string.IsNullOrEmpty(Title) && BorderPlacement.HasBorder(BorderPlacement.Top))
+                offset = new Offset(offset.Left, offset.Top + 2, offset.Right, offset.Bottom);
             
-            ContentContext?.SetOffset(BorderPlacement.AsVector());
+            ContentContext?.SetOffset(new Vector(offset.Left, offset.Top));
 
             var minRect = MinSize.AsRect().Remove(offset);
             var maxRect = MaxSize.AsRect().Remove(offset);
@@ -200,6 +249,7 @@ public sealed class Border : Control, IDrawingContextListener
     private Color? _foreground;
     private Color? _background;
     private DrawingContext _contentContext = DrawingContext.Dummy;
+    private string? _title;
     #endregion
 
 }

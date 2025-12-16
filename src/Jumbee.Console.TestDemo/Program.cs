@@ -122,13 +122,13 @@ class Program
             }
         };
 
-        internalGrid.AddChild(0, 0, spinner.WithMargin(1).WithDoubleBorder());
-        internalGrid.AddChild(1, 0, prompt.WithHeavyBorder().WithBorderColor(Orange1));
-        internalGrid.AddChild(2, 0, barChart.WithHeavyBorder().WithBorderColor(Yellow));
+        internalGrid.AddChild(0, 0, spinner.WithMargin(1).WithDoubleBorder().WithBorderTitle("Loading"));
+        internalGrid.AddChild(1, 0, prompt.WithHeavyBorder().WithBorderColor(Orange1).WithBorderTitle("Input"));
+        internalGrid.AddChild(2, 0, barChart.WithHeavyBorder().WithBorderColor(Yellow).WithBorderTitle("Stats"));
         
-        //internalGrid.AddChild(0, 1, new Jumbee.Console.Controls.Border { Content = tableControl, BorderStyle = Controls.BoxBorder.Rounded, Foreground = Jumbee.Console.Color.Aqua });
-        //internalGrid.AddChild(1, 1, new Jumbee.Console.Controls.Border { Content = barChart, BorderStyle = Jumbee.Console.Controls.BoxBorder.FromStyle(Jumbee.Console.Controls.BorderStyle.Ascii), Foreground = new ConsoleGUI.Data.Color(255, 0, 255) });
-        //internalGrid.AddChild(2, 1, new Jumbee.Console.Controls.Border { Content = treeControl, BorderStyle = Jumbee.Console.Controls.BoxBorder.FromStyle(Jumbee.Console.Controls.BorderStyle.Ascii) });
+        internalGrid.AddChild(0, 1, tableControl.WithRoundedBorder().WithBorderColor(Aqua).WithBorderTitle("Data"));
+        internalGrid.AddChild(1, 1, barChart.WithAsciiBorder().WithBorderColor(Red));
+        internalGrid.AddChild(2, 1, treeControl.WithAsciiBorder().WithBorderTitle("Hierarchy"));
 
         /*
         var grid2 = new Jumbee.Console.Grid([

@@ -69,6 +69,12 @@ public static class ControlExtensions
         return border;
     }
 
+    public static Border WithBorderTitle(this Border border, string title)
+    {
+        border.Title = title;
+        return border;
+    }
+
     public static Border WithAsciiBorder(this Control control) => new Border(control, BorderStyle.Ascii);  
 
     public static Border WithDoubleBorder(this Control control) => new Border(control, BorderStyle.Double);
