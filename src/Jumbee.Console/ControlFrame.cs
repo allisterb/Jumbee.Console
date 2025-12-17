@@ -23,38 +23,44 @@ public enum BorderStyle
 }
 
 /// <summary>
-/// Draws a border around a control.
+/// Draws a border around a control together with margins and a title bar.
 /// </summary>
-public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener, IInputListener
+public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextListener, IInputListener
 {
     #region Constructors
-    public Border(IControl content, BorderStyle borderStyle, Color? fgColor = null, Color? bgColor = null)
+    public ControlFrame(Control control, BorderStyle? borderStyle = null, Offset? margin = null, Color? fgColor = null, Color? bgColor = null)
     {
-        _borderStyle = borderStyle switch
-        {
-            BorderStyle.Ascii => SpectreBoxBorder.Ascii,
-            BorderStyle.Double => SpectreBoxBorder.Double,
-            BorderStyle.Heavy => SpectreBoxBorder.Heavy,
-            BorderStyle.Rounded => SpectreBoxBorder.Rounded,
-            BorderStyle.Square => SpectreBoxBorder.Square,
-            BorderStyle.None => SpectreBoxBorder.None,
-            _ => throw new ArgumentOutOfRangeException(nameof(borderStyle), borderStyle, null)
-        };
-        Content = content;
+        _borderStyle = borderStyle ?? BorderStyle.None; 
+        _boxBorder = GetSpectreBoxBorder(_borderStyle);
+        _margin = margin ?? DefaultMargin;
         _foreground = fgColor;
         _background = bgColor;
+        _control = control;
+        BindControl();
     }
     #endregion
 
     #region Properties
-    public IControl? Content
+    public Control Control
     {
-        get => _content;
+        get => _control;
         set
         {
-            if (_content == value) return;
-            _content = value;
-            BindContent();
+            
+            _control = value;
+            BindControl();
+        }
+    }
+
+    public BorderStyle BorderStyle
+    {
+        get => _borderStyle;
+        set
+        {
+            if (_borderStyle == value) return;
+            _borderStyle = value;
+            _boxBorder = GetSpectreBoxBorder(_borderStyle);
+            Initialize();
         }
     }
 
@@ -112,17 +118,16 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
             Redraw();
         }
     }
-
-    private int _top;
+   
     public int Top
     {
         get => _top;
         set
         {
             // Clamping will happen in Initialize or we need context size here.
-            // VerticalScrollPanel clamps in setter but accesses ContentContext.Size.
-            // We can do same if ContentContext is valid.
-            var maxTop = Math.Max(0, (ContentContext?.Size.Height ?? 0) - (Size.Height - (Margin.Top + Margin.Bottom) - (BorderPlacement.AsOffset().Top + BorderPlacement.AsOffset().Bottom)));
+            // VerticalScrollPanel clamps in setter but accesses ControlContext.Size.
+            // We can do same if ControlContext is valid.
+            var maxTop = Math.Max(0, (ControlContext?.Size.Height ?? 0) - (Size.Height - (Margin.Top + Margin.Bottom) - (BorderPlacement.AsOffset().Top + BorderPlacement.AsOffset().Bottom)));
             // Note: The above calculation is rough, Initialize does it better. 
             // Let's just set and let Initialize clamp or trigger logic.
             // But VerticalScrollPanel clamps in setter.
@@ -133,8 +138,7 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
             Initialize();
         }
     }
-
-    private Character _scrollBarForeground = new Character('▀', foreground: new Color(100, 100, 255));
+  
     public Character ScrollBarForeground
     {
         get => _scrollBarForeground;
@@ -145,8 +149,7 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
             Redraw(); // Just redraw scrollbar? Or full? Full is easier.
         }
     }
-
-    private Character _scrollBarBackground = new Character('║', foreground: new Color(100, 100, 100));
+  
     public Character ScrollBarBackground
     {
         get => _scrollBarBackground;
@@ -159,16 +162,17 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
     }
 
     public ConsoleKey ScrollUpKey { get; set; } = ConsoleKey.UpArrow;
+    
     public ConsoleKey ScrollDownKey { get; set; } = ConsoleKey.DownArrow;
 
-    private DrawingContext ContentContext
+    private DrawingContext ControlContext
     {
-        get => _contentContext;
+        get => _controlContext;
         set
         {
-            if (_contentContext == value) return;
-            _contentContext?.Dispose();
-            _contentContext = value;
+            if (_controlContext == value) return;
+            _controlContext?.Dispose();
+            _controlContext = value;
             Initialize();
         }
     }
@@ -193,42 +197,42 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
                 borderOffset.Right + Margin.Right,
                 borderOffset.Bottom + Margin.Bottom);
 
-            var contentLeft = totalOffset.Left;
-            var contentTop = totalOffset.Top;
-            var contentRight = Size.Width - 1 - totalOffset.Right;
-            var contentBottom = Size.Height - 1 - totalOffset.Bottom;
+            var controlLeft = totalOffset.Left;
+            var controlTop = totalOffset.Top;
+            var controlRight = Size.Width - 1 - totalOffset.Right;
+            var controlBottom = Size.Height - 1 - totalOffset.Bottom;
 
-            // 2. Content & Scrollbar (Inside Viewport)
-            if (position.X >= contentLeft && position.X <= contentRight &&
-                position.Y >= contentTop && position.Y <= contentBottom)
+            // 2. Control & Scrollbar (Inside Viewport)
+            if (position.X >= controlLeft && position.X <= controlRight &&
+                position.Y >= controlTop && position.Y <= controlBottom)
             {
-                // Scrollbar logic: always at the right edge of valid content area
-                if (position.X == contentRight)
+                // Scrollbar logic: always at the right edge of valid control area
+                if (position.X == controlRight)
                 {
-                    if (Content == null) return ScrollBarForeground;
+                    if (Control == null) return ScrollBarForeground;
 
-                    var viewportHeight = contentBottom - contentTop + 1;
-                    var contentHeight = ContentContext.Size.Height;
+                    var viewportHeight = controlBottom - controlTop + 1;
+                    var controlHeight = ControlContext.Size.Height;
 
-                    // Only draw scrollbar if content is larger than viewport
-                    if (contentHeight > viewportHeight)
+                    // Only draw scrollbar if control is larger than viewport
+                    if (controlHeight > viewportHeight)
                     {
                         // Calculate thumb position
                         // Relative Y in viewport
-                        var relY = position.Y - contentTop;
+                        var relY = position.Y - controlTop;
                         
-                        long checkY = (long)relY * contentHeight;
+                        long checkY = (long)relY * controlHeight;
                         long startThumb = (long)_top * viewportHeight;
                         long endThumb = (long)(_top + viewportHeight) * viewportHeight; 
 
                         // Note: endThumb logic might need tweaking for exact pixel match, 
                         // but this proportional logic is standard.
                         // Ideally: 
-                        // thumbTop = (_top * viewportHeight) / contentHeight
-                        // thumbSize = (viewportHeight * viewportHeight) / contentHeight
+                        // thumbTop = (_top * viewportHeight) / controlHeight
+                        // thumbSize = (viewportHeight * viewportHeight) / controlHeight
                         
                         // Using the previous multiplication logic to avoid integer division issues:
-                        // if (relY * contentHeight < _top * viewportHeight) -> Background
+                        // if (relY * controlHeight < _top * viewportHeight) -> Background
                         
                         if (checkY < startThumb) return ScrollBarBackground;
                         if (checkY >= endThumb) return ScrollBarBackground; 
@@ -237,20 +241,20 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
                     }
                     else
                     {
-                         // No scrollbar needed -> allow content to draw here?
+                         // No scrollbar needed -> allow control to draw here?
                          // Current design reserves the column. 
-                         // If we reserved the column in Initialize (limitWidth), content shouldn't be here.
+                         // If we reserved the column in Initialize (limitWidth), control shouldn't be here.
                          // But for aesthetic, maybe draw empty or background?
                          // If we return Character.Empty, we see background.
-                         // Let's return Character.Empty so content *could* extend if we changed limits,
+                         // Let's return Character.Empty so control *could* extend if we changed limits,
                          // but currently it acts as padding.
-                         // Actually, if we don't return here, it falls through to ContentContext.Contains
+                         // Actually, if we don't return here, it falls through to ControlContext.Contains
                          // which might return true if we didn't limit width.
                     }
                 }
 
-                if (ContentContext.Contains(position))
-                    return ContentContext[position];
+                if (ControlContext.Contains(position))
+                    return ControlContext[position];
 
                 return Character.Empty;
             }
@@ -323,9 +327,23 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
     #endregion
 
     #region Methods
+    public static SpectreBoxBorder GetSpectreBoxBorder(BorderStyle style)
+    {
+        return style switch
+        {
+            BorderStyle.Ascii => SpectreBoxBorder.Ascii,
+            BorderStyle.Double => SpectreBoxBorder.Double,
+            BorderStyle.Heavy => SpectreBoxBorder.Heavy,
+            BorderStyle.Rounded => SpectreBoxBorder.Rounded,
+            BorderStyle.Square => SpectreBoxBorder.Square,
+            BorderStyle.None => SpectreBoxBorder.None,
+            _ => throw new ArgumentOutOfRangeException(nameof(style), style, null)
+        };
+    }
+
     private Cell GetCell(BoxBorderPart part)
     {
-        var str = _borderStyle.GetPart(part);
+        var str = _boxBorder.GetPart(part);
         var ch = string.IsNullOrEmpty(str) ? ' ' : str[0];
         
         var character = new Character(ch);
@@ -350,18 +368,18 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
                 borderOffset.Right + Margin.Right,
                 borderOffset.Bottom + Margin.Bottom);
 
-            // Available space for content (excluding scrollbar for now)
-            // We reserve 1 column for scrollbar at the right of content
-            var contentLimitsMin = MinSize.AsRect().Remove(totalOffset).Size;
-            var contentLimitsMax = MaxSize.AsRect().Remove(totalOffset).Size;
+            // Available space for control (excluding scrollbar for now)
+            // We reserve 1 column for scrollbar at the right of control
+            var controlLimitsMin = MinSize.AsRect().Remove(totalOffset).Size;
+            var controlLimitsMax = MaxSize.AsRect().Remove(totalOffset).Size;
             
             // Allow infinite height for scrolling, but constrain width to make space for scrollbar
-            // If MaxSize.Width is infinite, we don't constrain width (except by MinSize/Content)
+            // If MaxSize.Width is infinite, we don't constrain width (except by MinSize/Control)
             // But we generally want to fit in MaxSize.
             
-            var limitWidth = Math.Max(0, contentLimitsMax.Width - 1);
-            ContentContext?.SetLimits(
-                new Size(Math.Max(0, contentLimitsMin.Width - 1), 0), 
+            var limitWidth = Math.Max(0, controlLimitsMax.Width - 1);
+            ControlContext?.SetLimits(
+                new Size(Math.Max(0, controlLimitsMin.Width - 1), 0), 
                 new Size(limitWidth, int.MaxValue));
 
             // Clamp Top
@@ -369,16 +387,16 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
             // Note: Size.Height is current size. During Resize sequence, this might be stale?
             // VerticalScrollPanel uses Size.Height (which is current).
             // But here we are about to Resize.
-            // If we are about to Resize to MaxSize (if content is large), then viewport will be larger.
+            // If we are about to Resize to MaxSize (if control is large), then viewport will be larger.
             // Let's rely on Redraw loop?
-            // Actually, we should probably use 'contentLimitsMax.Height' as the viewport constraint if we are expanding?
+            // Actually, we should probably use 'controlLimitsMax.Height' as the viewport constraint if we are expanding?
             // But MaxSize might be infinite.
-            // Let's stick to simple clamping against current content size vs current viewport estimate?
+            // Let's stick to simple clamping against current control size vs current viewport estimate?
             // Or just allow Top to be set, and Resize will clip?
             
-            if (ContentContext != null)
+            if (ControlContext != null)
             {
-                var contentHeight = ContentContext.Size.Height;
+                var controlHeight = ControlContext.Size.Height;
                 // If we expand to MaxSize, the viewport height will be at most MaxSize - Offsets.
                 var maxViewportHeight = Math.Max(0, MaxSize.Height - totalOffset.Top + totalOffset.Bottom);
                 // If MaxSize is infinite, maxViewportHeight is infinite?
@@ -387,20 +405,20 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
                 // Actual viewport height used for clamping depends on what size we WILL be.
                 // But we don't know yet.
                 // However, 'Top' only matters if we are scrolling.
-                // We scroll if ContentHeight > ViewportHeight.
+                // We scroll if ControlHeight > ViewportHeight.
                 
-                _top = Math.Max(0, Math.Min(_top, contentHeight - 1)); // Ensure at least within content? 
-                // Better: _top = Math.Max(0, Math.Min(_top, contentHeight - (currentViewportHeight)));
+                _top = Math.Max(0, Math.Min(_top, controlHeight - 1)); // Ensure at least within control? 
+                // Better: _top = Math.Max(0, Math.Min(_top, controlHeight - (currentViewportHeight)));
                 // But we don't know currentViewportHeight easily before Resize.
             }
             
-            ContentContext?.SetOffset(new Vector(totalOffset.Left, totalOffset.Top - _top));
+            ControlContext?.SetOffset(new Vector(totalOffset.Left, totalOffset.Top - _top));
 
-            var contentSize = ContentContext?.Size ?? Size.Empty;
+            var controlSize = ControlContext?.Size ?? Size.Empty;
             
             // Calculate desired size including margins, borders, and scrollbar (1 extra width)
-            var desiredContentSize = contentSize.Expand(1, 0); // +1 Width for scrollbar
-            var sizeRect = desiredContentSize.AsRect().Add(totalOffset);
+            var desiredControlSize = controlSize.Expand(1, 0); // +1 Width for scrollbar
+            var sizeRect = desiredControlSize.AsRect().Add(totalOffset);
 
             Resize(Size.Clip(MinSize, sizeRect.Size, MaxSize));
             
@@ -410,30 +428,30 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
             // Checking ConsoleGUI source (mental): Resize usually updates Size.
             
             // Post-Resize Clamping:
-            if (ContentContext != null)
+            if (ControlContext != null)
             {
                  viewportHeight = Math.Max(0, Size.Height - totalOffset.Top + totalOffset.Bottom);
-                 if (ContentContext.Size.Height > viewportHeight)
+                 if (ControlContext.Size.Height > viewportHeight)
                  {
-                     _top = Math.Min(ContentContext.Size.Height - viewportHeight, Math.Max(0, _top));
+                     _top = Math.Min(ControlContext.Size.Height - viewportHeight, Math.Max(0, _top));
                      // Update offset again with clamped Top?
-                     ContentContext.SetOffset(new Vector(totalOffset.Left, totalOffset.Top - _top));
+                     ControlContext.SetOffset(new Vector(totalOffset.Left, totalOffset.Top - _top));
                  }
                  else
                  {
                      _top = 0;
-                     ContentContext.SetOffset(new Vector(totalOffset.Left, totalOffset.Top));
+                     ControlContext.SetOffset(new Vector(totalOffset.Left, totalOffset.Top));
                  }
             }
         }
     }
 
-    private void BindContent()
+    private void BindControl()
     {
-        if (Content != null)
-            ContentContext = new DrawingContext(this, Content);
+        if (Control != null)
+            ControlContext = new DrawingContext(this, Control);
         else
-            ContentContext = DrawingContext.Dummy;
+            ControlContext = DrawingContext.Dummy;
     }
 
     void IDrawingContextListener.OnRedraw(DrawingContext drawingContext)
@@ -462,14 +480,19 @@ public sealed class Border : ConsoleGUI.Common.Control, IDrawingContextListener,
     #endregion
 
     #region Fields
-    private SpectreBoxBorder _borderStyle;
-    private IControl? _content;
+    public static Offset DefaultMargin { get; } = new Offset(0, 0, 0, 0);   
+    private SpectreBoxBorder _boxBorder;
+    private BorderStyle _borderStyle;
+    private Control _control;
     private BorderPlacement _borderPlacement = BorderPlacement.All;
     private Offset _margin;
     private Color? _foreground;
     private Color? _background;
-    private DrawingContext _contentContext = DrawingContext.Dummy;
+    private DrawingContext _controlContext = DrawingContext.Dummy;
     private string? _title;
+    private int _top;
+    private Character _scrollBarForeground = new Character('▀', foreground: new Color(100, 100, 255));
+    private Character _scrollBarBackground = new Character('║', foreground: new Color(100, 100, 100));
     #endregion
 
 }

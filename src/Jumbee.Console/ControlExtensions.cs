@@ -47,46 +47,78 @@ public static class ControlExtensions
 
         return result;
     }
-        
-    public static Margin WithMargin(this ConsoleGUI.Common.Control control, int left, int top, int right, int bottom) => new Margin
-    {
-        Offset = new Offset(left, top, right, bottom),
-        Content = control
-    };
 
-    public static Margin WithMargin(this ConsoleGUI.Common.Control control, int offset) => new Margin
+    public static ControlFrame WithMargin(this Control control, int left, int top, int right, int bottom) => new ControlFrame(
+        control,
+        margin: new Offset(left, top, right, bottom)
+    );
+    
+    public static ControlFrame WithMargin(this Control control, int offset) => control.WithMargin(offset, offset, offset, offset);
+    
+    public static ControlFrame WithMargin(this ControlFrame frame, int left, int top, int right, int bottom)
     {
-        Offset = new Offset(offset, offset, offset, offset),
-        Content = control
-    };
+        frame.Margin = new Offset(left, top, right, bottom);
+        return frame;
+    }
 
-    public static Border WithBorder(this ConsoleGUI.Common.Control control, BorderStyle style) => new Border(control, style);
+    public static ControlFrame WithMargin(this ControlFrame frame, int offset) => frame.WithMargin(offset, offset, offset, offset);
+
+    public static ControlFrame WithBorder(this Control control, BorderStyle style) => new ControlFrame(control, style);
         
-    public static Border WithBorderColor(this Border border, Color? fgColor = null, Color? bgColor = null)
+    public static ControlFrame WithBorder(this ControlFrame frame, BorderStyle style)
+    {
+        frame.BorderStyle = style;
+        return frame;
+    }
+    public static ControlFrame WithBorderColor(this ControlFrame border, Color? fgColor = null, Color? bgColor = null)
     {
         border.Foreground = fgColor ?? border.Foreground;
         border.Background = bgColor ?? border.Background;
         return border;
     }
 
-    public static Border WithBorderTitle(this Border border, string title)
+    public static ControlFrame WithBorderTitle(this ControlFrame border, string title)
     {
         border.Title = title;
         return border;
     }
 
-    public static Border WithAsciiBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Ascii);  
+    public static ControlFrame WithAsciiBorder(this Control control) => new ControlFrame(control, BorderStyle.Ascii);  
 
-    public static Border WithDoubleBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Double);
-
-    public static Border WithHeavyBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Heavy);
-
-    public static Border WithRoundedBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Rounded);
-
-    public static Border WithSquareBorder(this ConsoleGUI.Common.Control control) => new Border(control, BorderStyle.Square);
-
-    public static VerticalScrollPanel WithVerticalScrollBar(this ConsoleGUI.Common.Control control) => new VerticalScrollPanel
+    public static ControlFrame WithAsciiBorder(this ControlFrame frame)
     {
-        Content = control
-    };  
+        frame.BorderStyle = BorderStyle.Ascii;
+        return frame;
+    }
+    public static ControlFrame WithDoubleBorder(this Control control) => new ControlFrame(control, BorderStyle.Double);
+
+    public static ControlFrame WithDoubleBorder(this ControlFrame frame)
+    {
+        frame.BorderStyle = BorderStyle.Double;
+        return frame;
+    }   
+
+    public static ControlFrame WithHeavyBorder(this Control control) => new ControlFrame(control, BorderStyle.Heavy);
+
+    public static ControlFrame WithHeavyBorder(this ControlFrame frame)
+    {
+        frame.BorderStyle = BorderStyle.Heavy;
+        return frame;
+    }
+    
+    public static ControlFrame WithRoundedBorder(this Control control) => new ControlFrame(control, BorderStyle.Rounded);
+
+    public static ControlFrame WithRoundedBorder(this ControlFrame frame)
+    {
+        frame.BorderStyle = BorderStyle.Rounded;
+        return frame;
+    }
+    
+    public static ControlFrame WithSquareBorder(this Control control) => new ControlFrame(control, BorderStyle.Square);
+
+    public static ControlFrame WithSquareBorder(this ControlFrame frame)
+    {
+        frame.BorderStyle = BorderStyle.Square;
+        return frame;
+    }          
 }
