@@ -6,18 +6,23 @@ using System.Linq;
 
 using ConsoleGUI;
 
+/// <summary>
+///  A grid layout with controls arranged in equally-spaced rows and columns.
+/// </summary>
 public class Grid : Layout<ConsoleGUI.Controls.Grid>
 {
     #region Constructors
-    public Grid(ConsoleGUI.Controls.Grid layout) : base(layout) 
-    {
-        this.layout = layout;
-    }
-
-    public Grid(int[] rowHeights, int[] columnWidths, IControl[][]? controls = null) : this(new ConsoleGUI.Controls.Grid())
+    /// <summary>
+    /// Create a grid layout.
+    /// </summary>
+    /// <param name="rowHeights"></param>
+    /// <param name="columnWidths"></param>
+    /// <param name="controls"></param>
+    /// <exception cref="ArgumentException"></exception>
+    public Grid(int[] rowHeights, int[] columnWidths, IControl[][]? controls = null) : base(new ConsoleGUI.Controls.Grid())
     {                
-        layout.Rows = rowHeights.Select(h => new ConsoleGUI.Controls.Grid.RowDefinition(h)).ToArray();
-        layout.Columns = columnWidths.Select(w => new ConsoleGUI.Controls.Grid.ColumnDefinition(w)).ToArray();
+        control.Rows = rowHeights.Select(h => new ConsoleGUI.Controls.Grid.RowDefinition(h)).ToArray();
+        control.Columns = columnWidths.Select(w => new ConsoleGUI.Controls.Grid.ColumnDefinition(w)).ToArray();
         if (controls is not null)
         {
             if (controls.Length != rowHeights.Length)
@@ -32,7 +37,7 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
             {
                 for (int c = 0; c < controls[r].Length; c++)
                 {
-                    this.control.AddChild(c, r, controls[r][c]);
+                    control.AddChild(c, r, controls[r][c]);
                 }
             }
         }
@@ -49,7 +54,5 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     public override IControl this[int row, int column] => control.GetChild(column, row);
     #endregion
 
-    #region Fields
-    protected readonly ConsoleGUI.Controls.Grid layout;
-    #endregion
+
 }

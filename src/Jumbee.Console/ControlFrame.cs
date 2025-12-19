@@ -28,13 +28,14 @@ public enum BorderStyle
 public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextListener, IInputListener
 {
     #region Constructors
-    public ControlFrame(Control control, BorderStyle? borderStyle = null, Offset? margin = null, Color? fgColor = null, Color? bgColor = null)
+    public ControlFrame(Control control, BorderStyle? borderStyle = null, Offset? margin = null, Color? fgColor = null, Color? bgColor = null, string? title=null)
     {
         _borderStyle = borderStyle ?? BorderStyle.None; 
         _boxBorder = GetSpectreBoxBorder(_borderStyle);
         _margin = margin ?? DefaultMargin;
         _foreground = fgColor;
         _background = bgColor;
+        _title = title;
         _control = control;
         BindControl();
     }
@@ -123,17 +124,8 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
     {
         get => _top;
         set
-        {
-            // Clamping will happen in Initialize or we need context size here.
-            // VerticalScrollPanel clamps in setter but accesses ControlContext.Size.
-            // We can do same if ControlContext is valid.
-            var maxTop = Math.Max(0, (ControlContext?.Size.Height ?? 0) - (Size.Height - (Margin.Top + Margin.Bottom) - (BorderPlacement.AsOffset().Top + BorderPlacement.AsOffset().Bottom)));
-            // Note: The above calculation is rough, Initialize does it better. 
+        {            
             // Let's just set and let Initialize clamp or trigger logic.
-            // But VerticalScrollPanel clamps in setter.
-            // We'll stick to simple set + Initialize for now, logic in Initialize can fix _top if needed?
-            // Actually, best to just trigger update.
-             if (_top == value) return;
             _top = value;
             Initialize();
         }
@@ -377,7 +369,7 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
             
             var limitWidth = Math.Max(0, controlLimitsMax.Width - 1);
             ControlContext?.SetLimits(
-                new Size(Math.Max(0, controlLimitsMin.Width - 1), 0), 
+                new Size(Math.Max(0, controlLimitsMax.Width - 1), Math.Max(0, controlLimitsMax.Height)), 
                 new Size(limitWidth, int.MaxValue));
 
             // Clamp Top

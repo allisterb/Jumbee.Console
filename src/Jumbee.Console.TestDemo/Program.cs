@@ -11,16 +11,9 @@ using Jumbee.Console;
 
 using Spectre.Console;
 
-
-
-using ConsoleGuiSize = ConsoleGUI.Space.Size;
-using ConsoleGuiColor = ConsoleGUI.Data.Color;
-using SpectreColor = Spectre.Console.Color;
-using LayoutGrid = ConsoleGUI.Controls.Grid;
-
 using static Jumbee.Console.Color;
 
-class Program
+public class Program
 {
     static void Main(string[] args)
     {
@@ -42,7 +35,7 @@ class Program
             ("Coding", 54, Green),
             ("Testing", 33, Red)
         );
-                   
+
         barChart.Width = 50;
         barChart.Label = "[green bold]Activity[/]";
         barChart.CenterLabel = true;
@@ -55,11 +48,11 @@ class Program
         bar.AddNode("Qux");
         var quux = root.AddNode("Quux");
         quux.AddNode("Corgi");
-        
+
         // --- Wrap Spectre.Console Controls for ConsoleGUI ---
         var tableControl = new SpectreControl<Spectre.Console.Table>(table);
 
-        tableControl.Content.Border = TableBorder.Rounded;  
+        tableControl.Content.Border = TableBorder.Rounded;
         // var chartControl = new SpectreControl<Spectre.Console.BarChart>(barChart); // No longer needed
         var treeControl = new SpectreControl<Spectre.Console.Tree>(root);
 
@@ -75,32 +68,24 @@ class Program
 
         // The TextPrompt control
         var prompt = new TextPrompt("[yellow]What is your name?[/]", blinkCursor: true);
-        prompt.Committed += (sender, name) => 
+        prompt.Committed += (sender, name) =>
         {
             spinner.Text = $"Hello, [blue]{name}[/]!";
             spinner.SpinnerType = Spectre.Console.Spinner.Known.Ascii; // Change spinner style on success
         };
-        
-       
-        /*
-        var borderedPrompt = prompt.WithHeavyBorder().WithBorderColor(Orange1).WithBorderTitle("Input");
-        internalGrid.AddChild(0, 0, spinner.WithMargin(1).WithDoubleBorder().WithBorderTitle("Loading"));
-        internalGrid.AddChild(1, 0, borderedPrompt);
-        internalGrid.AddChild(2, 0, barChart.WithHeavyBorder().WithBorderColor(Yellow).WithBorderTitle("Stats"));
-        
-        internalGrid.AddChild(0, 1, tableControl.WithRoundedBorder().WithBorderColor(Aqua).WithBorderTitle("Data"));
-        internalGrid.AddChild(1, 1, barChart.WithAsciiBorder().WithBorderColor(Red));
-        internalGrid.AddChild(2, 1, treeControl.WithAsciiBorder().WithBorderTitle("Hierarchy"));
-        */
-        
-        var grid = new Jumbee.Console.Grid([20], [40, 40, 50], [[spinner, prompt, barChart]]);
-                
+
+        var p = prompt.WithAsciiBorder();
+        var grid = new Jumbee.Console.Grid([15, 15], [40, 40, 50], [
+            [spinner.WithFrame(borderStyle: BorderStyle.Rounded, fgColor: Red, title: "Spinna benz"), p, barChart],
+            [tableControl, barChart, treeControl]
+        ]);
+
         // Start the user interface
-        UI.Start(grid, 130, 20);
+        UI.Start(grid, 130, 40);
         //UI.Start(internalGrid, width:250, height: 60, isTrueColorTerminal: true);
         // Create a separate timer to update the chartControl content periodically
         var random = new Random();
-        var chartTimer = new Timer(_ => 
+        var chartTimer = new Timer(_ =>
         {
             // The SpectreControl.Content setter will acquire the lock internally
             var newPlanning = (double)random.Next(10, 30);
@@ -115,7 +100,7 @@ class Program
         // Main loop
         while (true)
         {
-            ConsoleManager.ReadInput([prompt, new InputListener()]);
+            ConsoleManager.ReadInput([p, prompt, new InputListener()]);
             Thread.Sleep(50);
         }
     }

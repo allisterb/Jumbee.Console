@@ -5,7 +5,7 @@ using ConsoleGUI.Common;
 
 public abstract class Layout<T> where T:ConsoleGUI.Common.Control, IDrawingContextListener
 {
-    public Layout(T control)
+    protected Layout(T control)
     {
         this.control = control;
     }

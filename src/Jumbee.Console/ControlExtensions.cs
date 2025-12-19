@@ -1,13 +1,7 @@
 ﻿namespace Jumbee.Console;
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-using ConsoleGUI.Common;
-using ConsoleGUI.Controls;
 using ConsoleGUI.Space;
 
 public static class ControlExtensions
@@ -48,6 +42,9 @@ public static class ControlExtensions
         return result;
     }
 
+    public static ControlFrame WithFrame(this Control control, BorderStyle? borderStyle = null, Offset? margin = null, Color? fgColor = null, Color? bgColor = null, string? title = null) 
+        => new ControlFrame(control, borderStyle, margin, fgColor, bgColor, title); 
+
     public static ControlFrame WithMargin(this Control control, int left, int top, int right, int bottom) => new ControlFrame(
         control,
         margin: new Offset(left, top, right, bottom)
@@ -77,11 +74,13 @@ public static class ControlExtensions
         return border;
     }
 
-    public static ControlFrame WithBorderTitle(this ControlFrame border, string title)
+    public static ControlFrame WithTitle(this ControlFrame frame, string title)
     {
-        border.Title = title;
-        return border;
+        frame.Title = title;
+        return frame;
     }
+
+    public static ControlFrame WithTitle(this Control control, string title) => new ControlFrame(control) { Title = title };
 
     public static ControlFrame WithAsciiBorder(this Control control) => new ControlFrame(control, BorderStyle.Ascii);  
 
