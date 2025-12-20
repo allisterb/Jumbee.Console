@@ -1,6 +1,7 @@
 namespace Jumbee.Console;
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 
 using ConsoleGUI;
@@ -48,7 +49,8 @@ public static class UI
         if (!isRunning) return;
         isRunning = false;
         timer?.Dispose();
-        timer = null;        
+        timer = null;
+        controls.Clear();
     }
 
     /// <summary>
@@ -62,8 +64,8 @@ public static class UI
     {
         if (Monitor.TryEnter(Lock))
         {
-            Monitor.Exit(Lock);
-            Paint?.Invoke(null, paintEventArgs);
+            Monitor.Exit(Lock);            
+            _Paint?.Invoke(null, paintEventArgs);
         }
     }
     #endregion
@@ -74,10 +76,39 @@ public static class UI
     private static Timer? timer;
     private static int interval = 100;
     private static bool isRunning;
+    private static List<Control> controls = new List<Control>();
+    private static List<ControlFrame> frames = new List<ControlFrame>();
     #endregion
 
     #region Events
-    public static event EventHandler<PaintEventArgs>? Paint;
+    private static EventHandler<PaintEventArgs>? _Paint;
+    public static event EventHandler<PaintEventArgs> Paint
+    {
+        add
+        {
+            _Paint = (EventHandler<PaintEventArgs>?)Delegate.Combine(_Paint, value);
+            if (value.Target is Control control)
+            {
+                controls.Add(control);
+            }
+            else if (value.Target is ControlFrame frame)
+            {
+                frames.Add(frame);
+            }
+        }
+        remove
+        {
+            _Paint ??= (EventHandler<PaintEventArgs>?)Delegate.Remove(_Paint, value);
+            if (value.Target is Control control)
+            {
+                controls.Remove(control);
+            }
+            else if (value.Target is ControlFrame frame)
+            {
+                frames.Remove(frame);
+            }
+        }
+    }        
     #endregion
 
     #region Types

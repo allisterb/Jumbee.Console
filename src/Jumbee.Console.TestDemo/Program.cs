@@ -74,10 +74,12 @@ public class Program
             spinner.SpinnerType = Spectre.Console.Spinner.Known.Ascii; // Change spinner style on success
         };
 
-        var p = prompt.WithAsciiBorder();
-        var grid = new Jumbee.Console.Grid([15, 15], [40, 40, 50], [
-            [spinner.WithFrame(borderStyle: BorderStyle.Rounded, fgColor: Red, title: "Spinna benz"), p, barChart],
-            [tableControl, barChart, treeControl]
+        var p = prompt
+            .WithAsciiBorder()
+            .WithTitle("Write here");
+        var grid = new Jumbee.Console.Grid([15, 15], [40, 80], [
+            [spinner.WithFrame(borderStyle: BorderStyle.Rounded, fgColor: Red, title: "Spinna benz"), p],
+            [tableControl, barChart]
         ]);
 
         // Start the user interface
