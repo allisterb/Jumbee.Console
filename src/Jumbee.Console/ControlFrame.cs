@@ -154,6 +154,28 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
         }
     }
 
+    public Character ScrollBarUpArrow
+    {
+        get => _scrollBarUpArrow;
+        set
+        {
+            if (_scrollBarUpArrow.Equals(value)) return;
+            _scrollBarUpArrow = value;
+            Redraw();
+        }
+    }
+
+    public Character ScrollBarDownArrow
+    {
+        get => _scrollBarDownArrow;
+        set
+        {
+            if (_scrollBarDownArrow.Equals(value)) return;
+            _scrollBarDownArrow = value;
+            Redraw();
+        }
+    }
+
     public ConsoleKey ScrollUpKey { get; set; } = ConsoleKey.UpArrow;
     
     public ConsoleKey ScrollDownKey { get; set; } = ConsoleKey.DownArrow;
@@ -229,6 +251,8 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
                             
                             // Using the previous multiplication logic to avoid integer division issues:
                             // if (relY * controlHeight < _top * viewportHeight) -> Background
+                            if (relY == 0) return ScrollBarUpArrow;
+                            if (relY == viewportHeight - 1) return ScrollBarDownArrow;
                             
                             if (checkY < startThumb) return ScrollBarBackground;
                             if (checkY >= endThumb) return ScrollBarBackground; 
@@ -498,6 +522,8 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
     private int _top;
     private Character _scrollBarForeground = new Character('▀', foreground: new Color(100, 100, 255));
     private Character _scrollBarBackground = new Character('║', foreground: new Color(100, 100, 100));
+    private Character _scrollBarUpArrow = new Character('\u25B2'); // ▲
+    private Character _scrollBarDownArrow = new Character('\u25BC'); // ▼
     #endregion
 
 }
