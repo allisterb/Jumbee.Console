@@ -531,10 +531,10 @@ public sealed class ControlFrame : ConsoleGUI.Common.Control, IDrawingContextLis
     private DrawingContext _controlContext = DrawingContext.Dummy;
     private string? _title;
     private int _top;
-    private Character _scrollBarForeground = new Character('▀', foreground: new Color(100, 100, 255));
-    private Character _scrollBarBackground = new Character('║', foreground: new Color(100, 100, 100));
-    private Character _scrollBarUpArrow = new Character('\u25B2'); // ▲
-    private Character _scrollBarDownArrow = new Character('\u25BC'); // ▼
+    private Character _scrollBarForeground = new Character('#', foreground: new Color(100, 100, 255));
+    private Character _scrollBarBackground = new Character('|', foreground: new Color(100, 100, 100));
+    private Character _scrollBarUpArrow = new Character('▲'); 
+    private Character _scrollBarDownArrow = new Character('▼'); 
     #endregion
 
 }
