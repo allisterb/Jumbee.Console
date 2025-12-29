@@ -1,19 +1,30 @@
 ﻿namespace Jumbee.Console;
 
+using ConsoleGUI.Controls;
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using System.Linq;
 
-public class VerticalTextLabel : CControl
+public enum TextLabelOrientation
+{
+    Horizontal,
+    Vertical
+}
+
+/// <summary>
+/// Displays a single-line text label with a defined horizontal or vertical orientation and foreground and background color.
+/// </summary>
+public class TextLabel : CControl
 {
     #region Constructors
-    public VerticalTextLabel(string text, Color fgcolor = default, Color bgcolor = default)
+    public TextLabel(TextLabelOrientation orientation, string text, Color fgcolor = default, Color bgcolor = default)
     {
+        _orientation = orientation;
         _text = text;        
         _fgcolor = fgcolor;
         _bgcolor = bgcolor;
         chars = _text.Select(t => new Character(t, foreground: _fgcolor, background: _bgcolor)).ToArray();
-        size = new Size(1, _text.Length);
+        size = orientation == TextLabelOrientation.Horizontal ? new Size(_text.Length, 1) :new Size(1, _text.Length);
         Initialize();
     }
     #endregion
@@ -48,7 +59,7 @@ public class VerticalTextLabel : CControl
         {
             _text = value;
             chars = _text.Select(t => new Character(t, foreground: _fgcolor, background: _bgcolor)).ToArray();
-            size = new Size(1, _text.Length);
+            size = _orientation == TextLabelOrientation.Horizontal ? new Size(_text.Length, 1) : new Size(1, _text.Length);
             Initialize();
         }
     }
@@ -59,23 +70,42 @@ public class VerticalTextLabel : CControl
     {
         get
         {
-            if (string.IsNullOrEmpty(_text) || position.X >= 1 || position.Y >= Text.Length)
+            if (string.IsNullOrEmpty(_text))
             {
-                return emptyCell;                
+                return emptyCell;
+            }
+            if (_orientation == TextLabelOrientation.Horizontal)
+            {
+                if (position.Y >= 1 || position.X >= Text.Length)
+                {
+                    return emptyCell;
+                }
+                else
+                {
+                    return chars[position.X];
+                }
             }
             else
             {
-                return chars[position.Y];
+                if (position.X >= 1 || position.Y >= Text.Length)
+                {
+                    return emptyCell;
+                }
+                else
+                {
+                    return chars[position.Y];
+                }
             }
         }
     }
     #endregion
 
     #region Methods
-    protected override void Initialize() => Resize(size);    
+    protected override void Initialize() => Resize(size);
     #endregion
 
     #region Fields
+    private TextLabelOrientation _orientation;
     private string _text = "";
     private Color _fgcolor;
     private Color _bgcolor;

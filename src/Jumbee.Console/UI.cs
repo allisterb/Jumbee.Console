@@ -56,9 +56,6 @@ public static class UI
     /// <summary>
     /// Handles periodic timer ticks by invoking the <see cref="Paint"/> event, if the lock is available.
     /// </summary>
-    /// <remarks>This method attempts to acquire a lock on the <see cref="Lock"/> object. If successful, it
-    /// releases the lock immediately and raises the <see cref="Paint"/> event with the predefined <see
-    /// cref="paintEventArgs"/>.</remarks>
     /// <param name="state">An optional state object passed by the timer. This parameter is not used in the method.</param>
     private static void OnTick(object? state)
     {

@@ -12,17 +12,17 @@ using ConsoleGUI.Space;
 public class Tab
 {    
     #region Constructors
-    internal Tab(TabBarDock tabBarDock, string name, IControl content, Color activebgColor = default, Color inactivebgColor = default)
+    internal Tab(TabBarDock tabBarDock, string name, IControl content, Color activeBgColor = default, Color inactiveBgColor = default)
     {
-        this.inactiveBgColor = inactiveBgColor.Equals(default) ? defaultinactiveBgColor : inactiveBgColor;
-        this.activeBgColor = Color.White; //activeBgColor.Equals(null) ? defaultactiveBgColor : activeBgColor;
+        this.activeBgColor = activeBgColor.Equals(default) ? defaultactiveBgColor : activeBgColor;
+        this.inactiveBgColor = inactiveBgColor.Equals(default) ? defaultinactiveBgColor : inactiveBgColor;        
         bool isHorizontalTabBar = tabBarDock ==  TabBarDock.Top || tabBarDock == TabBarDock.Bottom;
         headerBackground = new Background
         {
             Content = new Margin
             {
                 Offset = isHorizontalTabBar ? new Offset(1, 0, 1, 0) : new Offset(0, 1, 0, 1),
-                Content = isHorizontalTabBar ? new TextBlock { Text = name } : new VerticalTextLabel(name, this.activeBgColor)
+                Content = isHorizontalTabBar ? new TextLabel(TextLabelOrientation.Horizontal, name) : new TextLabel(TextLabelOrientation.Horizontal, name)
             },
             Color = this.inactiveBgColor
 
@@ -60,7 +60,7 @@ public class Tab
 public class TabPanelDockPanel : ConsoleGUI.Controls.DockPanel
 {
     #region Constructors
-    internal TabPanelDockPanel(TabBarDock tabBarDock) : base()
+    internal TabPanelDockPanel(TabBarDock tabBarDock, Color inactiveBgColor) : base()
     {
         this.tabBarDock = tabBarDock;
         Placement = tabBarDock switch
@@ -75,7 +75,7 @@ public class TabPanelDockPanel : ConsoleGUI.Controls.DockPanel
         tabsPanel = IsHorizontalTabBar ? new ConsoleGUI.Controls.HorizontalStackPanel() : new ConsoleGUI.Controls.VerticalStackPanel();
         DockedControl = new Background
         {
-            Color = new Color(25, 25, 52),
+            Color = inactiveBgColor,
             Content = IsHorizontalTabBar ?
             new Boundary
             {
@@ -95,9 +95,9 @@ public class TabPanelDockPanel : ConsoleGUI.Controls.DockPanel
     #endregion
 
     #region Methods
-    public void AddTab(string name, IControl content)
+    public void AddTab(string name, IControl content, Color activeBgColor = default, Color inactiveBgColor = default )
     {
-        var newTab = new Tab(tabBarDock, name, content, Color.White);
+        var newTab = new Tab(tabBarDock, name, content, activeBgColor, inactiveBgColor);
         tabs.Add(newTab);
         if (IsHorizontalTabBar)
         {

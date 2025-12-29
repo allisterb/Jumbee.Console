@@ -12,6 +12,7 @@ using Jumbee.Console;
 using Spectre.Console;
 
 using static Jumbee.Console.Color;
+using System.Security.AccessControl;
 
 public class Program
 {
@@ -61,12 +62,12 @@ public class Program
         );
         //var dockedFrame = dockedPanel.WithFrame(borderStyle: BorderStyle.Single, title: "Docked Panel (Left)");
 
-        var tabpanel = new TabPanel(TabBarDock.Left, ("Tab 1", CreateBox("T-Item 1", Black)), ("Tab 2", CreateBox("T-Item 2", Cyan1)));
+        var tabpanel = new TabPanel(TabBarDock.Top, controls: [("Tab 1", CreateBox("T-Item 1", Magenta1)), ("Tab 2", CreateBox("T-Item 2", Cyan1))]);
 
-        var vt = new VerticalTextLabel("hello");
+        var vt = new TextLabel(TextLabelOrientation.Horizontal, "hello", Red);
         // --- Main Layout ---
         // Combine them into a grid for display
-        var grid = new Jumbee.Console.Grid([40, 10, 20, 20], [60], [
+        var grid = new Jumbee.Console.Grid([20, 10, 20, 20], [60], [
             [tabpanel],
             [hStack],
             [vStack],
@@ -85,6 +86,8 @@ public class Program
             ConsoleManager.ReadInput([new InputListener()]);
             Thread.Sleep(50);
         }
+
+        
     }
 }
 
