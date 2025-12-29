@@ -26,13 +26,13 @@ public abstract class Control : ConsoleGUI.Common.Control, IDisposable
         {
             lock (UI.Lock)
             {
-                if (consoleBuffer.Buffer == null || position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height)
+                if (position.X < 0 || position.X >= Size.Width || position.Y < 0 || position.Y >= Size.Height)
                 {
                     return _emptyCell;
                 }
                 else
                 {
-                    return consoleBuffer.Buffer[position.X, position.Y];
+                    return consoleBuffer[position];
                 }
             }
         }
@@ -57,13 +57,13 @@ public abstract class Control : ConsoleGUI.Common.Control, IDisposable
     {
         lock (UI.Lock)
         {
-            var targetSize = MaxSize;
-            targetSize = new ConsoleGuiSize(Math.Max(0, targetSize.Width), Math.Max(0, targetSize.Height));
+            // Handle the case when negative or overflow sizes may get passed down by parent containers
+            var size = new ConsoleGuiSize(Math.Min(Math.Max(0, MaxSize.Width), 1000), Math.Min(Math.Max(0, MaxSize.Height), 1000));
 
-            if (targetSize.Width > 1000) targetSize = new ConsoleGuiSize(1000, targetSize.Height);
-            if (targetSize.Height > 1000) targetSize = new ConsoleGuiSize(targetSize.Width, 1000);
-            Resize(targetSize);
-            consoleBuffer.Resize(new ConsoleGuiSize(Math.Max(0, Size.Width), Math.Max(0, Size.Height)));
+            //if (targetSize.Width > 1000) targetSize = new ConsoleGuiSize(1000, targetSize.Height);
+            //if (targetSize.Height > 1000) targetSize = new ConsoleGuiSize(targetSize.Width, 1000);
+            Resize(size);
+            consoleBuffer.Size = Size;
             Paint();
         }
     }

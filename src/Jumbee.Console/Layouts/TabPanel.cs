@@ -13,7 +13,7 @@ public enum TabBarDock
 
 public class TabPanel : Layout<TabPanelDockPanel>
 {
-    public TabPanel(TabBarDock tabBarDock, Color activeTabBgColor = default, Color inactiveTabBgColor = default, params (string, IControl)[] controls) : base(new TabPanelDockPanel(tabBarDock)) {
+    public TabPanel(TabBarDock tabBarDock, Color activeTabBgColor = default, Color inactiveTabBgColor = default, params (string, IControl)[] controls) : base(new TabPanelDockPanel(tabBarDock, inactiveTabBgColor)) {
         foreach (var (tabname, tabcontrol) in controls)
         {
             this.control.AddTab(tabname, tabcontrol, activeTabBgColor, inactiveTabBgColor);

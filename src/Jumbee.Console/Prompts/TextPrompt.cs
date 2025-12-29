@@ -66,11 +66,11 @@ public class TextPrompt : Prompt
             lock (UI.Lock)
             {
                 Cell cell = _emptyCell;
-                if (consoleBuffer.Buffer != null &&
+                if (
                     position.X >= 0 && position.X < Size.Width &&
                     position.Y >= 0 && position.Y < Size.Height)
                 {
-                    cell = consoleBuffer.Buffer[position.X, position.Y];
+                    cell = consoleBuffer[position];
                 }
 
                 // Render Cursor
@@ -104,7 +104,8 @@ public class TextPrompt : Prompt
         _cursorScreenX = ansiConsole.CursorX;
         _cursorScreenY = ansiConsole.CursorY;
 
-        if (Frame != null)
+        // Auto-scroll frame if present/
+        if (Frame is not null)
         {
             var viewportHeight = Frame.ViewportSize.Height;
             if (_cursorScreenY < Frame.Top)

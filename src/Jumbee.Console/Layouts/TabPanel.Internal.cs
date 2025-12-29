@@ -60,7 +60,7 @@ public class Tab
 public class TabPanelDockPanel : ConsoleGUI.Controls.DockPanel
 {
     #region Constructors
-    internal TabPanelDockPanel(TabBarDock tabBarDock, Color inactiveBgColor) : base()
+    internal TabPanelDockPanel(TabBarDock tabBarDock, Color inactiveTabBgColor) : base()
     {
         this.tabBarDock = tabBarDock;
         Placement = tabBarDock switch
@@ -75,7 +75,7 @@ public class TabPanelDockPanel : ConsoleGUI.Controls.DockPanel
         tabsPanel = IsHorizontalTabBar ? new ConsoleGUI.Controls.HorizontalStackPanel() : new ConsoleGUI.Controls.VerticalStackPanel();
         DockedControl = new Background
         {
-            Color = inactiveBgColor,
+            Color = inactiveTabBgColor,
             Content = IsHorizontalTabBar ?
             new Boundary
             {

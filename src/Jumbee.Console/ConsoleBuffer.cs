@@ -1,8 +1,8 @@
 namespace Jumbee.Console;
 
 using System;
-using ConsoleGUI.Api;
 
+using ConsoleGUI.Api;
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 using ConsoleGuiSize = ConsoleGUI.Space.Size;
@@ -13,45 +13,73 @@ using ConsoleGuiSize = ConsoleGUI.Space.Size;
 public class ConsoleBuffer : IConsole
 {
     #region Properties
-    public Cell[,]? Buffer { get; private set; }
-    public ConsoleGuiSize Size { get; set; }
+    public ConsoleGuiSize Size 
+    {
+        get => field;
+        set
+        {
+            Resize(value);
+            field = value;  
+        }
+    }
     public bool KeyAvailable => false;
     #endregion
 
+    #region Indexers
+    public Cell this[Position position] => buffer[position.Y][position.X];
+    #endregion
+
     #region Methods
+    /// <summary>
+    /// Fill buffer with empty/transparent cells.
+    /// </summary>
     public void Initialize()
-    {
-        if (Buffer != null)
+    {    
+        for (int y = 0; y < Size.Height; y++)
         {
-            // Fill with empty/transparent cells
-            for (int x = 0; x < Size.Width; x++)
-            {
-                for (int y = 0; y < Size.Height; y++)
-                {
-                    Buffer[x, y] = new Cell(Character.Empty);
-                }
-            }
-        }
+            Array.Fill(buffer[y], emptyCell);
+        }        
     }
 
     public void OnRefresh() { }
 
+    /// <summary>
+    /// Sets the console buffer cell character.
+    /// </summary>
+    /// <param name="position"></param>
+    /// <param name="character"></param>
     public void Write(Position position, in Character character)
     {
-        if (Buffer == null) return;
         if (position.X >= 0 && position.X < Size.Width && position.Y >= 0 && position.Y < Size.Height)
         {
-            Buffer[position.X, position.Y] = new Cell(character);
+            buffer[position.Y][position.X] = new Cell(character);
         }
     }
 
+    /// <summary>
+    /// Will be handled by IInputListeners.
+    /// </summary>
+    /// <returns></returns>
     public ConsoleKeyInfo ReadKey() => default;
     
-    public void Resize(ConsoleGuiSize size)
+
+    /// <summary>
+    /// Resizing the control dimensions resizes the console buffer.
+    /// </summary>
+    /// <param name="size"></param>
+    protected void Resize(ConsoleGuiSize size)
     {
-        Size = size;
-        Buffer = new Cell[size.Width, size.Height];
+        buffer = new Cell[size.Height][] ;
+        for (int i = 0; i < size.Height; i++)
+        {
+            buffer[i] = new Cell[size.Width + 1];
+        }
         Initialize();
     }
+    #endregion
+
+    #region Fields
+    private static readonly Cell emptyCell = new Cell(Character.Empty);
+    private Cell[][] buffer = [];
     #endregion
 }
