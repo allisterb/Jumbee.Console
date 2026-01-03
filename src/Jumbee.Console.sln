@@ -15,6 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.TestDemo", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{C9B2828B-DAC4-4D99-B75E-890596A0B988}"
 	ProjectSection(SolutionItems) = preProject
+		..\docs\ConsoleGUI Control Rendering.md = ..\docs\ConsoleGUI Control Rendering.md
 		..\GEMINI.md = ..\GEMINI.md
 		..\README.md = ..\README.md
 	EndProjectSection
