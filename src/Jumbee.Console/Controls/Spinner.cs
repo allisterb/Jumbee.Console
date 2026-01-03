@@ -16,6 +16,7 @@ public class Spinner : AnimatedControl
             frameCount = _spinner.Frames.Count;
             interval = _spinner.Interval.Ticks;
             spinnerFrames = _spinner.Frames.Select(Markup.Escape).ToArray();
+            spinnerFramesMarkup = spinnerFrames.Select(f => $"[{styleMarkup}]{f}[/]" + (string.IsNullOrEmpty(_text) ? "" : " " + _text)).ToArray();
         }
     }
 
@@ -26,6 +27,7 @@ public class Spinner : AnimatedControl
         {
             _style = value;
             styleMarkup = _style.ToMarkup();
+            spinnerFramesMarkup = spinnerFrames.Select(f => $"[{styleMarkup}]{f}[/]" + (string.IsNullOrEmpty(_text) ? "" : " " + _text)).ToArray();
         }
     }
 
@@ -35,6 +37,7 @@ public class Spinner : AnimatedControl
         set
         {
             _text = value;
+            spinnerFramesMarkup = spinnerFrames.Select(f => $"[{styleMarkup}]{f}[/]" + (string.IsNullOrEmpty(_text) ? "" : " " + _text)).ToArray();
         }
     }
     #endregion
@@ -42,14 +45,8 @@ public class Spinner : AnimatedControl
     #region Methods
     protected sealed override void Render()
     {
-        ansiConsole.Clear(true);
-        var frame = spinnerFrames[frameIndex % spinnerFrames.Length];
-        var frameMarkup = $"[{styleMarkup}]{frame}[/]";
-        ansiConsole.Markup(frameMarkup);
-        if (!string.IsNullOrEmpty(_text))
-        {            
-            ansiConsole.Markup(" " + _text);
-        }   
+        ansiConsole.Clear(true);        
+        ansiConsole.Markup(spinnerFramesMarkup[frameIndex % spinnerFrames.Length]);        
     }
     #endregion
 
@@ -58,6 +55,7 @@ public class Spinner : AnimatedControl
     private Style _style = Style.Plain;
     private string styleMarkup = Style.Plain.ToMarkup();
     private string[] spinnerFrames = Spectre.Console.Spinner.Known.Default.Frames.Select(Markup.Escape).ToArray();
+    private string[] spinnerFramesMarkup = Spectre.Console.Spinner.Known.Default.Frames.Select(f => $"[{Style.Plain.ToMarkup()}]{f}[/]").ToArray();
     private string _text = string.Empty;
     #endregion
 }
