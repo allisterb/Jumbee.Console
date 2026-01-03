@@ -27,6 +27,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scripts", "Scripts", "{28E2
 		..\testdemo.cmd = ..\testdemo.cmd
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Core", "Core", "{8575CE18-ABF9-494C-9232-43E0F1E9BCE7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{6ED98344-E90A-44C5-8EB8-CBA5F48FF975}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -90,8 +94,10 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{7B6E8F93-BF85-49B1-AC10-0B325BBC3E0A} = {8575CE18-ABF9-494C-9232-43E0F1E9BCE7}
 		{87DE2B59-5AD1-E95D-0E65-F0B3F88012BF} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{5D091ADC-734A-965F-1D1B-E1B33540D2D6} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{6FE2DE0E-97C9-4486-B664-90E8B45BC4CD} = {6ED98344-E90A-44C5-8EB8-CBA5F48FF975}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}

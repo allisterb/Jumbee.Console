@@ -37,13 +37,12 @@ The initial plan created a bridge between the two libraries by implementing `IAn
 and a `SpectreControl` class for wrapping Spectre.Console controls as ConsoleGUI `IControl` to be used with ConsoleGUI control and layout classes.
 
 Support for updating and animating controls was added by using a single background thread started by the UI class running a timer that fires Paint events at regular intervals that controls use to update
-their state. Drawing conflicts during updates are mitigated by using a single lock object that gets passed to all controls derived from SpectreControl and AnimatedControl in Paint events to synchronize access to their internal state
+their state. Drawing conflicts during updates are mitigated by using a single lock object that gets passed to all controls derived from Control in Paint events to synchronize access to their internal state
 so that they can be properly rendered and drawn by ConsoleGUI. Paint events are only raised by the UI class when the lock is not held by any control.
 
-ConsoleGUI classes like Border and Margin and VerticalScrollPanel that simply wrap other control content with adornments like borders and scroll bars are implemented by a single
-ControlFrame class.
+## Project design and architecture
 
-## Project design
+Read all the markdown docs at @docs/*.md to understand the integration between Console.GUI and Spectre.Console in Jumbee.Console.
 
 ### Control class
 Controls are represented by the common Jumbee.Console.Control class. 
