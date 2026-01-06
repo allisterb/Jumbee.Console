@@ -100,10 +100,12 @@ public class Program
 
         }, null, 0, 100);
 
-        //var treeTimer = new Timer(_ =>
-        //{
-        //    treeControl.AddNode("lll");
-        //}, null, 0, 1000);
+        
+        
+        var treeTimer = new Timer(_ =>
+        {
+            treeControl.AddNode("lll");
+        }, null, 0, 1000);
 
         var t = Task.Run(() =>
         {

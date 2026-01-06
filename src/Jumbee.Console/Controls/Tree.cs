@@ -43,9 +43,11 @@ public class Tree : RenderableControl
         this(new Markup(root), style, guide, expanded) {}
     #endregion
 
+    #region Indexers
+    public TreeNode? this[uint index] => _root[index];
+    #endregion
 
     #region Properties
-
     public TreeNode Root => _root;
 
     /// <summary>
@@ -106,6 +108,8 @@ public class Tree : RenderableControl
         _root.AddChildren(labels);
         return this;    
     }
+
+    public bool RemoveNode(TreeNode node) => _root.RemoveChild(node);   
 
     internal void UpdateNodes() => this.Invalidate();
 
