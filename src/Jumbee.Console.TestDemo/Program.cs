@@ -84,7 +84,7 @@ public class Program
         ]);
 
         // Start the user interface
-        UI.Start(grid, 130, 40);
+        var t = UI.Start(grid, 130, 40);
         //UI.Start(internalGrid, width:250, height: 60, isTrueColorTerminal: true);
         // Create a separate timer to update the chartControl content periodically
         var random = new Random();
@@ -107,15 +107,7 @@ public class Program
             treeControl.AddNode("lll");
         }, null, 0, 1000);
 
-        var t = Task.Run(() =>
-        {
-            // Main loop
-            while (true)
-            {
-                ConsoleManager.ReadInput([p, prompt, new InputListener()]);
-                Thread.Sleep(50);
-            }
-        });
+        
         t.Wait();
     }
     

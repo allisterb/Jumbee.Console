@@ -24,7 +24,7 @@ public static class UI
     /// <param name="height"></param>
     /// <param name="paintInterval"></param>
     /// <param name="isTrueColorTerminal"></param>
-    public static Task Start(ILayout layout, int width = 110, int height = 25, int paintInterval = 100, bool isTrueColorTerminal = true)
+    internal static Task Start(IControl layout, int width = 110, int height = 25, int paintInterval = 100, bool isTrueColorTerminal = true)
     {        
         if (isRunning) return Task.CompletedTask;        
         if (!isTrueColorTerminal)
@@ -49,7 +49,9 @@ public static class UI
         isRunning = true;
         return Task;    
     }
-    
+
+    public static Task Start<T>(Layout<T> layout, int width = 110, int height = 25, int paintInterval = 100, bool isTrueColorTerminal = true) where T : ConsoleGUI.Common.Control, IDrawingContextListener =>
+       Start(layout.control, width, height, paintInterval, isTrueColorTerminal);
     /// <summary>
     /// Stops the UI update loop and disposes of the timer. 
     /// </summary>
@@ -118,8 +120,7 @@ public static class UI
                 {
                     inputListeners.Add(listener);   
                 }
-            }
-           
+            }           
         }
         remove
         {
