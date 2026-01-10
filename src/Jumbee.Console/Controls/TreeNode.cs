@@ -101,16 +101,19 @@ public class TreeNode
         }
     }
 
-    public bool RemoveChild(TreeNode child)
-    {
-        var r = _children.TryRemove(child.Id, out var c);
-        if (r)
+    public bool RemoveChild(uint id)
+    {        
+        if (_children.TryRemove(id, out var c))
         {
             c!.Parent = null;
-            IsRemoved = true;
+            c!.IsRemoved = true;
             UpdateTree();
+            return true;
         }
-        return r;
+        else
+        {
+            return false;
+        }
     }
 
     protected void UpdateTree()

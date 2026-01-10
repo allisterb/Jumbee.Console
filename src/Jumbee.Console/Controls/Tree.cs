@@ -23,7 +23,7 @@ public class Tree : RenderableControl
 {
     #region Constructors
     /// <summary>
-    /// Initializes a new instance of the <see cref="Tree"/> class.
+    /// Create a tree with a root label.
     /// </summary>
     /// <param name="rootLabel">The tree root label.</param>
     public Tree(IRenderable rootLabel, Style? style = null, TreeGuide? guide = null, bool expanded = true) : base()
@@ -109,7 +109,7 @@ public class Tree : RenderableControl
         return this;    
     }
 
-    public bool RemoveNode(TreeNode node) => _root.RemoveChild(node);   
+    public bool RemoveNode(TreeNode node) => _root.RemoveChild(node.Id);   
 
     internal void UpdateNodes() => this.Invalidate();
 
@@ -129,7 +129,6 @@ public class Tree : RenderableControl
             var stackNode = stack.Pop();
             if (stackNode.Count == 0)
             {
-                //Spectre.Console.
                 levels.RemoveLast();
                 if (levels.Count > 0)
                 {

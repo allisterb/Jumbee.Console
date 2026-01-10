@@ -16,7 +16,7 @@ public static class UI
 {
     #region Methods
     /// <summary>
-    /// Initializes the system console and starts the UI update loop.
+    /// Initializes the system console and starts the UI.
     /// </summary>
     /// <param name="layout"></param>
     /// <param name="width"></param>
@@ -37,10 +37,7 @@ public static class UI
         timer = new Timer(OnTick, null, interval, interval);
         isRunning = true;
     }
-
-    public static void Start<T>(Layout<T> layout, int width = 110, int height = 25, int paintInterval = 100, bool isTrueColorTerminal = true) where T : ConsoleGUI.Common.Control, IDrawingContextListener =>
-        Start(layout.control, width, height, paintInterval, isTrueColorTerminal);
-
+    
     /// <summary>
     /// Stops the UI update loop and disposes of the timer. 
     /// </summary>
