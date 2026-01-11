@@ -41,7 +41,7 @@ public class Program
         barChart.CenterLabel = true;
 
         // 3. Tree
-        var treeControl = new Jumbee.Console.Tree("Root", guide: TreeGuide.Ascii);
+        var treeControl = new Jumbee.Console.Tree("Root", guide: Jumbee.Console.TreeGuide.Ascii);
         treeControl.AddNode("[yellow]Foo[/]").AddChildren("[blue]Bar[/]", "Baz", "Qux");
         
         // Example of adding a subtree (since AddNode takes IRenderable)

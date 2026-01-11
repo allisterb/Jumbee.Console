@@ -13,6 +13,13 @@ using Spectre.Console.Interop;
 
 using CircularTreeException = Spectre.Console.Interop.CircularTreeException;
 
+public enum  TreeGuide
+{
+    Ascii,
+    Line,
+    BoldLine,
+    DoubleLine
+}
 /// <summary>
 /// Displays hierarchical data in a tree layout.
 /// </summary>
@@ -32,6 +39,7 @@ public class Tree : RenderableControl
         this._root = new TreeNode(this, 0, _rootLabel);
         this._style = style ?? Style.Plain;
         this._guide = guide ?? TreeGuide.Line;
+        this.scguide = GetSpectreConsoleTreeGuide(this._guide);
         this._expanded = expanded;
     }
 
@@ -71,6 +79,7 @@ public class Tree : RenderableControl
         set
         {
             _guide = value;
+            scguide = GetSpectreConsoleTreeGuide(_guide);
             Invalidate();
         }
     }
@@ -184,10 +193,19 @@ public class Tree : RenderableControl
         return result;
     }
     
+    protected static Spectre.Console.TreeGuide GetSpectreConsoleTreeGuide(TreeGuide guide) => guide switch
+    {
+        TreeGuide.Ascii => Spectre.Console.TreeGuide.Ascii,
+        TreeGuide.Line => Spectre.Console.TreeGuide.Line,
+        TreeGuide.BoldLine => Spectre.Console.TreeGuide.BoldLine,
+        TreeGuide.DoubleLine => Spectre.Console.TreeGuide.DoubleLine,
+        _ => Spectre.Console.TreeGuide.Line,
+    };  
+
     private Segment GetGuide(RenderOptions options, TreeGuidePart part)
     {
-        var guide = Guide.GetSafeTreeGuide(safe: !options.Unicode);
-        return new Segment(guide.GetPart(part), Style ?? Style.Plain);
+        var guide = scguide.GetSafeTreeGuide(safe: !options.Unicode);
+        return new Segment(guide.GetPart(part), Style);
     }
     #endregion
 
@@ -196,6 +214,7 @@ public class Tree : RenderableControl
     public TreeNode _root;
     protected Style _style;
     protected TreeGuide _guide;
+    protected Spectre.Console.TreeGuide scguide; 
     protected bool _expanded;
     #endregion
 }

@@ -2,6 +2,7 @@
 
 using System;
 using System.Linq;
+
 using Spectre.Console;
 
 public class Spinner : AnimatedControl
@@ -15,7 +16,7 @@ public class Spinner : AnimatedControl
             _spinner = value;
             frameCount = _spinner.Frames.Count;
             interval = _spinner.Interval.Ticks;
-            spinnerFrames = _spinner.Frames.Select(Markup.Escape).ToArray();
+            spinnerFrames = _spinner.Frames.Select(Style.EscapeMarkup).ToArray();
             spinnerFramesMarkup = spinnerFrames.Select(f => $"[{styleMarkup}]{f}[/]" + (string.IsNullOrEmpty(_text) ? "" : " " + _text)).ToArray();
         }
     }
@@ -26,7 +27,7 @@ public class Spinner : AnimatedControl
         set
         {
             _style = value;
-            styleMarkup = _style.ToMarkup();
+            styleMarkup = _style;
             spinnerFramesMarkup = spinnerFrames.Select(f => $"[{styleMarkup}]{f}[/]" + (string.IsNullOrEmpty(_text) ? "" : " " + _text)).ToArray();
         }
     }
@@ -53,9 +54,9 @@ public class Spinner : AnimatedControl
     #region Fields
     private Spectre.Console.Spinner _spinner = Spectre.Console.Spinner.Known.Default;
     private Style _style = Style.Plain;
-    private string styleMarkup = Style.Plain.ToMarkup();
+    private string styleMarkup = Style.Plain;
     private string[] spinnerFrames = Spectre.Console.Spinner.Known.Default.Frames.Select(Markup.Escape).ToArray();
-    private string[] spinnerFramesMarkup = Spectre.Console.Spinner.Known.Default.Frames.Select(f => $"[{Style.Plain.ToMarkup()}]{f}[/]").ToArray();
+    private string[] spinnerFramesMarkup = Spectre.Console.Spinner.Known.Default.Frames.Select(f => $"[{Style.Plain}]{f}[/]").ToArray();
     private string _text = string.Empty;
     #endregion
 }
