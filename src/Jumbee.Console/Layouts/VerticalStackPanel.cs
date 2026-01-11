@@ -6,7 +6,7 @@ using ConsoleGUI;
 
 public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
 {
-    public VerticalStackPanel(params IControl[]? controls) : base(new ConsoleGUI.Controls.VerticalStackPanel())
+    public VerticalStackPanel(params IFocusable[]? controls) : base(new ConsoleGUI.Controls.VerticalStackPanel())
     {
         if (controls != null)
         {
@@ -17,7 +17,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
         }
     }
 
-    public void Add(params IControl[] controls)
+    public void Add(params IFocusable[] controls)
     {
         foreach (var control in controls)
         {
@@ -25,7 +25,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
         }
     }
 
-    public void Remove(params IControl[] controls)
+    public void Remove(params IFocusable[] controls)
     {
         foreach (var control in controls)
         {
@@ -37,7 +37,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
 
     public override int Columns => 1;
 
-    public override IControl this[int row, int column]
+    public override IFocusable this[int row, int column]
     {
         get
         {
@@ -45,7 +45,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
             {
                 throw new ArgumentOutOfRangeException(nameof(column));
             }
-            return control.Children.ElementAt(row);
+            return (IFocusable) control.Children.ElementAt(row);
         }
     }
 }

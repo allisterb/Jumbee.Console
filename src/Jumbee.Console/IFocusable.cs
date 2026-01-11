@@ -4,7 +4,7 @@ using System;
 
 public delegate void FocusableEventHandler(); 
 
-public interface IFocusable
+public interface IFocusable : ConsoleGUI.IControl
 {
     bool IsFocused { get; set; }
 

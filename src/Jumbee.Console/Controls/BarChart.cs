@@ -17,7 +17,7 @@ public class BarChart : SpectreControl<Spectre.Console.BarChart>
         }
     }
 
-    public int? Width
+    public int? BarWidth
     {
         get => Content.Width;
         set

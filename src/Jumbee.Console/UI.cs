@@ -29,7 +29,7 @@ public static class UI
         }
         ConsoleManager.Setup();
         ConsoleManager.Resize(new Size(width, height));
-        ConsoleManager.Content = layout.LayoutControl;
+        ConsoleManager.Content = layout.CControl;
         interval = paintInterval;
         foreach(var c in layout.Controls)
         {
@@ -69,7 +69,7 @@ public static class UI
         cts.Cancel();   
     }
 
-    public static bool HasControl(IControl control) => controls.Contains(control);
+    public static bool HasControl(IFocusable control) => controls.Contains(control);
 
     public static void AddInputListener(IInputListener listener)
     {
@@ -107,7 +107,7 @@ public static class UI
     private static int interval = 100;
     private static bool isRunning;
     
-    private static List<IControl> controls = new List<IControl>();    
+    private static List<IFocusable> controls = new List<IFocusable>();    
     private static List<IInputListener> inputListeners = new List<IInputListener>();
     private static Dictionary<ConsoleKeyInfo, Action> GlobalHotKeys = new Dictionary<ConsoleKeyInfo, Action>
     {
@@ -122,7 +122,7 @@ public static class UI
         add
         {
             _Paint = (EventHandler<PaintEventArgs>?)Delegate.Combine(_Paint, value);
-            if (value.Target is IControl c)
+            if (value.Target is IFocusable c)
             {
                 if (!controls.Contains(c))
                 {
@@ -137,7 +137,7 @@ public static class UI
         remove
         {
             _Paint ??= (EventHandler<PaintEventArgs>?)Delegate.Remove(_Paint, value);
-            if (value.Target is IControl control)
+            if (value.Target is IFocusable control)
             {
                 controls.Remove(control);
             }           

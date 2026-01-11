@@ -1,10 +1,10 @@
 ﻿namespace Jumbee.Console;
 
+using System;
+using System.Threading;
+
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
-using System;
-using System.Security.Cryptography;
-using System.Threading;
 
 public abstract class Control : CControl, IFocusable, IDisposable    
 {
@@ -14,7 +14,13 @@ public abstract class Control : CControl, IFocusable, IDisposable
         consoleBuffer = new ConsoleBuffer();
         ansiConsole = new AnsiConsoleBuffer(consoleBuffer);
         UI.Paint += OnPaint;
+        OnFocus += Control_OnFocus;
+        OnLostFocus += Control_OnLostFocus;
     }
+
+    protected virtual void Control_OnLostFocus() {}
+
+    protected virtual void Control_OnFocus() {}
     #endregion
 
     #region Indexers    
@@ -36,12 +42,70 @@ public abstract class Control : CControl, IFocusable, IDisposable
         }
     }
     #endregion
-    
+
+    #region Properties
+    public virtual int Width
+    {
+        get => Size.Width;
+        set
+        {
+            Resize(new Size(value, Size.Height));
+        }
+    }
+
+    public virtual int Height
+    {
+        get => Size.Height;
+        set
+        {
+            Resize(new Size(Size.Width, value));
+        }
+    }   
+
+    public ControlFrame? Frame
+    {
+        get => field;
+        set
+        {
+            if (value is not null && UI.HasControl(this))
+            {
+                UI.AddInputListener(value);
+            }
+            field = value;
+        }
+
+    }
+
+    public virtual bool IsFocused
+    {
+        get => field;
+        set
+        {
+            var old = field;
+            field = value;
+            if (field && !old)
+            {
+                Control_OnFocus();
+                OnFocus?.Invoke();
+            }
+            else if (!field && old)
+            {
+                Control_OnLostFocus();
+                OnLostFocus?.Invoke();
+            }
+        }
+    }
+    #endregion
+
     #region Methods
     public virtual void Dispose()
     {
         UI.Paint -= OnPaint;
     }
+
+    public void Focus() => IsFocused = true;
+
+    public void UnFocus() => IsFocused = false;
 
     /// <summary>
     /// This method renders the control's content to the console buffer.
@@ -109,41 +173,7 @@ public abstract class Control : CControl, IFocusable, IDisposable
     /// </summary>
     protected void Validate() => Interlocked.Exchange(ref paintRequests, 0u);
     #endregion
-
-    #region Properties
-    public ControlFrame? Frame 
-    {
-        get => field;
-        set
-        {
-            if (value is not null && UI.HasControl(this))
-            {
-                UI.AddInputListener(value);
-            }
-            field = value;
-        }
     
-    }
-
-    public bool IsFocused 
-    { 
-        get => field; 
-        set
-        {
-            var old = field;
-            field = value;
-            if (field && !old)
-            {
-                OnFocus?.Invoke();
-            }
-            else if (!field && old)
-            {
-                OnLostFocus?.Invoke();
-            }
-        }
-    }
-    #endregion
-
     #region Events
     public event FocusableEventHandler? OnFocus;
     public event FocusableEventHandler? OnLostFocus;

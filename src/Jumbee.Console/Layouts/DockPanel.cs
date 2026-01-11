@@ -13,9 +13,11 @@ public enum DockedControlPlacement
 
 public class DockPanel : Layout<ConsoleGUI.Controls.DockPanel>
 {
-    public DockPanel(DockedControlPlacement placement, IControl dockedControl, IControl fillingControl)
+    public DockPanel(DockedControlPlacement placement, IFocusable dockedControl, IFocusable fillControl)
         : base(new ConsoleGUI.Controls.DockPanel())
     {
+        this.DockedControl = dockedControl;
+        this.FillControl = fillControl;
         control.Placement = placement switch
         {
             DockedControlPlacement.Top => ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Top,
@@ -23,22 +25,27 @@ public class DockPanel : Layout<ConsoleGUI.Controls.DockPanel>
             DockedControlPlacement.Bottom => ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Bottom,
             DockedControlPlacement.Left => ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Left,
             _ => throw new ArgumentOutOfRangeException(nameof(placement), placement, null)
-        };
-
-        control.DockedControl = dockedControl;
-        control.FillingControl = fillingControl;
+        };        
     }
 
-    public IControl DockedChild
+    public IFocusable DockedControl
     {
-        get => control.DockedControl;
-        set => control.DockedControl = value;
+        get => field;
+        set
+        {
+            field = value;
+            control.DockedControl = value;
+        }
     }
 
-    public IControl FillingChild
+    public IFocusable FillControl
     {
-        get => control.FillingControl;
-        set => control.FillingControl = value;
+        get => field;
+        set
+        {
+            field = value;
+            control.DockedControl = value;
+        }
     }
 
     public override int Rows => (control.Placement == ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Top ||
@@ -47,7 +54,7 @@ public class DockPanel : Layout<ConsoleGUI.Controls.DockPanel>
     public override int Columns => (control.Placement == ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Left ||
                                     control.Placement == ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Right) ? 2 : 1;
 
-    public override IControl this[int row, int column]
+    public override IFocusable this[int row, int column]
     {
         get
         {
@@ -57,13 +64,13 @@ public class DockPanel : Layout<ConsoleGUI.Controls.DockPanel>
             switch (control.Placement)
             {
                 case ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Top:
-                    return row == 0 ? control.DockedControl : control.FillingControl;
+                    return row == 0 ? DockedControl : FillControl;
                 case ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Bottom:
-                    return row == 0 ? control.FillingControl : control.DockedControl;
+                    return row == 0 ? FillControl : DockedControl;
                 case ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Left:
-                    return column == 0 ? control.DockedControl : control.FillingControl;
+                    return column == 0 ? DockedControl : FillControl;
                 case ConsoleGUI.Controls.DockPanel.DockedControlPlacement.Right:
-                    return column == 0 ? control.FillingControl : control.DockedControl;
+                    return column == 0 ? FillControl : DockedControl;
                 default:
                     throw new InvalidOperationException("Invalid placement state");
             }

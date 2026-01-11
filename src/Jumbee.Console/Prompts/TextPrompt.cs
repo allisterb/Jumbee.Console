@@ -86,6 +86,7 @@ public class TextPrompt : Prompt
             Invalidate();  
         }
     }
+
     #endregion
 
     #region Methods       
@@ -189,6 +190,17 @@ public class TextPrompt : Prompt
                 inputEvent.Handled = true;
             }
         }
+    }
+
+    protected override void Control_OnFocus()
+    {
+        BlinkCursor = true;
+
+    }
+
+    protected override void Control_OnLostFocus()
+    {
+        BlinkCursor = false;    
     }
 
     private void AttemptCommit()

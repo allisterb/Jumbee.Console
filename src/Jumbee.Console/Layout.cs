@@ -16,17 +16,17 @@ public enum LayoutKeyboardNavigation
     Right
 }
 
-public interface ILayout : IControl, IDrawingContextListener, IInputListener, IFocusable
+public interface ILayout : IFocusable, IDrawingContextListener, IInputListener
 {
     int Rows { get; }
     
     int Columns { get; }    
     
-    IControl LayoutControl { get; }
+    IControl CControl { get; }
 
-    IControl this[int row, int column] { get; }
+    IFocusable this[int row, int column] { get; }
 
-    IEnumerable<IControl> Controls { get; }
+    IEnumerable<IFocusable> Controls { get; }
 
     Dictionary <ConsoleKeyInfo, LayoutKeyboardNavigation> NavigationKeys { get; }
 }   
@@ -41,7 +41,7 @@ public abstract class Layout<T> : ILayout where T:CControl, IDrawingContextListe
     #endregion
 
     #region Indexers
-    public abstract IControl this[int row, int column] { get; }
+    public abstract IFocusable this[int row, int column] { get; }
     #endregion
 
     #region Properties
@@ -55,7 +55,7 @@ public abstract class Layout<T> : ILayout where T:CControl, IDrawingContextListe
 
     public Size Size => control.Size;   
 
-    public IControl LayoutControl => control;
+    public IControl CControl => control;
 
     public IDrawingContext Context
     {
@@ -63,7 +63,7 @@ public abstract class Layout<T> : ILayout where T:CControl, IDrawingContextListe
         set => ((IControl)control).Context = value;
     }
 
-    public IEnumerable<IControl> Controls
+    public IEnumerable<IFocusable> Controls
     {
         get
         {

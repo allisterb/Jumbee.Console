@@ -6,7 +6,7 @@ using ConsoleGUI;
 
 public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPanel>
 {
-    public HorizontalStackPanel(params IControl[]? controls) : base(new ConsoleGUI.Controls.HorizontalStackPanel())
+    public HorizontalStackPanel(params IFocusable[]? controls) : base(new ConsoleGUI.Controls.HorizontalStackPanel())
     {
         if (controls != null)
         {
@@ -17,7 +17,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
         }
     }
 
-    public void Add(params IControl[] controls)
+    public void Add(params IFocusable[] controls)
     {
         foreach (var control in controls)
         {
@@ -25,7 +25,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
         }
     }
 
-    public void Remove(params IControl[] controls)
+    public void Remove(params IFocusable[] controls)
     {
         foreach (var control in controls)
         {
@@ -37,7 +37,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
 
     public override int Columns => control.Children.Count();
 
-    public override IControl this[int row, int column]
+    public override IFocusable this[int row, int column]
     {
         get
         {
@@ -45,7 +45,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
             {
                 throw new ArgumentOutOfRangeException(nameof(row));
             }
-            return control.Children.ElementAt(column);
+            return (IFocusable) control.Children.ElementAt(column);
         }
     }
 }

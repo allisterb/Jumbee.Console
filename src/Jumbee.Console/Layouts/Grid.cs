@@ -19,7 +19,7 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// <param name="columnWidths"></param>
     /// <param name="controls"></param>
     /// <exception cref="ArgumentException"></exception>
-    public Grid(int[] rowHeights, int[] columnWidths, params IControl[][]? controls ) : base(new ConsoleGUI.Controls.Grid())
+    public Grid(int[] rowHeights, int[] columnWidths, params IFocusable[][]? controls ) : base(new ConsoleGUI.Controls.Grid())
     {                
         control.Rows = rowHeights.Select(h => new ConsoleGUI.Controls.Grid.RowDefinition(h)).ToArray();
         control.Columns = columnWidths.Select(w => new ConsoleGUI.Controls.Grid.ColumnDefinition(w)).ToArray();
@@ -51,8 +51,6 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
 
     public override int Columns => control.Columns.Length;
 
-    public override IControl this[int row, int column] => control.GetChild(column, row);
-    #endregion
-
-
+    public override IFocusable this[int row, int column] => (IFocusable) control.GetChild(column, row);
+    #endregion   
 }

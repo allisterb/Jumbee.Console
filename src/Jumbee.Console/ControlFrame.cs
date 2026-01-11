@@ -25,7 +25,7 @@ public enum BorderStyle
 /// <summary>
 /// Draws a border around a control together with margins and a title bar, and sets the foreground and background colors.
 /// </summary>
-public sealed class ControlFrame : CControl, IDrawingContextListener, IInputListener, IFocusable
+public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener, IInputListener 
 {
     #region Constructors
     public ControlFrame(Control control, BorderStyle? borderStyle = null, Offset? margin = null, Color? fgColor = null, Color? bgColor = null, string? title=null, Color? borderFgColor = null, Color? borderBgColor = null)

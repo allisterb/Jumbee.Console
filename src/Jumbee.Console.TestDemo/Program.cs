@@ -36,7 +36,7 @@ public class Program
             ("Testing", 33, Red)
         );
 
-        barChart.Width = 50;
+        barChart.BarWidth = 50;
         barChart.Label = "[green bold]Activity[/]";
         barChart.CenterLabel = true;
 
@@ -111,6 +111,7 @@ public class Program
         t.Wait();
     }
     
+    /*
     static void Test2(string[] args)
     {
         // --- Helpers ---
@@ -184,6 +185,7 @@ public class Program
 
         
     }
+    */
 }
 
 public class InputListener : IInputListener
