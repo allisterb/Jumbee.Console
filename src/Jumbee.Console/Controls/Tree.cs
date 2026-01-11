@@ -33,11 +33,11 @@ public class Tree : RenderableControl
     /// Create a tree with a root label.
     /// </summary>
     /// <param name="rootLabel">The tree root label.</param>
-    public Tree(IRenderable rootLabel, Style? style = null, TreeGuide? guide = null, bool expanded = true) : base()
+    public Tree(IRenderable rootLabel, TreeGuide? guide = null, Style? guideStyle = null, bool expanded = true) : base()
     {
         this._rootLabel = rootLabel;
         this._root = new TreeNode(this, 0, _rootLabel);
-        this._style = style ?? Style.Plain;
+        this._style = guideStyle ?? Style.Plain;
         this._guide = guide ?? TreeGuide.Line;
         this.scguide = GetSpectreConsoleTreeGuide(this._guide);
         this._expanded = expanded;
@@ -47,8 +47,8 @@ public class Tree : RenderableControl
     /// Initializes a new instance of the <see cref="Tree"/> class.
     /// </summary>
     /// <param name="root">The tree root label as a string.</param>
-    public Tree(string root, Style? style = null, TreeGuide? guide = null, bool expanded = true) : 
-        this(new Markup(root), style, guide, expanded) {}
+    public Tree(string root, TreeGuide? guide = null, Style ? guideStyle = null, bool expanded = true) : 
+        this(new Markup(root), guide, guideStyle, expanded) {}
     #endregion
 
     #region Indexers

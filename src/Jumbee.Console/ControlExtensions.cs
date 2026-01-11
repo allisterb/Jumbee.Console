@@ -146,5 +146,7 @@ public static class ControlExtensions
         frame.BorderFgColor = borderFgColor ?? frame.BorderFgColor;
         frame.BorderBgColor = borderBgColor ?? frame.BorderBgColor;
         return frame;
-    }          
+    }
+
+    public static string WithStyle(this string s, Style style) => style[s];
 }

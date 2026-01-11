@@ -18,8 +18,14 @@ public readonly struct Style
     public SCStyle SpectreConsoleStyle { get; }
     #endregion
 
+    #region Indexers
+    public string this[string text] => $"[{this.ToMarkup()}]{EscapeMarkup(text)}[/]";
+    #endregion
+
     #region Methods
     public static string EscapeMarkup(string text) => Spectre.Console.Markup.Escape(text);
+
+    public string ToMarkup() => SpectreConsoleStyle.ToMarkup();
     #endregion
 
     #region Operators
@@ -27,15 +33,14 @@ public readonly struct Style
 
     public static implicit operator Style(SCStyle spectreConsoleStyle) => new Style(spectreConsoleStyle);   
     
-    public static implicit operator Style(string style) => new Style(style);
-
-    public static implicit operator string(Style style) => style.SpectreConsoleStyle.ToMarkup();
+    public static implicit operator string(Style style) => style.ToMarkup();
 
     public static implicit operator Style(Color color) => new Style(new SCStyle(color) );
 
     public static implicit operator Color(Style style) => style.SpectreConsoleStyle.Foreground;
 
-    public static Style operator + (Style a, Style b) => new Style(a.SpectreConsoleStyle.Combine(b.SpectreConsoleStyle));
+    public static Style operator | (Style a, Style b) => new Style(a.SpectreConsoleStyle.Combine(b.SpectreConsoleStyle));
+
     #endregion
 
     #region Fields
