@@ -137,6 +137,26 @@ public class PlotLiveTests
             $"scatter ({scatterCells} cells) should fill fewer cells than the connected line ({lineCells})");
     }
 
+    [Fact]
+    public void Scatter_PointsOutsideFixedAxisRange_AreClippedNotThrown()
+    {
+        // Regression: a finite scatter point outside the pinned axis range maps to a sub-pixel column past the last
+        // cell. VirtualGraphics.DrawPoint must drop it against the REAL buffer bounds, not the scaled virtual bounds.
+        // (The scaled-bounds check alone passes for a sub-pixel column that is still out of the actual image; the
+        // hot-path SetPixel no longer guards, so an unclipped write would throw IndexOutOfRangeException. Several
+        // overshoot factors are used so at least one lands in that just-past-the-edge band regardless of plot size.)
+        var p = new Plot();
+        p.ConfigureGrid(g => g.IsVisible = false);
+        p.SetXRange(0, 10);
+        p.SetYRange(0, 10);
+        // 5,5 is inside the pinned window; the rest overshoot both axes by 1.3x–4x.
+        p.AddScatter([5.0, 13.0, 16.0, 20.0, 40.0], [5.0, 13.0, 16.0, 20.0, 40.0], PlotBrush.Braille);
+
+        var ex = Record.Exception(() => Render(p));
+        Assert.Null(ex);                    // off-axis points are clipped, not fatal
+        Assert.True(HasBraille(Render(p))); // the in-range point still draws
+    }
+
     private static int BrailleCount(string s) => s.Count(c => c is >= '⠀' and <= '⣿');
 
     // Sub-cell braille dot bits: dots 1/4 (top row of the cell) are bits 0/3 = 0x09; dots 7/8 (bottom row) are
