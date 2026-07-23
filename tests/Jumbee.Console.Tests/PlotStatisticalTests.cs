@@ -41,8 +41,8 @@ public class PlotStatisticalTests
     {
         var rng = new Random(3);
         var groups = Enumerable.Range(0, 4)
-            .Select(g => (IReadOnlyList<double>)Enumerable.Range(0, 40).Select(_ => g * 10 + rng.NextDouble() * 8).ToArray())
-            .ToList();
+            .Select(g => Enumerable.Range(0, 40).Select(_ => g * 10 + rng.NextDouble() * 8).ToArray())
+            .ToArray();
 
         var plot = new Plot();
         plot.AddBoxes(groups);
@@ -87,7 +87,7 @@ public class PlotStatisticalTests
         Assert.Null(ex);
     }
 
-    private static readonly IReadOnlyList<IReadOnlyList<double>> ThreeSeries =
+    private static readonly double[][] ThreeSeries =
     [
         new double[] { 6, 9, 5, 8 },
         new double[] { 4, 7, 8, 3 },
@@ -183,9 +183,9 @@ public class PlotStatisticalTests
         Assert.True(maxRight > shortRight, "the largest-value bar should extend further right than the smallest");
     }
 
-    private static IReadOnlyList<IReadOnlyList<double>> Gradient(int rows, int cols) =>
+    private static double[][] Gradient(int rows, int cols) =>
         Enumerable.Range(0, rows)
-            .Select(r => (IReadOnlyList<double>)Enumerable.Range(0, cols).Select(c => (double)(c + (rows - 1 - r))).ToArray())
+            .Select(r => Enumerable.Range(0, cols).Select(c => (double)(c + (rows - 1 - r))).ToArray())
             .ToArray();
 
     [Fact]
@@ -247,7 +247,7 @@ public class PlotStatisticalTests
     public void ConfusionMatrix_DrawsCellCountsWithContrastText()
     {
         // Strong diagonal (bright cells) with dim off-diagonal.
-        var m = new List<IReadOnlyList<double>>
+        var m = new double[][]
         {
             new double[] { 90, 2, 1 },
             new double[] { 3, 85, 4 },
@@ -281,7 +281,7 @@ public class PlotStatisticalTests
     public void ConfusionMatrix_CategoricalLabels_RenderInMargins()
     {
         var classes = new[] { "ant", "bee", "cod" };
-        var m = new List<IReadOnlyList<double>>
+        var m = new double[][]
         {
             new double[] { 20, 1, 0 },
             new double[] { 2, 18, 3 },
@@ -324,7 +324,7 @@ public class PlotStatisticalTests
     public void Heatmap_AllNaN_LeftBlank()
     {
         var nanGrid = Enumerable.Range(0, 4)
-            .Select(_ => (IReadOnlyList<double>)Enumerable.Repeat(double.NaN, 4).ToArray())
+            .Select(_ => Enumerable.Repeat(double.NaN, 4).ToArray())
             .ToArray();
         var plot = new Plot();
         plot.AddHeatmap(nanGrid);

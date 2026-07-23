@@ -31,27 +31,27 @@ public sealed class PlotSeries
     /// Passing empty lists is valid and draws nothing — a live series can be emptied (equivalently, <see cref="Clear"/>)
     /// and refilled without removing/re-adding it, so a series that appears only under some state (a trigger marker,
     /// peaks) can be toggled by feeding it data or emptying it.</summary>
-    public void SetData(IReadOnlyList<double> xs, IReadOnlyList<double> ys)
+    public void SetData(double[] xs, double[] ys)
     {
-        if (xs.Count != ys.Count)
+        if (xs.Length != ys.Length)
             throw new ArgumentException("xs and ys must have the same length.");
 
         _plot.UpdateSeries(() =>
         {
             _xs.Clear();
             _ys.Clear();
-            for (int i = 0; i < xs.Count; i++) { _xs.Add(xs[i]); _ys.Add(ys[i]); }
+            for (int i = 0; i < xs.Length; i++) { _xs.Add(xs[i]); _ys.Add(ys[i]); }
         });
     }
 
     /// <summary>Replaces the series with <paramref name="values"/> at implicit x positions 1, 2, 3, … — for bars.</summary>
-    public void SetValues(IReadOnlyList<double> values)
+    public void SetValues(double[] values)
     {
         _plot.UpdateSeries(() =>
         {
             _xs.Clear();
             _ys.Clear();
-            for (int i = 0; i < values.Count; i++) { _xs.Add(i + 1); _ys.Add(values[i]); }
+            for (int i = 0; i < values.Length; i++) { _xs.Add(i + 1); _ys.Add(values[i]); }
         });
     }
 

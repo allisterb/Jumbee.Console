@@ -139,6 +139,41 @@ public class PlotLiveTests
 
     private static int BrailleCount(string s) => s.Count(c => c is >= '⠀' and <= '⣿');
 
+    // Sub-cell braille dot bits: dots 1/4 (top row of the cell) are bits 0/3 = 0x09; dots 7/8 (bottom row) are
+    // bits 6/7 = 0xC0.
+    private static bool RowHasTopDot(string row) => row.Any(c => c is >= '⠀' and <= '⣿' && (c & 0x09) != 0);
+    private static bool RowHasBottomDot(string row) => row.Any(c => c is >= '⠀' and <= '⣿' && (c & 0xC0) != 0);
+
+    [Fact]
+    public void BrailleSubCell_TopOfPlotLightsTopDots_BottomLightsBottomDots()
+    {
+        // Regression for the ConsolePlot sub-pixel vertical inversion: a horizontal line at the TOP of the plot must
+        // light a braille cell's TOP dots (1/4), and one at the BOTTOM its BOTTOM dots (7/8) — matching ratatui.
+        // Before the ScaledConverter "+ (res-1)" fix, the top vRes-1 sub-rows were unreachable, so data-max wrongly
+        // lit the cell's BOTTOM dots.
+        static Plot Bare()
+        {
+            var p = new Plot();
+            p.ConfigureGrid(g => g.IsVisible = false);
+            p.ConfigureTicks(t => { t.IsVisible = false; t.Labels.IsVisible = false; });
+            p.ConfigureAxis(a => a.IsVisible = false);
+            return p;
+        }
+
+        // Anchors at y=0 and y=10 (right column) pin the range to [0,10]; the line under test spans the left columns.
+        var topPlot = Bare();
+        topPlot.AddScatter([9.0, 9.0], [0.0, 10.0], PlotBrush.Braille);
+        topPlot.AddSeries([0.0, 8.0], [10.0, 10.0], PlotBrush.Braille);   // line at the very top
+        var topRows = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(topPlot, 10, 4));
+        Assert.True(RowHasTopDot(topRows[0]), "a line at the top of the plot should light a braille cell's top dots");
+
+        var botPlot = Bare();
+        botPlot.AddScatter([9.0, 9.0], [0.0, 10.0], PlotBrush.Braille);
+        botPlot.AddSeries([0.0, 8.0], [0.0, 0.0], PlotBrush.Braille);     // line at the very bottom
+        var botRows = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(botPlot, 10, 4));
+        Assert.True(RowHasBottomDot(botRows[^1]), "a line at the bottom of the plot should light a braille cell's bottom dots");
+    }
+
     [Fact]
     public void ChromeColours_RenderTrueColour_NotSnappedTo16()
     {

@@ -22,6 +22,14 @@ public class PlotDrawBenchmarks
     private List<double> _ys = null!;
     private PointPen _pen;
 
+    // Large series to isolate the per-point draw-loop cost: one backed by double[] (draw loop's span fast-path), one
+    // by an opaque IReadOnlyList (forces the interface indexer). The gap = what the array/span fast-path saves.
+    private const int BigN = 2000;
+    private Plot _bigLineArray = null!;
+    private Plot _bigLineOpaque = null!;
+    private Plot _bigScatterArray = null!;
+    private Plot _bigScatterOpaque = null!;
+
     [Params(60)]
     public int Width;
 
@@ -38,6 +46,40 @@ public class PlotDrawBenchmarks
         _ys = new List<double>();
         for (int i = 0; i < 64; i++) { _xs.Add(i); _ys.Add(50 + 40 * System.Math.Sin(i * 0.2)); }
         _pen = new PointPen(SystemPointBrushes.Braille, new CColor(90, 160, 240));
+
+        _bigLineArray = BuildBig(scatter: false, opaque: false);
+        _bigLineOpaque = BuildBig(scatter: false, opaque: true);
+        _bigScatterArray = BuildBig(scatter: true, opaque: false);
+        _bigScatterOpaque = BuildBig(scatter: true, opaque: true);
+    }
+
+    // A BigN-point line/scatter with a pinned axis. The series data is either a plain double[] (fast path) or wrapped
+    // in Opaque (interface indexer). Both hold identical values, so the benchmarks differ only in the draw-loop index.
+    private Plot BuildBig(bool scatter, bool opaque)
+    {
+        var xs = new double[BigN];
+        var ys = new double[BigN];
+        for (int i = 0; i < BigN; i++) { xs[i] = i; ys[i] = 50 + 40 * System.Math.Sin(i * 0.05); }
+
+        var plot = new Plot(Width, Height);
+        plot.FixedXRange = (0, BigN - 1);
+        plot.FixedYRange = (0, 100);
+        var pen = new PointPen(SystemPointBrushes.Braille, new CColor(90, 160, 240));
+        IReadOnlyCollection<double> px = opaque ? new Opaque(xs) : xs;
+        IReadOnlyCollection<double> py = opaque ? new Opaque(ys) : ys;
+        if (scatter) plot.AddScatter(px, py, pen);
+        else plot.AddSeries(px, py, pen);
+        return plot;
+    }
+
+    // An IReadOnlyList<double> whose concrete type is neither double[] nor List<double>, so the draw loop's span
+    // fast-path (TryAsSpan) misses and it exercises the interface indexer — the pre-fast-path baseline.
+    private sealed class Opaque(double[] data) : IReadOnlyList<double>
+    {
+        public double this[int i] => data[i];
+        public int Count => data.Length;
+        public IEnumerator<double> GetEnumerator() { foreach (var d in data) yield return d; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     // A streaming line chart with a pinned axis, grid and tick labels — the common live-monitor configuration.
@@ -84,4 +126,19 @@ public class PlotDrawBenchmarks
         plot.AddSeries(_xs, _ys, _pen);
         plot.Draw();
     }
+
+    // BigN-point line: array/span fast path vs. the interface indexer. Their gap is the draw-loop indexing saving.
+    [Benchmark]
+    public void BigLine_ArraySpan() => _bigLineArray.Draw();
+
+    [Benchmark]
+    public void BigLine_InterfaceIndexer() => _bigLineOpaque.Draw();
+
+    // BigN-point scatter: DrawPoints has no per-segment Bresenham, so the per-point indexing is a larger share here —
+    // the clearest read on the fast-path's effect.
+    [Benchmark]
+    public void BigScatter_ArraySpan() => _bigScatterArray.Draw();
+
+    [Benchmark]
+    public void BigScatter_InterfaceIndexer() => _bigScatterOpaque.Draw();
 }

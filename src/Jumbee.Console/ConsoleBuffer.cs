@@ -9,7 +9,7 @@ using ConsoleGUI.Space;
 /// <summary>
 /// A ConsoleGUI.IConsole implementation that writes to a buffer.
 /// </summary>
-public class ConsoleBuffer : IConsole
+public class ConsoleBuffer : IConsole, IConsoleBuffer
 {
     #region Properties
     /// <summary>The logical size of the buffer; setting it resizes the backing cell arrays.</summary>
@@ -58,6 +58,14 @@ public class ConsoleBuffer : IConsole
     /// <param name="position"></param>
     /// <param name="character"></param>
     public void Write(Position position, in Character character) => buffer[position.Y][position.X] = new Cell(character);
+
+    /// <summary>Writes a character at column <paramref name="x"/>, row <paramref name="y"/> — the
+    /// <see cref="IConsoleBuffer"/> render-target entry point (used by controls that draw straight into the buffer).</summary>
+    public void Write(int x, int y, in Character character) => buffer[y][x] = new Cell(character);
+
+    /// <summary>The <see cref="Character"/> at (<paramref name="x"/>, <paramref name="y"/>) — a cell read without the
+    /// surrounding <see cref="Cell"/> (no mouse-listener copy), for a hot draw loop reading its own output back.</summary>
+    public Character CharacterAt(int x, int y) => buffer[y][x].Character;
         
     
     /// <summary>

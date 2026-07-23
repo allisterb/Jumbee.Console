@@ -58,7 +58,7 @@ public class Plot : Control
     /// rasterizes a segment between every consecutive pair of points, which is markedly more expensive than plotting
     /// points independently.</para>
     /// </remarks>
-    public Plot AddSeries(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PointPen pen = default)
+    public Plot AddSeries(double[] xs, double[] ys, PointPen pen = default)
     {
         UI.Invoke(() =>
         {
@@ -80,7 +80,7 @@ public class Plot : Control
     /// palette, cycling by series index.
     /// <para>For dense or high-frequency data prefer <see cref="AddScatter"/> — see the note there.</para>
     /// </remarks>
-    public Plot AddSeries(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PlotBrush brush, Color? color = null)
+    public Plot AddSeries(double[] xs, double[] ys, PlotBrush brush, Color? color = null)
     {
         UI.Invoke(() =>
         {
@@ -101,7 +101,7 @@ public class Plot : Control
     /// consecutive pair of points, whereas scatter plots each point on its own. When the point count is high and the
     /// connecting lines add little, prefer scatter for a large drawing-cost win.</para>
     /// </remarks>
-    public Plot AddScatter(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PlotBrush brush = PlotBrush.Braille, Color? color = null)
+    public Plot AddScatter(double[] xs, double[] ys, PlotBrush brush = PlotBrush.Braille, Color? color = null)
     {
         UI.Invoke(() =>
         {
@@ -116,7 +116,7 @@ public class Plot : Control
     /// a dot marker.
     /// </summary>
     /// <remarks><paramref name="color"/> defaults to the palette.</remarks>
-    public Plot AddStem(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, Color? color = null, double baseline = 0)
+    public Plot AddStem(double[] xs, double[] ys, Color? color = null, double baseline = 0)
     {
         UI.Invoke(() =>
         {
@@ -134,7 +134,7 @@ public class Plot : Control
     /// <paramref name="color"/> defaults to the palette; <paramref name="width"/> is the bar width as a fraction
     /// (0..1) of the spacing between bars.
     /// </remarks>
-    public Plot AddBars(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, Color? color = null, double baseline = 0, double width = 0.8)
+    public Plot AddBars(double[] xs, double[] ys, Color? color = null, double baseline = 0, double width = 0.8)
     {
         UI.Invoke(() =>
         {
@@ -152,7 +152,7 @@ public class Plot : Control
     /// <paramref name="bins"/> ≤ 0 picks a bin count automatically (√n, clamped); <paramref name="color"/> defaults
     /// to the palette.
     /// </remarks>
-    public Plot AddHistogram(IReadOnlyList<double> values, int bins = 0, Color? color = null)
+    public Plot AddHistogram(double[] values, int bins = 0, Color? color = null)
     {
         UI.Invoke(() =>
         {
@@ -166,7 +166,7 @@ public class Plot : Control
     }
 
     // Bins the finite values into equal-width buckets, returning each bin's midpoint (x) and count (bar height).
-    private static (double[] mids, double[] counts) Histogram(IReadOnlyList<double> values, int bins)
+    private static (double[] mids, double[] counts) Histogram(double[] values, int bins)
     {
         var finite = values.Where(v => !double.IsNaN(v) && !double.IsInfinity(v)).ToArray();
         if (finite.Length == 0) return ([], []);
@@ -193,8 +193,8 @@ public class Plot : Control
     /// </summary>
     /// <remarks><paramref name="up"/> defaults to green (close ≥ open), <paramref name="down"/> to red.</remarks>
     public Plot AddCandles(
-        IReadOnlyList<double> xs, IReadOnlyList<double> opens, IReadOnlyList<double> highs,
-        IReadOnlyList<double> lows, IReadOnlyList<double> closes, Color? up = null, Color? down = null)
+        double[] xs, double[] opens, double[] highs,
+        double[] lows, double[] closes, Color? up = null, Color? down = null)
     {
         UI.Invoke(() =>
         {
@@ -215,8 +215,8 @@ public class Plot : Control
     /// <paramref name="color"/>; <paramref name="width"/> is the box width as a fraction (0..1) of the spacing.
     /// </remarks>
     public Plot AddBox(
-        IReadOnlyList<double> xs, IReadOnlyList<double> mins, IReadOnlyList<double> q1s,
-        IReadOnlyList<double> medians, IReadOnlyList<double> q3s, IReadOnlyList<double> maxes,
+        double[] xs, double[] mins, double[] q1s,
+        double[] medians, double[] q3s, double[] maxes,
         Color? color = null, Color? medianColor = null, double width = 0.6)
     {
         UI.Invoke(() =>
@@ -237,7 +237,7 @@ public class Plot : Control
     /// defaults to the palette.
     /// </remarks>
     public Plot AddBoxes(
-        IReadOnlyList<IReadOnlyList<double>> groups, IReadOnlyList<double>? positions = null,
+        double[][] groups, double[]? positions = null,
         Color? color = null, Color? medianColor = null, double width = 0.6)
     {
         UI.Invoke(() =>
@@ -248,11 +248,11 @@ public class Plot : Control
             var medians = new List<double>();
             var q3s = new List<double>();
             var maxes = new List<double>();
-            for (int i = 0; i < groups.Count; i++)
+            for (int i = 0; i < groups.Length; i++)
             {
                 if (!Quartiles(groups[i], out var min, out var q1, out var med, out var q3, out var max))
                     continue;
-                xs.Add(positions is not null && i < positions.Count ? positions[i] : i + 1);
+                xs.Add(positions is not null && i < positions.Length ? positions[i] : i + 1);
                 mins.Add(min); q1s.Add(q1); medians.Add(med); q3s.Add(q3); maxes.Add(max);
             }
 
@@ -266,7 +266,7 @@ public class Plot : Control
 
     // The five-number summary of the finite values (linear-interpolation percentiles, numpy's default), or false
     // when there are no finite values.
-    private static bool Quartiles(IReadOnlyList<double> values, out double min, out double q1, out double median, out double q3, out double max)
+    private static bool Quartiles(double[] values, out double min, out double q1, out double median, out double q3, out double max)
     {
         min = q1 = median = q3 = max = 0;
         var sorted = values.Where(v => !double.IsNaN(v) && !double.IsInfinity(v)).ToArray();
@@ -297,7 +297,7 @@ public class Plot : Control
     /// <remarks>
     /// <paramref name="color"/> defaults to the palette; <paramref name="capWidth"/> is the cap half-width in cells.
     /// </remarks>
-    public Plot AddErrorBars(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IReadOnlyList<double> errors, Color? color = null, int capWidth = 1) =>
+    public Plot AddErrorBars(double[] xs, double[] ys, double[] errors, Color? color = null, int capWidth = 1) =>
         AddErrorBars(xs, ys, errors, errors, color, capWidth);
 
     /// <summary>
@@ -308,7 +308,7 @@ public class Plot : Control
     /// <paramref name="color"/> defaults to the palette; <paramref name="capWidth"/> is the cap half-width in cells.
     /// </remarks>
     public Plot AddErrorBars(
-        IReadOnlyList<double> xs, IReadOnlyList<double> ys, IReadOnlyList<double> errLows, IReadOnlyList<double> errHighs,
+        double[] xs, double[] ys, double[] errLows, double[] errHighs,
         Color? color = null, int capWidth = 1)
     {
         UI.Invoke(() =>
@@ -328,12 +328,12 @@ public class Plot : Control
     /// as a fraction (0..1) of the spacing.
     /// </remarks>
     public Plot AddGroupedBars(
-        IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList<double>> series,
+        double[] xs, double[][] series,
         IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
     {
         UI.Invoke(() =>
         {
-            var cs = ColorsFor(series.Count, colors);
+            var cs = ColorsFor(series.Length, colors);
             AddElement(plot => plot.AddGroupedBars(xs, series, cs, baseline, width));
         });
         return this;
@@ -347,12 +347,12 @@ public class Plot : Control
     /// <paramref name="colors"/> defaults to the palette (one per series).
     /// </remarks>
     public Plot AddStackedBars(
-        IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList<double>> series,
+        double[] xs, double[][] series,
         IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
     {
         UI.Invoke(() =>
         {
-            var cs = ColorsFor(series.Count, colors);
+            var cs = ColorsFor(series.Length, colors);
             AddElement(plot => plot.AddStackedBars(xs, series, cs, baseline, width));
         });
         return this;
@@ -366,7 +366,7 @@ public class Plot : Control
     /// <paramref name="color"/> defaults to the palette; <paramref name="width"/> is the bar thickness as a fraction
     /// (0..1) of the spacing.
     /// </remarks>
-    public Plot AddHBars(IReadOnlyList<double> positions, IReadOnlyList<double> values, Color? color = null, double baseline = 0, double width = 0.8)
+    public Plot AddHBars(double[] positions, double[] values, Color? color = null, double baseline = 0, double width = 0.8)
     {
         UI.Invoke(() =>
         {
@@ -386,14 +386,14 @@ public class Plot : Control
     /// (readable-contrast on the cell colour) — e.g. <c>v =&gt; ((int)v).ToString()</c> for a confusion matrix.
     /// </remarks>
     public Plot AddHeatmap(
-        IReadOnlyList<IReadOnlyList<double>> values, PlotColormap colormap = PlotColormap.Viridis,
+        double[][] values, PlotColormap colormap = PlotColormap.Viridis,
         double? min = null, double? max = null, Func<double, string>? cellText = null)
     {
         UI.Invoke(() =>
         {
-            int rows = values.Count;
+            int rows = values.Length;
             if (rows == 0) return;
-            int cols = values[0].Count;
+            int cols = values[0].Length;
             if (cols == 0) return;
 
             double dataMin = double.PositiveInfinity, dataMax = double.NegativeInfinity;
@@ -424,19 +424,19 @@ public class Plot : Control
     /// <see cref="SetXTicks"/>/<see cref="SetYTicks"/>.
     /// </remarks>
     public Plot AddConfusionMatrix(
-        IReadOnlyList<IReadOnlyList<double>> counts, IReadOnlyList<string>? rowLabels = null,
-        IReadOnlyList<string>? colLabels = null, PlotColormap colormap = PlotColormap.Heat)
+        double[][] counts, string[]? rowLabels = null,
+        string[]? colLabels = null, PlotColormap colormap = PlotColormap.Heat)
     {
         AddHeatmap(counts, colormap, cellText: v => ((long)Math.Round(v)).ToString());
 
-        int rows = counts.Count;
-        int cols = rows > 0 ? counts[0].Count : 0;
+        int rows = counts.Length;
+        int cols = rows > 0 ? counts[0].Length : 0;
         // The grid tiles 0..cols × 0..rows with row 0 at the top, so column c's centre is at x = c+0.5 and row r's
         // centre is at y = rows−r−0.5 (image y is up).
         if (colLabels is not null && cols > 0)
-            SetXTicks([.. Enumerable.Range(0, cols).Select(c => (c + 0.5, c < colLabels.Count ? colLabels[c] : ""))]);
+            SetXTicks([.. Enumerable.Range(0, cols).Select(c => (c + 0.5, c < colLabels.Length ? colLabels[c] : ""))]);
         if (rowLabels is not null && rows > 0)
-            SetYTicks([.. Enumerable.Range(0, rows).Select(r => (rows - r - 0.5, r < rowLabels.Count ? rowLabels[r] : ""))]);
+            SetYTicks([.. Enumerable.Range(0, rows).Select(r => (rows - r - 0.5, r < rowLabels.Length ? rowLabels[r] : ""))]);
         // Categorical ticks keep the grid at exact bounds (edge to edge), so the labels need a reserved margin
         // rather than being attached to the axis inside the grid.
         if (rowLabels is not null || colLabels is not null)
@@ -758,20 +758,25 @@ public class Plot : Control
             _plot = BuildPlot(w, h);
         }
 
-        consoleBuffer.Initialize();
+        // Skip when there's nothing to draw or no room for the axes/labels. Draw won't run to fill the buffer here, so
+        // clear it explicitly. ConsolePlot pads degenerate data ranges (a single point / flat series) internally, so
+        // Draw is safe for any non-empty data at a usable size — no try/catch needed, and the UI frame loop is the
+        // ultimate backstop for anything unforeseen.
+        if (_plot is null || w < MinWidth || h < MinHeight)
+        {
+            consoleBuffer.Initialize();
+            return;
+        }
 
-        // Skip when there's nothing to draw or no room for the axes/labels. ConsolePlot pads degenerate data ranges
-        // (a single point / flat series) internally, so Draw is safe for any non-empty data at a usable size — no
-        // try/catch needed here, and the UI frame loop is the ultimate backstop for anything unforeseen.
-        if (_plot is null || w < MinWidth || h < MinHeight) return;
+        // Draw straight into consoleBuffer — PlotImage's cell surface IS this buffer, so there's no copy pass. Draw's
+        // own Clear() fills every cell each frame, so a separate consoleBuffer.Initialize() would be redundant work.
         _plot.Draw();
-        _plot.Render();   // blits GetImage() into consoleBuffer (see PlotImage)
     }
 
     private PlotImage? BuildPlot(int width, int height)
     {
         if (_config.Count == 0 && _chrome.Count == 0) return null;
-        var plot = new PlotImage(width, height, consoleBuffer) { Background = _background };
+        var plot = new PlotImage(consoleBuffer, (CColor?)_background);
         foreach (var apply in _chrome) apply(plot);    // persistent styling first (axis/grid/ticks)
         foreach (var apply in _config) apply(plot);    // then per-data series/labels/ranges
         return plot;
