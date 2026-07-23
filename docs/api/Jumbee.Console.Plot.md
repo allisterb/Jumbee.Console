@@ -4,7 +4,7 @@ Namespace: [Jumbee.Console](Jumbee.Console.md)
 Assembly: Jumbee.Console.dll  
 
 A line/scatter chart backed by the ConsolePlot library, rendered into the control's buffer. Add data with
-<xref href="Jumbee.Console.Plot.AddSeries(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref> and tune the axes/grid/ticks with the <code>Configure*</code> methods.
+<xref href="Jumbee.Console.Plot.AddSeries(System.Double%5b%5d%2cSystem.Double%5b%5d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref> and tune the axes/grid/ticks with the <code>Configure*</code> methods.
 
 ```csharp
 public class Plot : Control, IFocusable
@@ -133,7 +133,7 @@ on each rebuild, so settings survive resizing.
 
 <p>For data that changes every frame (a live scope, a streaming chart), add the series ONCE with
 <xref href="Jumbee.Console.Plot.AddLiveSeries(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref> and feed it via the returned <xref href="Jumbee.Console.PlotSeries" data-throw-if-not-resolved="false"></xref> handle
-(<code>SetData</code>/<code>Push</code>) rather than rebuilding with <xref href="Jumbee.Console.Plot.Clear" data-throw-if-not-resolved="false"></xref> + <xref href="Jumbee.Console.Plot.AddSeries(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref> each frame —
+(<code>SetData</code>/<code>Push</code>) rather than rebuilding with <xref href="Jumbee.Console.Plot.Clear" data-throw-if-not-resolved="false"></xref> + <xref href="Jumbee.Console.Plot.AddSeries(System.Double%5b%5d%2cSystem.Double%5b%5d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref> each frame —
 the live path mutates the data in place without re-allocating the plot, and it keeps your <code>Configure*</code> styling
 (which <xref href="Jumbee.Console.Plot.Clear" data-throw-if-not-resolved="false"></xref> would otherwise drop from the data list).</p>
 
@@ -175,20 +175,20 @@ protected override bool FillsFrameViewport { get; }
 
 ## Methods
 
-### <a id="Jumbee_Console_Plot_AddBars_System_Collections_Generic_IReadOnlyCollection_System_Double__System_Collections_Generic_IReadOnlyCollection_System_Double__System_Nullable_Jumbee_Console_Color__System_Double_System_Double_"></a> AddBars\(IReadOnlyCollection<double\>, IReadOnlyCollection<double\>, Color?, double, double\)
+### <a id="Jumbee_Console_Plot_AddBars_System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Double_System_Double_"></a> AddBars\(double\[\], double\[\], Color?, double, double\)
 
 Adds a vertical bar series — each point drawn as a filled bar from <code class="paramref">baseline</code> (default 0) to
 its value, with an eighth-block sub-cell top.
 
 ```csharp
-public Plot AddBars(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, Color? color = null, double baseline = 0, double width = 0.8)
+public Plot AddBars(double[] xs, double[] ys, Color? color = null, double baseline = 0, double width = 0.8)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyCollection<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyCollection<double\>
+`ys` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -205,29 +205,29 @@ public Plot AddBars(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> 
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">width</code> is the bar width as a fraction
 (0..1) of the spacing between bars.
 
-### <a id="Jumbee_Console_Plot_AddBox_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddBox\(IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, Color?, Color?, double\)
+### <a id="Jumbee_Console_Plot_AddBox_System_Double___System_Double___System_Double___System_Double___System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddBox\(double\[\], double\[\], double\[\], double\[\], double\[\], double\[\], Color?, Color?, double\)
 
 Adds a box-and-whisker series from the five-number summary of each box — <code class="paramref">mins</code>,
 <code class="paramref">q1s</code>, <code class="paramref">medians</code>, <code class="paramref">q3s</code>, <code class="paramref">maxes</code> (all the
 same length as <code class="paramref">xs</code>).
 
 ```csharp
-public Plot AddBox(IReadOnlyList<double> xs, IReadOnlyList<double> mins, IReadOnlyList<double> q1s, IReadOnlyList<double> medians, IReadOnlyList<double> q3s, IReadOnlyList<double> maxes, Color? color = null, Color? medianColor = null, double width = 0.6)
+public Plot AddBox(double[] xs, double[] mins, double[] q1s, double[] medians, double[] q3s, double[] maxes, Color? color = null, Color? medianColor = null, double width = 0.6)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`mins` IReadOnlyList<double\>
+`mins` double\[\]
 
-`q1s` IReadOnlyList<double\>
+`q1s` double\[\]
 
-`medians` IReadOnlyList<double\>
+`medians` double\[\]
 
-`q3s` IReadOnlyList<double\>
+`q3s` double\[\]
 
-`maxes` IReadOnlyList<double\>
+`maxes` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -244,20 +244,20 @@ public Plot AddBox(IReadOnlyList<double> xs, IReadOnlyList<double> mins, IReadOn
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">medianColor</code> defaults to
 <code class="paramref">color</code>; <code class="paramref">width</code> is the box width as a fraction (0..1) of the spacing.
 
-### <a id="Jumbee_Console_Plot_AddBoxes_System_Collections_Generic_IReadOnlyList_System_Collections_Generic_IReadOnlyList_System_Double___System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddBoxes\(IReadOnlyList<IReadOnlyList<double\>\>, IReadOnlyList<double\>?, Color?, Color?, double\)
+### <a id="Jumbee_Console_Plot_AddBoxes_System_Double_____System_Double___System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddBoxes\(double\[\]\[\], double\[\]?, Color?, Color?, double\)
 
 Adds a box-and-whisker series from raw data <code class="paramref">groups</code> — one box per group, with the quartiles
 (min/Q1/median/Q3/max, linear-interpolation percentiles) computed here.
 
 ```csharp
-public Plot AddBoxes(IReadOnlyList<IReadOnlyList<double>> groups, IReadOnlyList<double>? positions = null, Color? color = null, Color? medianColor = null, double width = 0.6)
+public Plot AddBoxes(double[][] groups, double[]? positions = null, Color? color = null, Color? medianColor = null, double width = 0.6)
 ```
 
 #### Parameters
 
-`groups` IReadOnlyList<IReadOnlyList<double\>\>
+`groups` double\[\]\[\]
 
-`positions` IReadOnlyList<double\>?
+`positions` double\[\]?
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -274,26 +274,26 @@ public Plot AddBoxes(IReadOnlyList<IReadOnlyList<double>> groups, IReadOnlyList<
 Boxes are positioned at <code class="paramref">positions</code> (defaults to 1, 2, 3, …). <code class="paramref">color</code>
 defaults to the palette.
 
-### <a id="Jumbee_Console_Plot_AddCandles_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__"></a> AddCandles\(IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, Color?, Color?\)
+### <a id="Jumbee_Console_Plot_AddCandles_System_Double___System_Double___System_Double___System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__"></a> AddCandles\(double\[\], double\[\], double\[\], double\[\], double\[\], Color?, Color?\)
 
 Adds an OHLC candlestick series — each point drawn as a candle (high/low wick + open/close body) coloured by
 direction.
 
 ```csharp
-public Plot AddCandles(IReadOnlyList<double> xs, IReadOnlyList<double> opens, IReadOnlyList<double> highs, IReadOnlyList<double> lows, IReadOnlyList<double> closes, Color? up = null, Color? down = null)
+public Plot AddCandles(double[] xs, double[] opens, double[] highs, double[] lows, double[] closes, Color? up = null, Color? down = null)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`opens` IReadOnlyList<double\>
+`opens` double\[\]
 
-`highs` IReadOnlyList<double\>
+`highs` double\[\]
 
-`lows` IReadOnlyList<double\>
+`lows` double\[\]
 
-`closes` IReadOnlyList<double\>
+`closes` double\[\]
 
 `up` [Color](Jumbee.Console.Color.md)?
 
@@ -307,22 +307,22 @@ public Plot AddCandles(IReadOnlyList<double> xs, IReadOnlyList<double> opens, IR
 
 <code class="paramref">up</code> defaults to green (close ≥ open), <code class="paramref">down</code> to red.
 
-### <a id="Jumbee_Console_Plot_AddConfusionMatrix_System_Collections_Generic_IReadOnlyList_System_Collections_Generic_IReadOnlyList_System_Double___System_Collections_Generic_IReadOnlyList_System_String__System_Collections_Generic_IReadOnlyList_System_String__Jumbee_Console_PlotColormap_"></a> AddConfusionMatrix\(IReadOnlyList<IReadOnlyList<double\>\>, IReadOnlyList<string\>?, IReadOnlyList<string\>?, PlotColormap\)
+### <a id="Jumbee_Console_Plot_AddConfusionMatrix_System_Double_____System_String___System_String___Jumbee_Console_PlotColormap_"></a> AddConfusionMatrix\(double\[\]\[\], string\[\]?, string\[\]?, PlotColormap\)
 
 Adds a confusion matrix — an annotated heatmap of <code class="paramref">counts</code> (row = actual class top-to-bottom,
 column = predicted class), each cell coloured by <code class="paramref">colormap</code> and labelled with its count.
 
 ```csharp
-public Plot AddConfusionMatrix(IReadOnlyList<IReadOnlyList<double>> counts, IReadOnlyList<string>? rowLabels = null, IReadOnlyList<string>? colLabels = null, PlotColormap colormap = PlotColormap.Heat)
+public Plot AddConfusionMatrix(double[][] counts, string[]? rowLabels = null, string[]? colLabels = null, PlotColormap colormap = PlotColormap.Heat)
 ```
 
 #### Parameters
 
-`counts` IReadOnlyList<IReadOnlyList<double\>\>
+`counts` double\[\]\[\]
 
-`rowLabels` IReadOnlyList<string\>?
+`rowLabels` string\[\]?
 
-`colLabels` IReadOnlyList<string\>?
+`colLabels` string\[\]?
 
 `colormap` [PlotColormap](Jumbee.Console.PlotColormap.md)
 
@@ -333,25 +333,25 @@ public Plot AddConfusionMatrix(IReadOnlyList<IReadOnlyList<double>> counts, IRea
 #### Remarks
 
 When <code class="paramref">rowLabels</code>/<code class="paramref">colLabels</code> are given, the class names are placed as
-categorical axis ticks at the cell centres. A wrapper over <xref href="Jumbee.Console.Plot.AddHeatmap(System.Collections.Generic.IReadOnlyList%7bSystem.Collections.Generic.IReadOnlyList%7bSystem.Double%7d%7d%2cJumbee.Console.PlotColormap%2cSystem.Nullable%7bSystem.Double%7d%2cSystem.Nullable%7bSystem.Double%7d%2cSystem.Func%7bSystem.Double%2cSystem.String%7d)" data-throw-if-not-resolved="false"></xref> +
+categorical axis ticks at the cell centres. A wrapper over <xref href="Jumbee.Console.Plot.AddHeatmap(System.Double%5b%5d%5b%5d%2cJumbee.Console.PlotColormap%2cSystem.Nullable%7bSystem.Double%7d%2cSystem.Nullable%7bSystem.Double%7d%2cSystem.Func%7bSystem.Double%2cSystem.String%7d)" data-throw-if-not-resolved="false"></xref> +
 <xref href="Jumbee.Console.Plot.SetXTicks(System.Collections.Generic.IReadOnlyList%7bSystem.ValueTuple%7bSystem.Double%2cSystem.String%7d%7d)" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.Plot.SetYTicks(System.Collections.Generic.IReadOnlyList%7bSystem.ValueTuple%7bSystem.Double%2cSystem.String%7d%7d)" data-throw-if-not-resolved="false"></xref>.
 
-### <a id="Jumbee_Console_Plot_AddErrorBars_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Int32_"></a> AddErrorBars\(IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, Color?, int\)
+### <a id="Jumbee_Console_Plot_AddErrorBars_System_Double___System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Int32_"></a> AddErrorBars\(double\[\], double\[\], double\[\], Color?, int\)
 
 Adds vertical error bars with symmetric error — each point (<code class="paramref">xs</code>, <code class="paramref">ys</code>)
 drawn as a whisker of ±<code class="paramref">errors</code> with caps and a centre marker.
 
 ```csharp
-public Plot AddErrorBars(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IReadOnlyList<double> errors, Color? color = null, int capWidth = 1)
+public Plot AddErrorBars(double[] xs, double[] ys, double[] errors, Color? color = null, int capWidth = 1)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyList<double\>
+`ys` double\[\]
 
-`errors` IReadOnlyList<double\>
+`errors` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -365,24 +365,24 @@ public Plot AddErrorBars(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IRe
 
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">capWidth</code> is the cap half-width in cells.
 
-### <a id="Jumbee_Console_Plot_AddErrorBars_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Int32_"></a> AddErrorBars\(IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, IReadOnlyList<double\>, Color?, int\)
+### <a id="Jumbee_Console_Plot_AddErrorBars_System_Double___System_Double___System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Int32_"></a> AddErrorBars\(double\[\], double\[\], double\[\], double\[\], Color?, int\)
 
 Adds vertical error bars with asymmetric error — each point (<code class="paramref">xs</code>, <code class="paramref">ys</code>)
 drawn as a whisker from <code>y − errLow</code> to <code>y + errHigh</code> with caps and a centre marker.
 
 ```csharp
-public Plot AddErrorBars(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IReadOnlyList<double> errLows, IReadOnlyList<double> errHighs, Color? color = null, int capWidth = 1)
+public Plot AddErrorBars(double[] xs, double[] ys, double[] errLows, double[] errHighs, Color? color = null, int capWidth = 1)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyList<double\>
+`ys` double\[\]
 
-`errLows` IReadOnlyList<double\>
+`errLows` double\[\]
 
-`errHighs` IReadOnlyList<double\>
+`errHighs` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -396,19 +396,19 @@ public Plot AddErrorBars(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IRe
 
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">capWidth</code> is the cap half-width in cells.
 
-### <a id="Jumbee_Console_Plot_AddGroupedBars_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Collections_Generic_IReadOnlyList_System_Double___System_Collections_Generic_IReadOnlyList_Jumbee_Console_Color__System_Double_System_Double_"></a> AddGroupedBars\(IReadOnlyList<double\>, IReadOnlyList<IReadOnlyList<double\>\>, IReadOnlyList<Color\>?, double, double\)
+### <a id="Jumbee_Console_Plot_AddGroupedBars_System_Double___System_Double_____System_Collections_Generic_IReadOnlyList_Jumbee_Console_Color__System_Double_System_Double_"></a> AddGroupedBars\(double\[\], double\[\]\[\], IReadOnlyList<Color\>?, double, double\)
 
 Adds grouped (side-by-side) vertical bars — one sub-bar per series at each x.
 
 ```csharp
-public Plot AddGroupedBars(IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList<double>> series, IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
+public Plot AddGroupedBars(double[] xs, double[][] series, IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`series` IReadOnlyList<IReadOnlyList<double\>\>
+`series` double\[\]\[\]
 
 `colors` IReadOnlyList<[Color](Jumbee.Console.Color.md)\>?
 
@@ -426,20 +426,20 @@ public Plot AddGroupedBars(IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList
 <code class="paramref">colors</code> defaults to the palette (one per series); <code class="paramref">width</code> is the group width
 as a fraction (0..1) of the spacing.
 
-### <a id="Jumbee_Console_Plot_AddHBars_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__System_Nullable_Jumbee_Console_Color__System_Double_System_Double_"></a> AddHBars\(IReadOnlyList<double\>, IReadOnlyList<double\>, Color?, double, double\)
+### <a id="Jumbee_Console_Plot_AddHBars_System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Double_System_Double_"></a> AddHBars\(double\[\], double\[\], Color?, double, double\)
 
 Adds horizontal bars — each category at a Y <code class="paramref">position</code> with its bar growing along X from
 <code class="paramref">baseline</code> to its value.
 
 ```csharp
-public Plot AddHBars(IReadOnlyList<double> positions, IReadOnlyList<double> values, Color? color = null, double baseline = 0, double width = 0.8)
+public Plot AddHBars(double[] positions, double[] values, Color? color = null, double baseline = 0, double width = 0.8)
 ```
 
 #### Parameters
 
-`positions` IReadOnlyList<double\>
+`positions` double\[\]
 
-`values` IReadOnlyList<double\>
+`values` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -456,18 +456,18 @@ public Plot AddHBars(IReadOnlyList<double> positions, IReadOnlyList<double> valu
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">width</code> is the bar thickness as a fraction
 (0..1) of the spacing.
 
-### <a id="Jumbee_Console_Plot_AddHeatmap_System_Collections_Generic_IReadOnlyList_System_Collections_Generic_IReadOnlyList_System_Double___Jumbee_Console_PlotColormap_System_Nullable_System_Double__System_Nullable_System_Double__System_Func_System_Double_System_String__"></a> AddHeatmap\(IReadOnlyList<IReadOnlyList<double\>\>, PlotColormap, double?, double?, Func<double, string\>?\)
+### <a id="Jumbee_Console_Plot_AddHeatmap_System_Double_____Jumbee_Console_PlotColormap_System_Nullable_System_Double__System_Nullable_System_Double__System_Func_System_Double_System_String__"></a> AddHeatmap\(double\[\]\[\], PlotColormap, double?, double?, Func<double, string\>?\)
 
 Adds a heatmap: a grid of <code class="paramref">values</code> (one list per row, row 0 drawn at the top) tiled over
 the plot area, each cell coloured by <code class="paramref">colormap</code>.
 
 ```csharp
-public Plot AddHeatmap(IReadOnlyList<IReadOnlyList<double>> values, PlotColormap colormap = PlotColormap.Viridis, double? min = null, double? max = null, Func<double, string>? cellText = null)
+public Plot AddHeatmap(double[][] values, PlotColormap colormap = PlotColormap.Viridis, double? min = null, double? max = null, Func<double, string>? cellText = null)
 ```
 
 #### Parameters
 
-`values` IReadOnlyList<IReadOnlyList<double\>\>
+`values` double\[\]\[\]
 
 `colormap` [PlotColormap](Jumbee.Console.PlotColormap.md)
 
@@ -487,18 +487,18 @@ Values are normalised into [<code class="paramref">min</code>, <code class="para
 min/max. NaN cells are blank. Pass <code class="paramref">cellText</code> to draw each cell's value as centred text
 (readable-contrast on the cell colour) — e.g. <code>v =&gt; ((int)v).ToString()</code> for a confusion matrix.
 
-### <a id="Jumbee_Console_Plot_AddHistogram_System_Collections_Generic_IReadOnlyList_System_Double__System_Int32_System_Nullable_Jumbee_Console_Color__"></a> AddHistogram\(IReadOnlyList<double\>, int, Color?\)
+### <a id="Jumbee_Console_Plot_AddHistogram_System_Double___System_Int32_System_Nullable_Jumbee_Console_Color__"></a> AddHistogram\(double\[\], int, Color?\)
 
 Adds a histogram of <code class="paramref">values</code> — the values are binned and each bin drawn as a touching bar
 (bar height = bin count).
 
 ```csharp
-public Plot AddHistogram(IReadOnlyList<double> values, int bins = 0, Color? color = null)
+public Plot AddHistogram(double[] values, int bins = 0, Color? color = null)
 ```
 
 #### Parameters
 
-`values` IReadOnlyList<double\>
+`values` double\[\]
 
 `bins` int
 
@@ -572,7 +572,7 @@ public PlotSeries AddLiveBars(Color? color = null, double baseline = 0, double w
 
 #### Remarks
 
-Feed it with <xref href="Jumbee.Console.PlotSeries.SetValues(System.Collections.Generic.IReadOnlyList%7bSystem.Double%7d)" data-throw-if-not-resolved="false"></xref> (bars at x = 1, 2, 3, …) or <xref href="Jumbee.Console.PlotSeries.SetData(System.Collections.Generic.IReadOnlyList%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.Double%7d)" data-throw-if-not-resolved="false"></xref>.
+Feed it with <xref href="Jumbee.Console.PlotSeries.SetValues(System.Double%5b%5d)" data-throw-if-not-resolved="false"></xref> (bars at x = 1, 2, 3, …) or <xref href="Jumbee.Console.PlotSeries.SetData(System.Double%5b%5d%2cSystem.Double%5b%5d)" data-throw-if-not-resolved="false"></xref>.
 <code class="paramref">color</code> defaults to the palette. Starts empty.
 
 ### <a id="Jumbee_Console_Plot_AddLiveScatter_System_Nullable_Jumbee_Console_Color__Jumbee_Console_PlotBrush_"></a> AddLiveScatter\(Color?, PlotBrush\)
@@ -599,12 +599,12 @@ public PlotSeries AddLiveScatter(Color? color = null, PlotBrush brush = PlotBrus
 
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">brush</code> sets the marker (and its sub-cell
 resolution). Starts empty. Markers are markedly cheaper to draw than a line for dense/high-frequency data —
-see the note on <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
+see the note on <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
 
 ### <a id="Jumbee_Console_Plot_AddLiveSeries_System_Nullable_Jumbee_Console_Color__Jumbee_Console_PlotBrush_"></a> AddLiveSeries\(Color?, PlotBrush\)
 
 Adds a live <b>line</b> series (consecutive points joined) and returns a <xref href="Jumbee.Console.PlotSeries" data-throw-if-not-resolved="false"></xref> handle to
-feed it data as it arrives (<xref href="Jumbee.Console.PlotSeries.SetData(System.Collections.Generic.IReadOnlyList%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.Double%7d)" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.PlotSeries.Push(System.Double%2cSystem.Double%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref>). For unconnected
+feed it data as it arrives (<xref href="Jumbee.Console.PlotSeries.SetData(System.Double%5b%5d%2cSystem.Double%5b%5d)" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.PlotSeries.Push(System.Double%2cSystem.Double%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref>). For unconnected
 markers use <xref href="Jumbee.Console.Plot.AddLiveScatter(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref>.
 
 ```csharp
@@ -625,21 +625,21 @@ public PlotSeries AddLiveSeries(Color? color = null, PlotBrush brush = PlotBrush
 
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">brush</code>'s sub-cell resolution (Braille 2×4,
 Quadrant 2×2, the rest 1×1) sets how smooth the line looks. Starts empty. For dense or high-frequency data
-(e.g. an audio waveform) prefer <xref href="Jumbee.Console.Plot.AddLiveScatter(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref> — see the drawing-cost note on <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
+(e.g. an audio waveform) prefer <xref href="Jumbee.Console.Plot.AddLiveScatter(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref> — see the drawing-cost note on <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
 
-### <a id="Jumbee_Console_Plot_AddScatter_System_Collections_Generic_IReadOnlyCollection_System_Double__System_Collections_Generic_IReadOnlyCollection_System_Double__Jumbee_Console_PlotBrush_System_Nullable_Jumbee_Console_Color__"></a> AddScatter\(IReadOnlyCollection<double\>, IReadOnlyCollection<double\>, PlotBrush, Color?\)
+### <a id="Jumbee_Console_Plot_AddScatter_System_Double___System_Double___Jumbee_Console_PlotBrush_System_Nullable_Jumbee_Console_Color__"></a> AddScatter\(double\[\], double\[\], PlotBrush, Color?\)
 
 Adds a scatter series — the points drawn as markers, without connecting lines.
 
 ```csharp
-public Plot AddScatter(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PlotBrush brush = PlotBrush.Braille, Color? color = null)
+public Plot AddScatter(double[] xs, double[] ys, PlotBrush brush = PlotBrush.Braille, Color? color = null)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyCollection<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyCollection<double\>
+`ys` double\[\]
 
 `brush` [PlotBrush](Jumbee.Console.PlotBrush.md)
 
@@ -654,25 +654,25 @@ public Plot AddScatter(IReadOnlyCollection<double> xs, IReadOnlyCollection<doubl
 The <code class="paramref">brush</code> sets the marker (and its sub-cell resolution); <code class="paramref">color</code> defaults
 to the palette.
 
-<p>Scatter is also markedly cheaper to draw than a line series (<xref href="Jumbee.Console.Plot.AddSeries(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref>)
+<p>Scatter is also markedly cheaper to draw than a line series (AddSeries(IReadOnlyCollection&lt;double&gt;, IReadOnlyCollection&lt;double&gt;, PointPen))
 for dense or high-frequency data such as an audio waveform: a line rasterizes a segment between every
 consecutive pair of points, whereas scatter plots each point on its own. When the point count is high and the
 connecting lines add little, prefer scatter for a large drawing-cost win.</p>
 
-### <a id="Jumbee_Console_Plot_AddSeries_System_Collections_Generic_IReadOnlyCollection_System_Double__System_Collections_Generic_IReadOnlyCollection_System_Double__ConsolePlot_Drawing_Tools_PointPen_"></a> AddSeries\(IReadOnlyCollection<double\>, IReadOnlyCollection<double\>, PointPen\)
+### <a id="Jumbee_Console_Plot_AddSeries_System_Double___System_Double___ConsolePlot_Drawing_Tools_PointPen_"></a> AddSeries\(double\[\], double\[\], PointPen\)
 
-Adds a line series — consecutive points joined by straight segments (use <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref> for
+Adds a line series — consecutive points joined by straight segments (use <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref> for
 unconnected markers). <code class="paramref">xs</code> and <code class="paramref">ys</code> must be the same length.
 
 ```csharp
-public Plot AddSeries(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PointPen pen = default)
+public Plot AddSeries(double[] xs, double[] ys, PointPen pen = default)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyCollection<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyCollection<double\>
+`ys` double\[\]
 
 `pen` PointPen
 
@@ -685,24 +685,24 @@ public Plot AddSeries(IReadOnlyCollection<double> xs, IReadOnlyCollection<double
 When <code class="paramref">pen</code> is left at its default a colour is taken from the control's palette (cycling by
 series index) and drawn with the Braille brush.
 
-<p>For dense or high-frequency data (e.g. an audio waveform) prefer <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>: a line
+<p>For dense or high-frequency data (e.g. an audio waveform) prefer <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>: a line
 rasterizes a segment between every consecutive pair of points, which is markedly more expensive than plotting
 points independently.</p>
 
-### <a id="Jumbee_Console_Plot_AddSeries_System_Collections_Generic_IReadOnlyCollection_System_Double__System_Collections_Generic_IReadOnlyCollection_System_Double__Jumbee_Console_PlotBrush_System_Nullable_Jumbee_Console_Color__"></a> AddSeries\(IReadOnlyCollection<double\>, IReadOnlyCollection<double\>, PlotBrush, Color?\)
+### <a id="Jumbee_Console_Plot_AddSeries_System_Double___System_Double___Jumbee_Console_PlotBrush_System_Nullable_Jumbee_Console_Color__"></a> AddSeries\(double\[\], double\[\], PlotBrush, Color?\)
 
 Adds a line series (consecutive points joined by straight segments) drawn with the given
-<code class="paramref">brush</code>. For unconnected markers use <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
+<code class="paramref">brush</code>. For unconnected markers use <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref>.
 
 ```csharp
-public Plot AddSeries(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, PlotBrush brush, Color? color = null)
+public Plot AddSeries(double[] xs, double[] ys, PlotBrush brush, Color? color = null)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyCollection<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyCollection<double\>
+`ys` double\[\]
 
 `brush` [PlotBrush](Jumbee.Console.PlotBrush.md)
 
@@ -718,21 +718,21 @@ The <code class="paramref">brush</code>'s sub-cell resolution — Braille 2×4, 
 the line looks. When <code class="paramref">color</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> a colour is taken from the control's
 palette, cycling by series index.
 
-<p>For dense or high-frequency data prefer <xref href="Jumbee.Console.Plot.AddScatter(System.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyCollection%7bSystem.Double%7d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref> — see the note there.</p>
+<p>For dense or high-frequency data prefer <xref href="Jumbee.Console.Plot.AddScatter(System.Double%5b%5d%2cSystem.Double%5b%5d%2cJumbee.Console.PlotBrush%2cSystem.Nullable%7bJumbee.Console.Color%7d)" data-throw-if-not-resolved="false"></xref> — see the note there.</p>
 
-### <a id="Jumbee_Console_Plot_AddStackedBars_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Collections_Generic_IReadOnlyList_System_Double___System_Collections_Generic_IReadOnlyList_Jumbee_Console_Color__System_Double_System_Double_"></a> AddStackedBars\(IReadOnlyList<double\>, IReadOnlyList<IReadOnlyList<double\>\>, IReadOnlyList<Color\>?, double, double\)
+### <a id="Jumbee_Console_Plot_AddStackedBars_System_Double___System_Double_____System_Collections_Generic_IReadOnlyList_Jumbee_Console_Color__System_Double_System_Double_"></a> AddStackedBars\(double\[\], double\[\]\[\], IReadOnlyList<Color\>?, double, double\)
 
 Adds stacked vertical bars — the series stacked from <code class="paramref">baseline</code> at each x.
 
 ```csharp
-public Plot AddStackedBars(IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList<double>> series, IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
+public Plot AddStackedBars(double[] xs, double[][] series, IReadOnlyList<Color>? colors = null, double baseline = 0, double width = 0.8)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`series` IReadOnlyList<IReadOnlyList<double\>\>
+`series` double\[\]\[\]
 
 `colors` IReadOnlyList<[Color](Jumbee.Console.Color.md)\>?
 
@@ -749,20 +749,20 @@ public Plot AddStackedBars(IReadOnlyList<double> xs, IReadOnlyList<IReadOnlyList
 <code class="paramref">series</code> is one value list per series (each the same length as <code class="paramref">xs</code>).
 <code class="paramref">colors</code> defaults to the palette (one per series).
 
-### <a id="Jumbee_Console_Plot_AddStem_System_Collections_Generic_IReadOnlyCollection_System_Double__System_Collections_Generic_IReadOnlyCollection_System_Double__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddStem\(IReadOnlyCollection<double\>, IReadOnlyCollection<double\>, Color?, double\)
+### <a id="Jumbee_Console_Plot_AddStem_System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddStem\(double\[\], double\[\], Color?, double\)
 
 Adds a stem series — a vertical line from <code class="paramref">baseline</code> (default 0) to each point, capped with
 a dot marker.
 
 ```csharp
-public Plot AddStem(IReadOnlyCollection<double> xs, IReadOnlyCollection<double> ys, Color? color = null, double baseline = 0)
+public Plot AddStem(double[] xs, double[] ys, Color? color = null, double baseline = 0)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyCollection<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyCollection<double\>
+`ys` double\[\]
 
 `color` [Color](Jumbee.Console.Color.md)?
 
@@ -1033,7 +1033,7 @@ public Plot SetXTicks(IReadOnlyList<(double value, string label)> ticks)
 
 Replaces the auto numeric ticks and keeps the data bounds unadjusted. For labels in a reserved margin (rather
 than attached inside the grid), pair with <code>ConfigureTicks(t =&gt; t.Labels.AttachToAxis = false)</code> —
-<xref href="Jumbee.Console.Plot.AddConfusionMatrix(System.Collections.Generic.IReadOnlyList%7bSystem.Collections.Generic.IReadOnlyList%7bSystem.Double%7d%7d%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.String%7d%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.String%7d%2cJumbee.Console.PlotColormap)" data-throw-if-not-resolved="false"></xref> does this for you.
+<xref href="Jumbee.Console.Plot.AddConfusionMatrix(System.Double%5b%5d%5b%5d%2cSystem.String%5b%5d%2cSystem.String%5b%5d%2cJumbee.Console.PlotColormap)" data-throw-if-not-resolved="false"></xref> does this for you.
 
 ### <a id="Jumbee_Console_Plot_SetXWindow_System_Double_"></a> SetXWindow\(double\)
 

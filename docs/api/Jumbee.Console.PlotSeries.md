@@ -5,7 +5,7 @@ Assembly: Jumbee.Console.dll
 
 A live, updatable series in a <xref href="Jumbee.Console.Plot" data-throw-if-not-resolved="false"></xref>. Returned by <xref href="Jumbee.Console.Plot.AddLiveSeries(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref> (line),
 <xref href="Jumbee.Console.Plot.AddLiveScatter(System.Nullable%7bJumbee.Console.Color%7d%2cJumbee.Console.PlotBrush)" data-throw-if-not-resolved="false"></xref> (markers) or <xref href="Jumbee.Console.Plot.AddLiveBars(System.Nullable%7bJumbee.Console.Color%7d%2cSystem.Double%2cSystem.Double)" data-throw-if-not-resolved="false"></xref>; hold onto it and feed data as it
-arrives with <xref href="Jumbee.Console.PlotSeries.SetData(System.Collections.Generic.IReadOnlyList%7bSystem.Double%7d%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.Double%7d)" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.PlotSeries.SetValues(System.Collections.Generic.IReadOnlyList%7bSystem.Double%7d)" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.PlotSeries.Push(System.Double%2cSystem.Double%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref> or <xref href="Jumbee.Console.PlotSeries.Clear" data-throw-if-not-resolved="false"></xref>.
+arrives with <xref href="Jumbee.Console.PlotSeries.SetData(System.Double%5b%5d%2cSystem.Double%5b%5d)" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.PlotSeries.SetValues(System.Double%5b%5d)" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.PlotSeries.Push(System.Double%2cSystem.Double%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref> or <xref href="Jumbee.Console.PlotSeries.Clear" data-throw-if-not-resolved="false"></xref>.
 
 ```csharp
 public sealed class PlotSeries
@@ -67,7 +67,7 @@ public void Scroll(double value, int window)
 
 Unlike <xref href="Jumbee.Console.PlotSeries.Push(System.Double%2cSystem.Double%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref> there is no ever-growing x — pair with <code>SetXRange(0, window − 1)</code> to pin the axis.
 
-### <a id="Jumbee_Console_PlotSeries_SetData_System_Collections_Generic_IReadOnlyList_System_Double__System_Collections_Generic_IReadOnlyList_System_Double__"></a> SetData\(IReadOnlyList<double\>, IReadOnlyList<double\>\)
+### <a id="Jumbee_Console_PlotSeries_SetData_System_Double___System_Double___"></a> SetData\(double\[\], double\[\]\)
 
 Replaces the series data with the paired <code class="paramref">xs</code>/<code class="paramref">ys</code> (same length).
     Passing empty lists is valid and draws nothing — a live series can be emptied (equivalently, <xref href="Jumbee.Console.PlotSeries.Clear" data-throw-if-not-resolved="false"></xref>)
@@ -75,24 +75,24 @@ Replaces the series data with the paired <code class="paramref">xs</code>/<code 
     peaks) can be toggled by feeding it data or emptying it.
 
 ```csharp
-public void SetData(IReadOnlyList<double> xs, IReadOnlyList<double> ys)
+public void SetData(double[] xs, double[] ys)
 ```
 
 #### Parameters
 
-`xs` IReadOnlyList<double\>
+`xs` double\[\]
 
-`ys` IReadOnlyList<double\>
+`ys` double\[\]
 
-### <a id="Jumbee_Console_PlotSeries_SetValues_System_Collections_Generic_IReadOnlyList_System_Double__"></a> SetValues\(IReadOnlyList<double\>\)
+### <a id="Jumbee_Console_PlotSeries_SetValues_System_Double___"></a> SetValues\(double\[\]\)
 
 Replaces the series with <code class="paramref">values</code> at implicit x positions 1, 2, 3, … — for bars.
 
 ```csharp
-public void SetValues(IReadOnlyList<double> values)
+public void SetValues(double[] values)
 ```
 
 #### Parameters
 
-`values` IReadOnlyList<double\>
+`values` double\[\]
 

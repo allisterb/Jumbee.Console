@@ -84,6 +84,25 @@ public Position AddX(Position pos1, int x)
 
  Position
 
+### <a id="Jumbee_Console_ConsoleBuffer_CharacterAt_System_Int32_System_Int32_"></a> CharacterAt\(int, int\)
+
+The <xref href="ConsoleGUI.Data.Character" data-throw-if-not-resolved="false"></xref> at (<code class="paramref">x</code>, <code class="paramref">y</code>) — a cell read without the
+    surrounding <xref href="ConsoleGUI.Data.Cell" data-throw-if-not-resolved="false"></xref> (no mouse-listener copy), for a hot draw loop reading its own output back.
+
+```csharp
+public Character CharacterAt(int x, int y)
+```
+
+#### Parameters
+
+`x` int
+
+`y` int
+
+#### Returns
+
+ Character
+
 ### <a id="Jumbee_Console_ConsoleBuffer_GetPosition_System_Int32_"></a> GetPosition\(int\)
 
 Converts a linear cell <code class="paramref">distance</code> (row-major) into an (x, y) <xref href="ConsoleGUI.Space.Position" data-throw-if-not-resolved="false"></xref>.
@@ -151,6 +170,23 @@ public void Write(Position position, in Character character)
 #### Parameters
 
 `position` Position
+
+`character` Character
+
+### <a id="Jumbee_Console_ConsoleBuffer_Write_System_Int32_System_Int32_ConsoleGUI_Data_Character__"></a> Write\(int, int, in Character\)
+
+Writes a character at column <code class="paramref">x</code>, row <code class="paramref">y</code> — the
+    <xref href="ConsoleGUI.Api.IConsoleBuffer" data-throw-if-not-resolved="false"></xref> render-target entry point (used by controls that draw straight into the buffer).
+
+```csharp
+public void Write(int x, int y, in Character character)
+```
+
+#### Parameters
+
+`x` int
+
+`y` int
 
 `character` Character
 
