@@ -1,5 +1,0 @@
-{
-  // Point the C# extension / Dev Kit at the solution so it loads the right project graph.
-  "dotnet.defaultSolution": "src/Jumbee.Console.sln",
-  "files.eol": "\n"
-}

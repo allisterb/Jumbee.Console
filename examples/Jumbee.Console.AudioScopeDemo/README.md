@@ -19,6 +19,24 @@ picture doesn't prove a waveform actually reached the screen — the headless sn
 That's `ScopeView` rendering a real decoded MP3: a bold mode name and status header on top, a braille
 waveform filling the rest of the terminal underneath. Let's get there.
 
+## Running it
+
+```
+dotnet run --project examples/Jumbee.Console.AudioScopeDemo -- [mp3path] [--fps N] [--interval MS]
+```
+
+With no arguments it decodes a bundled MP3 and opens at the original cadence — a 50 ms audio feed (20 Hz)
+under a 24 fps paint cap. The first positional argument points it at your own file. `--fps N` raises the
+paint cap and, unless you also pass `--interval`, tightens the feed to `1000/N` ms so the waveform's *data*
+refreshes N times a second rather than just repainting the same samples faster — `--fps 60` gives a
+genuinely 60 Hz scope. Pass `--interval MS` to set the feed period on its own and decouple the two clocks
+again.
+
+The thing that caught me out when I first went looking for a "faster" knob: the refresh rate has nothing to
+do with NAudio's sample rate. This is a decode-only source with no real-time device, so the frame rate is
+purely those two clocks — the sample rate only decides how much audio-time each 2048-sample frame spans,
+i.e. how fast the waveform *scrolls*, not how often it updates.
+
 ## The shape of the app
 
 scope-tui's UI is almost entirely one thing: a plot. A one-line header on top (mode name, trigger status,

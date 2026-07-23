@@ -1,7 +1,40 @@
 using Jumbee.Console;
 using ScopeTui;
 
-var mp3Path = args.Length > 0 ? args[0] : @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
+// --- CLI: [mp3path] [--fps N] [--interval MS]. The scope's refresh is driven by two INDEPENDENT clocks (see the
+// README): the audio FEED interval (how often a fresh sample buffer is pulled + the waveform recomputed) and the
+// UI paint FPS cap. With no flags both keep their original values -- a 50ms feed (20Hz data) under a 24fps paint
+// cap. `--fps N` raises the paint cap AND, unless `--interval` is also given, tightens the feed to 1000/N ms so the
+// DATA actually refreshes N times/sec (not just repaints identical samples faster). `--interval MS` sets the feed
+// period on its own, letting the two clocks be decoupled again. NAudio's sample rate is unrelated to either -- this
+// is a decode-only source (no real-time device), so frame rate is purely these two knobs; the sample rate only sets
+// how much audio-time each 2048-sample frame spans (the horizontal scroll speed).
+string? mp3Path = null;
+int fps = 24;
+bool fpsSet = false;
+int? feedMs = null;
+for (var i = 0; i < args.Length; i++)
+{
+    switch (args[i])
+    {
+        case "--fps" when i + 1 < args.Length && int.TryParse(args[i + 1], out var f):
+            fps = Math.Clamp(f, 1, 240);
+            fpsSet = true;
+            i++;
+            break;
+        case "--interval" when i + 1 < args.Length && int.TryParse(args[i + 1], out var ms):
+            feedMs = Math.Clamp(ms, 1, 1000);
+            i++;
+            break;
+        default:
+            mp3Path ??= args[i]; // first non-flag positional argument is the mp3 path
+            break;
+    }
+}
+mp3Path ??= @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
+// Feed period: an explicit --interval wins; else follow --fps when it was set (so "--fps 60" refreshes data at
+// 60Hz), otherwise keep the original 50ms (20Hz) tick.
+var feedInterval = TimeSpan.FromMilliseconds(feedMs ?? (fpsSet ? Math.Max(1, (int)Math.Round(1000.0 / fps)) : 50));
 
 const int bufferSamples = 2048;
 
@@ -148,7 +181,7 @@ void HandleFrame(double[][] frame)
     }
 }
 
-var feedHandle = view.StartAudioFeed(audio.NextFrame, HandleFrame, TimeSpan.FromMilliseconds(50),
+var feedHandle = view.StartAudioFeed(audio.NextFrame, HandleFrame, feedInterval,
     onError: ex => view.SetError($"decode failed: {ex.Message}"));
 
 // --- Mode-agnostic global hotkeys: scale, samples, pause, scatter, quit, Tab. ---
@@ -252,7 +285,9 @@ RebuildNow();
 // ever invalidates faster than that. 60fps bought no extra smoothness (data itself only refreshes 20x/sec) but
 // still had the UI thread waking 3x more often than necessary to check for dirty regions. 24fps sits just above
 // the 20Hz data rate (comfortable headroom for a tick landing slightly early) instead of a free-running clock.
-var uiTask = UI.Start(root, width: 110, height: 25, fps: 24);
+// This is now the DEFAULT only -- `--fps N` overrides it (and by default tightens the feed interval to match, so
+// the higher cap is backed by an equally faster data refresh rather than just repainting identical frames).
+var uiTask = UI.Start(root, width: 110, height: 25, fps: fps);
 await uiTask;
 
 // Safety net: reachable even if the UI stopped via a path other than our own quit handlers. Guarded by `quitting`

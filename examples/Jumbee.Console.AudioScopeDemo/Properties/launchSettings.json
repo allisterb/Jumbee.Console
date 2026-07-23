@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Jumbee.Console.AudioScopeDemo": {
+      "commandName": "Project",
+      "commandLineArgs": "--fps 60"
+    }
+  }
+}
