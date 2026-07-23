@@ -10,6 +10,8 @@ sample buffers, and redraws a waveform, a Lissajous figure, or an FFT spectrum t
 genuinely different kind of TUI from a feed reader. If Jumbee.Console could carry this, it could carry
 most things.
 
+![](https://imgur.com/el25rjy.png)
+![](https://imgur.com/mKkFgeA.png)
 This article is the how, in the order I actually built it: the shape of the app, the plotting, getting
 audio off the UI thread without wedging the dispatcher, the three-mode strategy pattern, and — because a
 picture doesn't prove a waveform actually reached the screen — the headless snapshot tests that do.
@@ -468,3 +470,4 @@ If you're building something in this category — anything that redraws continuo
 snapshots so it can run off the UI thread with nothing to race, and reach for the *Live*/`SetData` variant
 of whatever widget you're feeding before you reach for `Clear()` — the second one will work, but the first
 one is what makes 20Hz feel free.
+
