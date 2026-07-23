@@ -9,7 +9,7 @@
   <!-- Shared assembly version for the Jumbee.Console libraries. Projects opt in by mapping their AssemblyVersion /
        FileVersion / Version to this property, so bumping the version here restamps them all on the next build. -->
   <PropertyGroup Label="Versioning">
-    <ProjectAssemblyVersion>0.1.4</ProjectAssemblyVersion>
+    <ProjectAssemblyVersion>0.1.5</ProjectAssemblyVersion>
   </PropertyGroup>
 
   <!-- Shared NuGet package metadata. Projects are NOT packed by default; the shipped libraries

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.5
+
+
+### Added
+
+- **`Color.FromHexString`** — parses a hex colour string (e.g. `"#FF8800"`) into a `Jumbee.Console.Color`.
+- **24-bit (true-color) support in ConsolePlot** — plot chrome and series take full RGB `Jumbee.Console.Color` values.
+- `Plot` **screen-anchored axis titles** — the Y title pins to the top-left and the X title to the bottom-right, so they stay put as the axes rescale.
+
+### Changed
+- Performance optimizations for `Plot` control.
+- **`UI.Start`: the frame-rate parameter is now `fps`** (frames per second) instead of `paintInterval`
+- `Overlay` and `TextLabel` are now `sealed`.
+
+### Fixed
+
+- Fixed a latent crash when drawing **scatter points outside a fixed axis range** — such a point mapped past the plot buffer and threw `IndexOutOfRangeException`; it is now correctly clipped.
+- UI/threading robustness: self-heal a UI run that was previously hard-killed, plus assorted input/UI/threading fixes.
+
 ## 0.1.4
 
 ### Fixed
