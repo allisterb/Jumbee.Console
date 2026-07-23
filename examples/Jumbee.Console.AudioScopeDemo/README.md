@@ -10,8 +10,6 @@ sample buffers, and redraws a waveform, a Lissajous figure, or an FFT spectrum t
 genuinely different kind of TUI from a feed reader. If Jumbee.Console could carry this, it could carry
 most things.
 
-![](https://imgur.com/el25rjy.png)
-![](https://imgur.com/mKkFgeA.png)
 This article is the how, in the order I actually built it: the shape of the app, the plotting, getting
 audio off the UI thread without wedging the dispatcher, the three-mode strategy pattern, and — because a
 picture doesn't prove a waveform actually reached the screen — the headless snapshot tests that do.
@@ -296,12 +294,12 @@ public static List<Series> References(GraphSnapshot g) =>
 ];
 ```
 
-![vectorscope](review/04-vectorscope.png)
+![vectorscope](https://imgur.com/mKkFgeA.png)
 
 And the spectroscope — FFT magnitude spectrum, log-Y by default, decade-marker gridlines ported from the
 Rust source:
 
-![spectroscope](review/15-spectroscope.png)
+![spectroscope](https://imgur.com/el25rjy.png)
 
 The FFT deserves one honest note, because it's the closest I came to shipping a genuinely broken feature
 without a test catching it. NAudio's `FastFourierTransform.FFT` normalizes its forward transform by `1/N` —
