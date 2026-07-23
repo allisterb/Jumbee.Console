@@ -22,20 +22,20 @@ waveform filling the rest of the terminal underneath. Let's get there.
 ## Running it
 
 ```
-dotnet run --project examples/Jumbee.Console.AudioScopeDemo -- [mp3path] [--fps N] [--interval MS]
+dotnet run --project examples/Jumbee.Console.AudioScopeDemo -- [mp3path] [--fps N] [--sample-rate HZ]
 ```
 
-With no arguments it decodes a bundled MP3 and opens at the original cadence — a 50 ms audio feed (20 Hz)
-under a 24 fps paint cap. The first positional argument points it at your own file. `--fps N` raises the
-paint cap and, unless you also pass `--interval`, tightens the feed to `1000/N` ms so the waveform's *data*
-refreshes N times a second rather than just repainting the same samples faster — `--fps 60` gives a
-genuinely 60 Hz scope. Pass `--interval MS` to set the feed period on its own and decouple the two clocks
-again.
+With no arguments it decodes a bundled MP3 and opens at the original cadence — the source sampled 20 times a
+second (a 50 ms feed) under a 24 fps paint cap. The first positional argument points it at your own file.
+`--fps N` raises the paint cap and, unless you also pass `--sample-rate`, tightens the feed to match
+(`1000/N` ms) so the waveform's *data* refreshes N times a second rather than just repainting the same
+samples faster — `--fps 60` gives a genuinely 60 Hz scope. `--sample-rate HZ` sets how often the source is
+sampled on its own (feed interval = `1000/HZ` ms, the same arithmetic as `--fps`), decoupling the two clocks.
 
-The thing that caught me out when I first went looking for a "faster" knob: the refresh rate has nothing to
-do with NAudio's sample rate. This is a decode-only source with no real-time device, so the frame rate is
-purely those two clocks — the sample rate only decides how much audio-time each 2048-sample frame spans,
-i.e. how fast the waveform *scrolls*, not how often it updates.
+One naming trap worth calling out: this `--sample-rate` is how often *we poll the source*, not NAudio's PCM
+sample rate (44.1 kHz). They're unrelated — this is a decode-only source with no real-time device, so the
+refresh rate is purely those two clocks. The PCM rate only decides how much audio-time each 2048-sample frame
+spans, i.e. how fast the waveform *scrolls*, not how often it updates.
 
 ## The shape of the app
 

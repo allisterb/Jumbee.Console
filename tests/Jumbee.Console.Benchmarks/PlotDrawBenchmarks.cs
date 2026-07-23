@@ -30,6 +30,14 @@ public class PlotDrawBenchmarks
     private Plot _bigScatterArray = null!;
     private Plot _bigScatterOpaque = null!;
 
+    // Scope-scale draw: the AudioScope demo's exact per-frame Draw() shape — two braille series (L/R, 2048 pts each)
+    // over the real 220x53 terminal, fixed ±1 Y / [0,N] X, grid+ticks+labels off. `ScopeLine_Draw` vs
+    // `ScopeScatter_Draw` is the like-for-like connected-line vs unconnected-dots cost at true scope size; both feed
+    // the SAME summed-sine waveform so the only difference is DrawLines vs DrawPoints.
+    private const int ScopeW = 220, ScopeH = 53, ScopeN = 2048;
+    private Plot _scopeLine = null!;
+    private Plot _scopeScatter = null!;
+
     [Params(60)]
     public int Width;
 
@@ -51,6 +59,38 @@ public class PlotDrawBenchmarks
         _bigLineOpaque = BuildBig(scatter: false, opaque: true);
         _bigScatterArray = BuildBig(scatter: true, opaque: false);
         _bigScatterOpaque = BuildBig(scatter: true, opaque: true);
+
+        _scopeLine = BuildScope(scatter: false);
+        _scopeScatter = BuildScope(scatter: true);
+    }
+
+    // A scope-scale plot mirroring the AudioScope demo's per-frame Draw() workload. Two braille series over the real
+    // 220x53 terminal with a fixed ±1 Y window; a summed-sine "audio-ish" waveform (not a single smooth sine, so
+    // segment steepness — and thus the dense-segment fast-path's hit rate — is realistic rather than best-case).
+    private Plot BuildScope(bool scatter)
+    {
+        var xs = new double[ScopeN];
+        var yl = new double[ScopeN];
+        var yr = new double[ScopeN];
+        for (int i = 0; i < ScopeN; i++)
+        {
+            xs[i] = i;
+            double t = i * 0.05;
+            yl[i] = 0.6 * System.Math.Sin(t) + 0.3 * System.Math.Sin(t * 3.1) + 0.1 * System.Math.Sin(t * 7.3);
+            yr[i] = 0.6 * System.Math.Sin(t + 0.7) + 0.3 * System.Math.Sin(t * 2.7) + 0.1 * System.Math.Sin(t * 6.1);
+        }
+
+        var plot = new Plot(ScopeW, ScopeH);
+        plot.FixedXRange = (0, ScopeN - 1);
+        plot.FixedYRange = (-1, 1);
+        plot.Grid.IsVisible = false;
+        plot.Ticks.IsVisible = false;
+        plot.Ticks.Labels.IsVisible = false;
+        var penL = new PointPen(SystemPointBrushes.Braille, new CColor(220, 60, 60));
+        var penR = new PointPen(SystemPointBrushes.Braille, new CColor(220, 200, 60));
+        if (scatter) { plot.AddScatter(xs, yl, penL); plot.AddScatter(xs, yr, penR); }
+        else { plot.AddSeries(xs, yl, penL); plot.AddSeries(xs, yr, penR); }
+        return plot;
     }
 
     // A BigN-point line/scatter with a pinned axis. The series data is either a plain double[] (fast path) or wrapped
@@ -141,4 +181,13 @@ public class PlotDrawBenchmarks
 
     [Benchmark]
     public void BigScatter_InterfaceIndexer() => _bigScatterOpaque.Draw();
+
+    // Scope-scale connected line (the shipped oscilloscope) vs unconnected scatter, same waveform. The gap is the cost
+    // of rasterizing the connecting segments (per-segment clip + Bresenham) that a scatter skips — i.e. what a
+    // dense-segment fast-path in DrawLines can shave without changing the connected-line look.
+    [Benchmark]
+    public void ScopeLine_Draw() => _scopeLine.Draw();
+
+    [Benchmark]
+    public void ScopeScatter_Draw() => _scopeScatter.Draw();
 }

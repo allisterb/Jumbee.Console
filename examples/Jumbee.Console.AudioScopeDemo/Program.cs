@@ -1,18 +1,19 @@
 using Jumbee.Console;
 using ScopeTui;
 
-// --- CLI: [mp3path] [--fps N] [--interval MS]. The scope's refresh is driven by two INDEPENDENT clocks (see the
-// README): the audio FEED interval (how often a fresh sample buffer is pulled + the waveform recomputed) and the
-// UI paint FPS cap. With no flags both keep their original values -- a 50ms feed (20Hz data) under a 24fps paint
-// cap. `--fps N` raises the paint cap AND, unless `--interval` is also given, tightens the feed to 1000/N ms so the
-// DATA actually refreshes N times/sec (not just repaints identical samples faster). `--interval MS` sets the feed
-// period on its own, letting the two clocks be decoupled again. NAudio's sample rate is unrelated to either -- this
-// is a decode-only source (no real-time device), so frame rate is purely these two knobs; the sample rate only sets
-// how much audio-time each 2048-sample frame spans (the horizontal scroll speed).
+// --- CLI: [mp3path] [--fps N] [--sample-rate HZ]. The scope's refresh is driven by two INDEPENDENT clocks (see the
+// README): the audio SAMPLE rate -- how many times per second the source is sampled, i.e. a fresh buffer pulled and
+// the waveform recomputed (in Hz) -- and the UI paint FPS cap. With no flags both keep their original values: the
+// source sampled 20x/sec (a 50ms feed) under a 24fps paint cap. `--fps N` raises the paint cap AND, unless
+// `--sample-rate` is also given, tightens the feed to match (1000/N ms) so the DATA refreshes N times/sec, not just
+// repaints. `--sample-rate HZ` sets the sampling rate on its own (feed interval = 1000/HZ ms, the same math as fps),
+// decoupling the two clocks. This is DISTINCT from NAudio's PCM sample rate (44.1kHz): the source is decode-only (no
+// real-time device), so the frame rate is purely these two knobs; the PCM rate only sets how much audio-time each
+// 2048-sample frame spans (the horizontal scroll speed).
 string? mp3Path = null;
 int fps = 24;
 bool fpsSet = false;
-int? feedMs = null;
+int? sampleRate = null;   // audio-source sampling rate in Hz (buffer pulls per second); feed interval = 1000/rate ms
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -22,8 +23,10 @@ for (var i = 0; i < args.Length; i++)
             fpsSet = true;
             i++;
             break;
-        case "--interval" when i + 1 < args.Length && int.TryParse(args[i + 1], out var ms):
-            feedMs = Math.Clamp(ms, 1, 1000);
+        case "--sample-rate" when i + 1 < args.Length && int.TryParse(args[i + 1], out var sr):
+            // Clamp to [1, 1000] Hz so the derived interval stays in [1000ms, 1ms] -- 1000/rate with rate 0 or
+            // negative would be a non-positive/degenerate period.
+            sampleRate = Math.Clamp(sr, 1, 1000);
             i++;
             break;
         default:
@@ -32,9 +35,12 @@ for (var i = 0; i < args.Length; i++)
     }
 }
 mp3Path ??= @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
-// Feed period: an explicit --interval wins; else follow --fps when it was set (so "--fps 60" refreshes data at
-// 60Hz), otherwise keep the original 50ms (20Hz) tick.
-var feedInterval = TimeSpan.FromMilliseconds(feedMs ?? (fpsSet ? Math.Max(1, (int)Math.Round(1000.0 / fps)) : 50));
+// Feed period (ms): an explicit --sample-rate wins (1000/rate, mirroring the fps->interval math with the same >=1ms
+// guard); else follow --fps when it was set (so "--fps 60" refreshes data at 60Hz); else the original 50ms (20Hz).
+var feedMs = sampleRate is { } rate
+    ? Math.Max(1, (int)Math.Round(1000.0 / rate))
+    : fpsSet ? Math.Max(1, (int)Math.Round(1000.0 / fps)) : 50;
+var feedInterval = TimeSpan.FromMilliseconds(feedMs);
 
 const int bufferSamples = 2048;
 
@@ -142,7 +148,26 @@ void RequestRebuild()
     rebuildInFlight[idx] = true;
     Task.Run(() =>
     {
-        var frame = ScopeView.ComputeFrame(g, mode, modeState, prior, ch, fr);
+        ScopeFrame frame;
+        try
+        {
+            frame = ScopeView.ComputeFrame(g, mode, modeState, prior, ch, fr);
+        }
+        catch (Exception ex)
+        {
+            // A ComputeFrame failure (bad data, an FFT edge case, a NaN) must NOT leave rebuildInFlight[idx] stuck:
+            // without this catch the flag would stay set and the single-flight guard above would silently drop every
+            // later tick, freezing this mode forever. Clear the flag and surface the error on the UI thread, mirroring
+            // the feed's own decode onError path (see StartAudioFeed above). Only ComputeFrame is guarded here -- an
+            // exception in the apply below runs on the UI thread and surfaces through the dispatcher, not a swallowed
+            // background task.
+            UI.Invoke(() =>
+            {
+                rebuildInFlight[idx] = false;
+                view.SetError($"render failed: {ex.Message}");
+            });
+            return;
+        }
         UI.Invoke(() =>
         {
             view.Apply(frame);

@@ -20,7 +20,7 @@ public enum TextLabelOrientation
 /// Displays a single-line text label with a defined horizontal or vertical orientation, foreground and background
 /// colour, and optional text decoration (e.g. bold, underline).
 /// </summary>
-public class TextLabel : Control
+public sealed class TextLabel : Control
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="TextLabel"/> with the given <paramref name="orientation"/>, <paramref name="text"/>, optional foreground/background colours, and optional <paramref name="decoration"/>.</summary>

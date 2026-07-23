@@ -56,6 +56,27 @@ public class ScopeRenderBenchmarks
         ScopeRenderDiagnostics.RefreshFrame(_plot, _yl, _yr, ScopeRenderDiagnostics.GainOf(Amplitude), ++_tick);
 }
 
+/// <summary>
+/// The same scope frame as <see cref="ScopeRenderBenchmarks"/>, but composited through an ambient
+/// <see cref="ConsoleGUI.Controls.Overlay"/> (mirroring <c>UI.Start</c>), so the per-cell composite reads route
+/// through <c>Overlay.get_Item</c> — the render-pipeline frame the profiler flagged at ~14%. Used to measure the
+/// effect of sealing <c>Overlay</c> (PGO guarded-devirtualization of that interface indexer call).
+/// </summary>
+[MemoryDiagnoser]
+public class ScopeOverlayBenchmarks
+{
+    private Plot _plot = null!;
+    private double[] _yl = null!, _yr = null!;
+    private int _tick;
+
+    [GlobalSetup]
+    public void Setup() => _plot = ScopeRenderDiagnostics.NewOverlaySession(out _yl, out _yr);
+
+    [Benchmark]
+    public void ScopeRefreshFrameViaOverlay() =>
+        ScopeRenderDiagnostics.RefreshFrame(_plot, _yl, _yr, ScopeRenderDiagnostics.GainOf(ScopeAmplitude.Overshoot), ++_tick);
+}
+
 /// <summary>The compute/composite/bytes split behind <see cref="ScopeRenderBenchmarks"/>, and the shared workload.</summary>
 public static class ScopeRenderDiagnostics
 {
@@ -80,6 +101,24 @@ public static class ScopeRenderDiagnostics
         Rebuild(plot, yl, yr, 5.0, 0);
         ConsoleManager.AnsiOutput = static _ => Task.CompletedTask;   // no-op sink for the BDN timing path
         StartSession(plot);
+        return plot;
+    }
+
+    /// <summary>Like <see cref="NewSession"/> but composites the plot THROUGH an ambient ConsoleGUI
+    /// <see cref="ConsoleGUI.Controls.Overlay"/> (as the real app does under <c>UI.Start</c>), so every composited
+    /// cell read routes through <c>Overlay.get_Item</c> — the ~14% frame the profiler flagged. The plot is returned
+    /// for <see cref="RefreshFrame"/>; the Overlay stays as <c>ConsoleManager.Content</c>.</summary>
+    public static Plot NewOverlaySession(out double[] yl, out double[] yr)
+    {
+        var plot = new Plot();
+        plot.ConfigureGrid(g => g.IsVisible = false)
+            .ConfigureTicks(t => { t.IsVisible = false; t.Labels.IsVisible = false; })
+            .SetYRange(-1, 1).SetXRange(0, N);
+        yl = new double[N];
+        yr = new double[N];
+        Rebuild(plot, yl, yr, 5.0, 0);
+        ConsoleManager.AnsiOutput = static _ => Task.CompletedTask;
+        StartSession(new ConsoleGUI.Controls.Overlay { BottomContent = plot });
         return plot;
     }
 
