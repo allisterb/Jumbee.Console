@@ -12,7 +12,7 @@ public sealed class GroupedBarExample : Plot, IExample
     public GroupedBarExample()
     {
         double[] quarters = [1, 2, 3, 4];
-        IReadOnlyList<IReadOnlyList<double>> series =
+        double[][] series =
         [
             [18, 24, 21, 30],   // Product A
             [12, 16, 22, 19],   // Product B

@@ -11,7 +11,7 @@ public sealed class StackedBarExample : Plot, IExample
     public StackedBarExample()
     {
         double[] xs = [1, 2, 3, 4, 5];
-        IReadOnlyList<IReadOnlyList<double>> series =
+        double[][] series =
         [
             [8, 10, 7, 12, 9],    // base layer
             [5, 6, 9, 4, 7],      // middle layer

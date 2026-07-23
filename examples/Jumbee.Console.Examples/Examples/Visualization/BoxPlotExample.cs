@@ -16,7 +16,7 @@ public sealed class BoxPlotExample : Plot, IExample
     {
         // Six deterministic (seeded) sample groups with drifting centre and spread, so each box differs.
         var rng = new Random(11);
-        var groups = new List<IReadOnlyList<double>>();
+        var groups = new List<double[]>();
         for (int g = 0; g < 6; g++)
         {
             double centre = 20 + g * 6;
@@ -26,7 +26,7 @@ public sealed class BoxPlotExample : Plot, IExample
                 .ToArray());
         }
 
-        AddBoxes(groups, medianColor: new CColor(240, 200, 90));
+        AddBoxes(groups.ToArray(), medianColor: new CColor(240, 200, 90));
         ConfigureGrid(g => g.IsVisible = true);
     }
 

@@ -13,7 +13,7 @@ public sealed class HeatmapExample : Plot, IExample
     public HeatmapExample()
     {
         const int rows = 16, cols = 32;
-        var grid = new List<IReadOnlyList<double>>();
+        var grid = new List<double[]>();
         for (int r = 0; r < rows; r++)
         {
             // Row 0 is the top; build a smooth ridge that shifts across the grid.
@@ -25,7 +25,7 @@ public sealed class HeatmapExample : Plot, IExample
             }).ToArray());
         }
 
-        AddHeatmap(grid, PlotColormap.Viridis);
+        AddHeatmap(grid.ToArray(), PlotColormap.Viridis);
         ConfigureGrid(g => g.IsVisible = false);
     }
 

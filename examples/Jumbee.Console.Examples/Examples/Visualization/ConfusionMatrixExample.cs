@@ -12,7 +12,7 @@ public sealed class ConfusionMatrixExample : Plot, IExample
     {
         string[] classes = ["cat", "dog", "bird", "fish", "frog"];
         // A 5-class classifier's counts: a strong diagonal with some believable off-diagonal confusion.
-        IReadOnlyList<IReadOnlyList<double>> counts =
+        double[][] counts =
         [
             [58, 3, 1, 0, 2],
             [4, 47, 6, 1, 0],
