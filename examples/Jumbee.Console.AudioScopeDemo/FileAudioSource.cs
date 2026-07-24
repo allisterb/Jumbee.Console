@@ -29,7 +29,7 @@ public sealed class FileAudioSource : IAudioSource
             ".mp3" => new Mp3FileReaderBase(path, waveFormat => new Mp3FrameDecompressor(waveFormat)),
             ".wav" => new WaveFileReader(path),
             var ext => throw new NotSupportedException(
-                $"Unsupported audio file type '{ext}'. Use .mp3 or .wav, or capture live with --input mic."),
+                $"Unsupported audio file type '{ext}'. Use .mp3 or .wav, or capture a device with the 'live' input."),
         };
         sampler = reader.ToSampleProvider();
         Channels = reader.WaveFormat.Channels;

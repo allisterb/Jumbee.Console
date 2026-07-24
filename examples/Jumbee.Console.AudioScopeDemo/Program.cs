@@ -11,11 +11,14 @@ using ScopeTui;
 // parallel -- a deliberate stress test of Control.Feed: four concurrent feeds, three consumers marshalling onto the
 // one UI thread.
 //
-// Audio input (--input): 'file' decodes the mp3 argument (MP3 via NLayer + WAV, both fully-managed/cross-platform);
-// 'live' captures the default recording device live -- WASAPI on Windows, ALSA on Linux (NAudio 3), so the scope
-// works on a real box (e.g. an industrial-automation Linux target) as well as from a file.
+// Audio input (the 'input' argument): 'file' decodes the mp3 argument (MP3 via NLayer + WAV, both fully-managed/
+// cross-platform); 'live' captures a recording device live -- WASAPI on Windows, ALSA on Linux (NAudio 3), so the
+// scope works on a real box (e.g. an industrial-automation Linux target) as well as from a file. 'live' defaults to
+// the platform's default recording endpoint; --loopback scopes what is PLAYING instead, and --device picks a
+// specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
-// CLI (System.CommandLine): [mp3path] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter] [--input file|live]. Two independent clocks
+// CLI (System.CommandLine): file|live [--path FILE] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter]
+// [--device D] [--loopback] [--mono] [--list-devices]. Two independent clocks
 // drive the scope: the FEED period (how often the source is sampled and the waveforms recompute) and the UI paint
 // FPS cap. By default the feed follows --fps (1000/N ms); --sample-rate decouples it (1000/HZ ms) so the DATA can
 // refresh at its own rate. Both are distinct from NAudio's 44.1kHz PCM rate, which only sets the waveform's scroll
@@ -50,10 +53,26 @@ var scatterOpt = new Option<bool>("--scatter")
 {
     Description = "Start in scatter mode (draw points) instead of connected lines. Toggle at runtime with 's'.",
 };
+var deviceOpt = new Option<string?>("--device")
+{
+    Description = "Live capture endpoint: an index or partial name from --list-devices, or a raw endpoint ID / ALSA PCM name.",
+};
+var loopbackOpt = new Option<bool>("--loopback")
+{
+    Description = "Scope what is PLAYING rather than what is recording (WASAPI loopback / PulseAudio monitor).",
+};
+var monoOpt = new Option<bool>("--mono")
+{
+    Description = "Scope a single channel: opens a 1-channel stream where the backend allows it, else averages the device's channels.",
+};
+var listDevicesOpt = new Option<bool>("--list-devices")
+{
+    Description = "Print the live capture endpoints --device can select (honours --loopback) and exit.",
+};
 
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
-    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt,
+    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt, listDevicesOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -64,7 +83,34 @@ root.SetAction(async (parse, ct) =>
     var sampleRate = parse.GetValue(sampleRateOpt);
     var bufferSamples = Math.Clamp(parse.GetValue(bufferOpt), 64, 1 << 16);
     var startScatter = parse.GetValue(scatterOpt);
-   
+    var deviceSpec = parse.GetValue(deviceOpt);
+    var loopback = parse.GetValue(loopbackOpt);
+    var mono = parse.GetValue(monoOpt);
+    var live = input.Equals("live", StringComparison.OrdinalIgnoreCase);
+
+    // --list-devices is a query, not a run: print the endpoints --device selects and exit before any UI starts.
+    if (parse.GetValue(listDevicesOpt))
+    {
+        try
+        {
+            var devices = RecordingAudioSource.ListDevices(loopback);
+            Console.WriteLine(loopback ? "Playback endpoints (--loopback):" : "Recording endpoints:");
+            foreach (var d in devices) Console.WriteLine($"  [{d.Index}] {d.Name}{(d.IsDefault ? "  (default)" : "")}\n        {d.Id}");
+            if (devices.Count == 0) Console.WriteLine("  (none)");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Could not enumerate audio devices: {ex.Message}");
+            return 1;
+        }
+        return 0;
+    }
+
+    if (!live && (deviceSpec is not null || loopback || mono))
+    {
+        Console.Error.WriteLine("--device, --loopback and --mono apply to 'live' input only.");
+        return 1;
+    }
 
     // Feed period: --sample-rate wins (1000/rate); otherwise follow --fps (1000/fps).
     var feedMs = sampleRate is { } rate
@@ -79,8 +125,8 @@ root.SetAction(async (parse, ct) =>
     IAudioSource audio;
     try
     {
-        audio = input.Equals("live", StringComparison.OrdinalIgnoreCase)
-            ? new RecordingAudioSource(bufferSamples)          // live capture: WASAPI (Windows) / ALSA (Linux)
+        audio = live
+            ? new RecordingAudioSource(bufferSamples, RecordingAudioSource.ResolveDevice(deviceSpec, loopback), loopback, mono)
             : new FileAudioSource(filePath, bufferSamples);     // decode the mp3 (default)
     }
     catch (Exception ex)
