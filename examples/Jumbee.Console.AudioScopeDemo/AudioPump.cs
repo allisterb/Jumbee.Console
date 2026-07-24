@@ -14,11 +14,11 @@ using Jumbee.Console;
 /// </summary>
 public sealed class AudioPump : Control
 {
-    private readonly AudioSource audio;
+    private readonly IAudioSource audio;
     private readonly ChannelBus bus;
     private FeedHandle? feed;
 
-    public AudioPump(AudioSource audio, ChannelBus bus)
+    public AudioPump(IAudioSource audio, ChannelBus bus)
     {
         this.audio = audio;
         this.bus = bus;

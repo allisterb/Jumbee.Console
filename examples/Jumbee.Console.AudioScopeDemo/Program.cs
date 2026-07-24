@@ -5,13 +5,17 @@ using ScopeTui;
 
 // --- scope-tui as THREE simultaneous panes, all fed from ONE audio source ---------------------------------------
 // An oscilloscope across the top, a spectroscope (bottom-left) and a vectorscope (bottom-right) below -- each its
-// own ScopeView control, each driven by its OWN Control.Feed, all reading the SAME decoded audio from one
-// ChannelBus. AudioSource is single-threaded (one reader, one stream position), so exactly ONE pump decodes and
+// own ScopeView control, each driven by its OWN Control.Feed, all reading the SAME audio from one ChannelBus. The
+// IAudioSource (a decoded file, or a live capture device) is single-threaded, so exactly ONE pump reads and
 // publishes; the three panes fan out from the bus, computing their (different) transforms off the UI thread in
 // parallel -- a deliberate stress test of Control.Feed: four concurrent feeds, three consumers marshalling onto the
 // one UI thread.
 //
-// CLI (System.CommandLine): [mp3path] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter]. Two independent clocks
+// Audio input (--input): 'file' decodes the mp3 argument (MP3 via NLayer + WAV, both fully-managed/cross-platform);
+// 'live' captures the default recording device live -- WASAPI on Windows, ALSA on Linux (NAudio 3), so the scope
+// works on a real box (e.g. an industrial-automation Linux target) as well as from a file.
+//
+// CLI (System.CommandLine): [mp3path] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter] [--input file|live]. Two independent clocks
 // drive the scope: the FEED period (how often the source is sampled and the waveforms recompute) and the UI paint
 // FPS cap. By default the feed follows --fps (1000/N ms); --sample-rate decouples it (1000/HZ ms) so the DATA can
 // refresh at its own rate. Both are distinct from NAudio's 44.1kHz PCM rate, which only sets the waveform's scroll
@@ -40,10 +44,17 @@ var scatterOpt = new Option<bool>("--scatter")
 {
     Description = "Start in scatter mode (draw points) instead of connected lines. Toggle at runtime with 's'.",
 };
-
-var root = new RootCommand("scope-tui -- three simultaneous audio scopes (oscilloscope, spectroscope, vectorscope) from one source.")
+var inputOpt = new Option<string>("--input")
 {
-    mp3Arg, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt,
+    Description = "Audio input: 'file' decodes the mp3 argument; 'live' captures the default recording device live "
+        + "(WASAPI on Windows, ALSA on Linux).",
+    DefaultValueFactory = _ => "file",
+};
+inputOpt.AcceptOnlyFromAmong("file", "live");
+
+var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
+{
+    mp3Arg, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, inputOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -53,6 +64,7 @@ root.SetAction(async (parse, ct) =>
     var sampleRate = parse.GetValue(sampleRateOpt);
     var bufferSamples = Math.Clamp(parse.GetValue(bufferOpt), 64, 1 << 16);
     var startScatter = parse.GetValue(scatterOpt);
+    var input = parse.GetValue(inputOpt)!;
 
     // Feed period: --sample-rate wins (1000/rate); otherwise follow --fps (1000/fps).
     var feedMs = sampleRate is { } rate
@@ -64,7 +76,18 @@ root.SetAction(async (parse, ct) =>
     // are normalized to [-1,1], so a typical passage only fills a small slice; this makes the default view fill the
     // axis the way scope-tui's raw-sample-space plot does, without touching the interactive Scale knob.
     const double AmplitudeGain = 5.0;
-    var audio = new AudioSource(mp3Path, bufferSamples);
+    IAudioSource audio;
+    try
+    {
+        audio = input.Equals("live", StringComparison.OrdinalIgnoreCase)
+            ? new RecordingAudioSource(bufferSamples)          // live capture: WASAPI (Windows) / ALSA (Linux)
+            : new FileAudioSource(mp3Path, bufferSamples);     // decode the mp3 (default)
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Could not open audio input '{input}': {ex.Message}");
+        return 1;
+    }
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
     var bus = new ChannelBus();

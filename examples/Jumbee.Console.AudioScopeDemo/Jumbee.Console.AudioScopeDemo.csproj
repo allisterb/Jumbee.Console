@@ -9,7 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.3.0" />
+    <!-- NAudio 3 (preview): cross-platform device I/O. NAudio.Wasapi (Windows) and NAudio.Alsa (Linux) are BOTH
+         referenced unconditionally so the code compiles on every OS; a runtime OS check selects the right capture
+         backend (see RecordingAudioSource). NLayer stays for fully-managed, no-native-dependency MP3 decode
+         (verified working against NAudio 3). -->
+    <PackageReference Include="NAudio.Core" Version="3.0.0-preview.18" />
+    <PackageReference Include="NAudio.Wasapi" Version="3.0.0-preview.18" />
+    <PackageReference Include="NAudio.Alsa" Version="3.0.0-preview.18" />
     <PackageReference Include="NLayer.NAudioSupport" Version="2.0.1" />
     <PackageReference Include="System.CommandLine" Version="2.0.10" />
   </ItemGroup>
