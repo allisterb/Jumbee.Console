@@ -346,9 +346,9 @@ Two things to know when asserting: text snapshots are **glyphs only** — colour
   domain logic from the UI, off-thread feed fetching, custom `IRenderable`/`CompositeControl` controls, and
   headless snapshot testing. The full runnable source is in
   [`examples/Jumbee.Console.NewsReaderDemo`](examples/Jumbee.Console.NewsReaderDemo).
-- Case study 2: [porting the scope-TUI oscillocope app](examples/Jumbee.Console.AudioScopeDemo/README.md) — another longer worked
+- Case study 2: [porting the scope-TUI oscillocope app](examples/Jumbee.Console.AudioScopeDemo-basic/README.md) — another longer worked
   example that demonstrates builing a graphics-heavy oscilloscope app from realtime audio data. Source is in
-  [`examples/Jumbee.Console.AudioScopeDemo`](examples/Jumbee.Console.AudioScopeDemo/).
+  [`examples/Jumbee.Console.AudioScopeDemo-basic`](examples/Jumbee.Console.AudioScopeDemo/).
 - [Troubleshooting](TROUBLESHOOTING.md) — the Spectre.Console collision, submodules/CS1704, non-TTY rendering, and mouse input.
 - [API reference](docs/api/) — every public type, grouped by namespace, with summaries.
 - [Control guides](docs/controls/) — task-focused walkthroughs (selection controls, display widgets, links,
