@@ -200,11 +200,14 @@ public sealed class ScopeView : CompositeControl
         allLabels = [modeLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
 
         plot = new Plot();
-        // Minimal scope look: axis lines plus captions only -- no background grid, no tick marks, no numeric
-        // tick labels -- matching reference/screenshots/scope-tui/scope-tui.png. ConfigureTicks's IsVisible and
-        // Labels.IsVisible are documented as two SEPARATE flags (Plot.md remarks), so both are set explicitly.
-        plot.ConfigureGrid(g => g.IsVisible = false);
-        plot.ConfigureTicks(t => { t.IsVisible = false; t.Labels.IsVisible = false; });
+        // Show the background grid, tick marks, and numeric tick labels (ConfigureTicks's IsVisible and
+        // Labels.IsVisible are two SEPARATE flags -- Plot.md remarks). The grid pen is dashed by default (a faint
+        // dotted grid); SetGridColor/SetTickColor below recolour them to the scope's AxisColor/LabelsColor while
+        // keeping that dashed brush. The tick labels are recomputed whenever the axis range changes (a Scale/Samples
+        // hotkey calls Plot.SetXRange/SetYRange, which rebuilds the plot) -- an ordinary per-tick SetData does not
+        // rebuild, but the range is unchanged then, so the labels stay correct and are redrawn every frame.
+        plot.ConfigureGrid(g => g.IsVisible = true);
+        plot.ConfigureTicks(t => { t.IsVisible = true; t.Labels.IsVisible = true; });
 
         // Round-9 -> Round-10 (item 4): axis/grid/tick colour and the axis title colour used to be set ONCE here
         // as build-time constants (Plot.md: "Retained across Clear()... set it once at setup rather than per
@@ -314,8 +317,14 @@ public sealed class ScopeView : CompositeControl
                 controls: [[modeLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
         }
 
-        // Round-9 (item 3): SetXRange/SetYRange used to run unconditionally every tick even though the bounds
-        // only actually move on a Scale/Samples hotkey or a mode switch -- gate on a real change.
+        ApplyLive(frame);
+
+        // Pin the axis ranges AFTER ApplyLive. SetXRange/SetYRange record the fixed range in the plot's per-DATA
+        // config, which a shape-rebuild's plot.Clear() (inside ApplyLive) wipes -- so applying them BEFORE ApplyLive
+        // let a rebuild drop the pin, and the plot then auto-scaled to each frame's data (a jumpy axis that tracked
+        // the music's amplitude). ApplyLive resets last*Min/Max to null on a rebuild, so this block re-pins after the
+        // Clear; on an ordinary tick the pin is untouched and the gate skips (the bounds only move on a Scale/Samples
+        // hotkey or a mode switch). (Axis/grid/tick COLOURS survive Clear -- they live in the plot's chrome list.)
         if (frame.XMin != lastXMin || frame.XMax != lastXMax)
         {
             plot.SetXRange(frame.XMin, frame.XMax);
@@ -329,7 +338,6 @@ public sealed class ScopeView : CompositeControl
             lastYMax = frame.YMax;
         }
 
-        ApplyLive(frame);
         ApplyAxisAndHeader(frame);
     }
 
@@ -370,6 +378,10 @@ public sealed class ScopeView : CompositeControl
             usingLivePools = true;
             lastReferencesKey = null; // force the references refresh below too
             lastReferencesCount = frame.References.Count;
+            // plot.Clear() above wiped the pinned axis ranges (they live in the plot's per-data config, unlike the
+            // chrome colours) -- null the caches so Apply's range block re-pins them after this rebuild instead of
+            // gate-skipping (their values are unchanged) and leaving the plot to auto-scale to the data.
+            lastXMin = lastXMax = lastYMin = lastYMax = null;
         }
 
         if (!Equals(lastReferencesKey, frame.ReferencesKey))

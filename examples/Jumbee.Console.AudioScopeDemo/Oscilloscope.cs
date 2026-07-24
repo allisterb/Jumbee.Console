@@ -168,8 +168,12 @@ public class Oscilloscope : IDisplayMode
     string IDisplayMode.ChannelName(int index) => ChannelName(index);
     object? IDisplayMode.Snapshot() => Snapshot();
     string IDisplayMode.Header(object? modeState) => Header((OscilloscopeState)modeState!);
+    // The Y axis is pinned to +/-(Scale * Gain): the per-sample values are amplified by Gain (see Process), so at the
+    // default Scale=1 this is exactly +/-Gain (the max a full-scale [-1,1] sample can reach once gained) -- a fixed
+    // window that fits the loudest passage without clipping AND holds steady instead of auto-scaling to each frame's
+    // peak (which made the axis jump around with the music). Scale zooms this window in/out.
     (double XMin, double XMax, double YMin, double YMax) IDisplayMode.AxisBounds(GraphSnapshot g, object? modeState) =>
-        (0, g.Samples, -g.Scale, g.Scale);
+        (0, g.Samples, -g.Scale * g.Gain, g.Scale * g.Gain);
     IReadOnlyList<Series> IDisplayMode.References(GraphSnapshot g) => [Reference(g.Samples, g.AxisColor)];
     (IReadOnlyList<Series> Series, object? NextState) IDisplayMode.Process(GraphSnapshot g, object? modeState, object? priorState, double[][] channels) =>
         (Process((OscilloscopeState)modeState!, g.Palette, g.LabelsColor, g.Scatter, channels, g.Gain), null);
