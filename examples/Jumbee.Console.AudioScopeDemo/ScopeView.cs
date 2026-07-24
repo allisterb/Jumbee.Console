@@ -177,6 +177,11 @@ public sealed class ScopeView : CompositeControl
     // its top axis chrome shows through the frame. See ControlFrame's FillsFrameViewport handling.
     protected override bool FillsFrameViewport => true;
 
+    // The Plot/TextLabel children cover the whole pane but aren't focusable, so their cells carry no mouse listener.
+    // Opting into the mouse makes CompositeControl attach the pane's own listener to those cells, so a click anywhere
+    // on the scope focuses it (click-to-focus) -- which the focused-border cue and per-pane hotkeys key off.
+    protected override bool WantsMouse => true;
+
     /// <summary>The underlying <see cref="Jumbee.Console.Plot"/>, exposed for tests that want to inspect it directly.</summary>
     public Plot Plot => plot;
     /// <summary>The last decode/compute error surfaced via <see cref="SetError"/>, or null.</summary>
@@ -478,25 +483,35 @@ public sealed class ScopeView : CompositeControl
         // Producer-local state, touched ONLY on this feed's background thread (which never overlaps its own produce).
         long lastChannelVersion = -1, lastConfigVersion = -1;
         object? lastModeSnapshot = null;
-        object? accumulator = null; // e.g. the spectroscope's FFT history -- threaded produce->produce, never crosses threads
+        object? accumulator = null;       // e.g. the spectroscope's FFT history -- threaded produce->produce, never crosses threads
+        double[][]? frozenChannels = null; // the last live frame this pane computed with -- reused while paused
 
         return Feed<ScopeFrame?>(
             produce: () =>
             {
-                var frame = bus.Latest;
-                if (frame is null) return null; // no audio yet
-
                 var config = cfg.Current;
                 var modeSnapshot = mode.Snapshot();
-                if (frame.Version == lastChannelVersion && config.Version == lastConfigVersion
+                var paused = config.Snapshot.Pause;
+
+                // While paused this pane freezes on the last live frame; otherwise it follows the shared bus (the pump
+                // keeps decoding regardless, since pause is per-pane). The version compared against is the channel
+                // DATA's -- frozen data keeps its version, so a paused pane only re-renders on a config/mode change
+                // (e.g. rescaling the frozen waveform), never on new audio.
+                var busFrame = bus.Latest;
+                var channels = paused ? frozenChannels : busFrame?.Channels;
+                var channelVersion = paused ? lastChannelVersion : busFrame?.Version ?? -1;
+                if (channels is null) return null; // no audio yet (or paused before any live frame)
+
+                if (channelVersion == lastChannelVersion && config.Version == lastConfigVersion
                     && Equals(modeSnapshot, lastModeSnapshot))
                     return null; // nothing changed since our last frame -- idle, no recompute, no repaint
 
-                lastChannelVersion = frame.Version;
+                lastChannelVersion = channelVersion;
                 lastConfigVersion = config.Version;
                 lastModeSnapshot = modeSnapshot;
+                if (!paused) frozenChannels = channels; // remember the live frame so a later pause freezes on it
 
-                var computed = ComputeFrame(config.Snapshot, mode, modeSnapshot, accumulator, frame.Channels, framerate());
+                var computed = ComputeFrame(config.Snapshot, mode, modeSnapshot, accumulator, channels, framerate());
                 accumulator = computed.NextModeState;
                 return computed;
             },
@@ -511,7 +526,7 @@ public sealed class ScopeView : CompositeControl
     /// mode is currently active.
     /// </summary>
     protected override HelpInfo? GetHelpInfo() =>
-        new HelpInfo("Scope", "scope-tui", "One scope pane (oscilloscope, vectorscope, or spectroscope) -- all three are shown together.")
+        new HelpInfo("Scope", "scope-tui", "One scope pane (oscilloscope, vectorscope, or spectroscope) of three shown together. Click a pane or Tab to focus it; these keys act on the focused pane.")
             .WithKey("Up/Down", "Zoom the vertical scale (amplitude) in/out")
             .WithKey("Left/Right", "More/fewer samples per frame (time window)")
             .WithKey("Shift/Ctrl/Alt + arrow", "Same as above, larger/smaller step size")

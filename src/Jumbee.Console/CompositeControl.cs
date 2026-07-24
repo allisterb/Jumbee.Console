@@ -93,7 +93,16 @@ public abstract class CompositeControl : Control, IDrawingContextListener
             // A child covers this cell: return it as-is so it keeps the child's own mouse listener (in child
             // coordinates), letting ConsoleManager route hover/click to the child and click-to-focus work.
             if (_contentContext.Contains(position))
-                return _contentContext[position];
+            {
+                var childCell = _contentContext[position];
+                // If the covering child isn't itself focusable/mouse-listening (its cell carries no listener) but
+                // THIS composite opts into the mouse (WantsMouse), attach our own listener so a click anywhere on
+                // the composite still reaches it — click-to-focus for a display composite (e.g. a plot pane) whose
+                // children aren't focusable. A child that carries its own listener keeps it unchanged.
+                return childCell.MouseListener is null && WantsMouse
+                    ? childCell.WithMouseListener(this, position)
+                    : childCell;
+            }
 
             // Otherwise the composite's own surface (whatever Render drew into the buffer, e.g. a background).
             if (position.X >= 0 && position.Y >= 0 && position.X < Size.Width && position.Y < Size.Height)

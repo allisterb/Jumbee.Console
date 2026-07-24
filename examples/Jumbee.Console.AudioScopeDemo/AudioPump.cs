@@ -16,26 +16,23 @@ public sealed class AudioPump : Control
 {
     private readonly AudioSource audio;
     private readonly ChannelBus bus;
-    private readonly GraphConfig cfg;
     private FeedHandle? feed;
 
-    public AudioPump(AudioSource audio, ChannelBus bus, GraphConfig cfg)
+    public AudioPump(AudioSource audio, ChannelBus bus)
     {
         this.audio = audio;
         this.bus = bus;
-        this.cfg = cfg;
     }
 
-    /// <summary>Starts the decode feed. <c>produce</c> decodes and publishes on a background thread; while paused it
-    /// decodes nothing -- freezing all three panes together (they see the bus version stall) and, like scope-tui, not
-    /// advancing the stream position so the waveform doesn't jump on resume. <c>apply</c> is a no-op: publishing to the
-    /// bus is a thread-safe volatile write, so it happens in <c>produce</c> off the UI thread rather than hopping onto
-    /// it. Returns the <see cref="FeedHandle"/> for teardown.</summary>
+    /// <summary>Starts the decode feed: <c>produce</c> decodes the next frame and publishes it to the bus on a
+    /// background thread. It always decodes -- pause is now per-pane (each pane freezes its own display against its
+    /// config while the shared decoder keeps advancing), so the single pump can't gate the stream. <c>apply</c> is a
+    /// no-op: publishing to the bus is a thread-safe volatile write, so it happens in <c>produce</c> off the UI thread
+    /// rather than hopping onto it. Returns the <see cref="FeedHandle"/> for teardown.</summary>
     public FeedHandle Start(TimeSpan interval, Action<Exception>? onError = null) =>
         feed = Feed<object?>(
             produce: () =>
             {
-                if (cfg.Current.Snapshot.Pause) return null; // paused: don't decode (freeze), don't advance the stream
                 bus.Publish(audio.NextFrame());
                 return null;
             },
