@@ -21,11 +21,17 @@ using ScopeTui;
 // refresh at its own rate. Both are distinct from NAudio's 44.1kHz PCM rate, which only sets the waveform's scroll
 // speed. --buffer sets how many samples/channel each frame carries (the oscilloscope window and the FFT size).
 
-var mp3Arg = new Argument<string?>("mp3path")
+var inputArg = new Argument<string?>("input")
+{
+    Arity = ArgumentArity.ExactlyOne,
+    Description = "Selects the audio input: 'file' decodes the mp3 argument; 'live' captures the default recording device.",
+}
+.AcceptOnlyFromAmong("file", "live"); ;
+var pathOpt = new Option<string?>("path")
 {
     Arity = ArgumentArity.ZeroOrOne,
-    Description = "Path to an MP3 to decode. Defaults to the bundled sample track.",
-};
+    Description = "Path to an MP3 file to decode. Defaults to the bundled sample track.",
+}.AcceptLegalFilePathsOnly();
 var fpsOpt = new Option<int>("--fps")
 {
     Description = "UI paint-rate cap in frames/sec. Also sets the data refresh rate unless --sample-rate is given.",
@@ -44,27 +50,21 @@ var scatterOpt = new Option<bool>("--scatter")
 {
     Description = "Start in scatter mode (draw points) instead of connected lines. Toggle at runtime with 's'.",
 };
-var inputOpt = new Option<string>("--input")
-{
-    Description = "Audio input: 'file' decodes the mp3 argument; 'live' captures the default recording device live "
-        + "(WASAPI on Windows, ALSA on Linux).",
-    DefaultValueFactory = _ => "file",
-};
-inputOpt.AcceptOnlyFromAmong("file", "live");
 
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
-    mp3Arg, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, inputOpt,
+    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt,
 };
 
 root.SetAction(async (parse, ct) =>
 {
-    var mp3Path = parse.GetValue(mp3Arg) ?? @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
+    var input = parse.GetValue(inputArg)!;
+    var filePath = parse.GetValue(pathOpt) ?? @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
     var fps = Math.Clamp(parse.GetValue(fpsOpt), 1, 240);
     var sampleRate = parse.GetValue(sampleRateOpt);
     var bufferSamples = Math.Clamp(parse.GetValue(bufferOpt), 64, 1 << 16);
     var startScatter = parse.GetValue(scatterOpt);
-    var input = parse.GetValue(inputOpt)!;
+   
 
     // Feed period: --sample-rate wins (1000/rate); otherwise follow --fps (1000/fps).
     var feedMs = sampleRate is { } rate
@@ -81,7 +81,7 @@ root.SetAction(async (parse, ct) =>
     {
         audio = input.Equals("live", StringComparison.OrdinalIgnoreCase)
             ? new RecordingAudioSource(bufferSamples)          // live capture: WASAPI (Windows) / ALSA (Linux)
-            : new FileAudioSource(mp3Path, bufferSamples);     // decode the mp3 (default)
+            : new FileAudioSource(filePath, bufferSamples);     // decode the mp3 (default)
     }
     catch (Exception ex)
     {
