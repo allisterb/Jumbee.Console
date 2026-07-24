@@ -2,7 +2,7 @@
   "profiles": {
     "Jumbee.Console.AudioScopeDemo": {
       "commandName": "Project",
-      "commandLineArgs": "--fps 60 --interval 10"
+      "commandLineArgs": "--fps 60 --sample-rate 60"
     }
   }
 }

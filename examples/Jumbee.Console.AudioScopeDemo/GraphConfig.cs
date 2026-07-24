@@ -21,6 +21,11 @@ public readonly record struct GraphSnapshot(
     public Color PaletteFor(int index) => Palette[index % Palette.Length];
 }
 
+/// <summary>An immutable, versioned <see cref="GraphSnapshot"/> published by <see cref="GraphConfig.Publish"/>. The
+/// three scope panes each read the current one off their background feed thread; the <see cref="Version"/> lets a
+/// pane detect a config change even when the audio data itself hasn't advanced (e.g. rescaling while paused).</summary>
+public sealed record ConfigState(long Version, GraphSnapshot Snapshot);
+
 /// <summary>Shared graph state mirroring scope-tui's Rust GraphConfig — the knobs every display mode reads.
 /// Mutated only by hotkey handlers on the UI thread; take a <see cref="Snapshot"/> before reading from any other
 /// thread.</summary>
@@ -51,6 +56,21 @@ public class GraphConfig
     public double Gain = 1.0;
 
     public GraphSnapshot Snapshot() => new(Pause, Samples, Width, Scale, Scatter, References, ShowUi, Palette, LabelsColor, AxisColor, Gain);
+
+    // The current published snapshot. Mutated only on the UI thread (hotkey handlers -> Publish); read as a single
+    // volatile reference by each pane's background feed, so a producer never sees a torn multi-field snapshot and
+    // needs no lock. Seeded from the default fields; Program.cs calls Publish() once after its object-initializer
+    // sets the real values, then again after every hotkey mutation.
+    private volatile ConfigState current;
+
+    public GraphConfig() => current = new ConfigState(0, Snapshot());
+
+    /// <summary>The current immutable, versioned config snapshot -- safe to read from any thread.</summary>
+    public ConfigState Current => current;
+
+    /// <summary>Captures the current mutable fields into a new immutable <see cref="ConfigState"/> (version bumped)
+    /// and publishes it for the panes to read. Call on the UI thread after mutating any field.</summary>
+    public void Publish() => current = new ConfigState(current.Version + 1, Snapshot());
 
     /// <summary>Clamped increment/decrement helper, mirroring update_value_f in display/mod.rs.</summary>
     public static void UpdateF(ref double val, double baseAmount, double magnitude, double min, double max)

@@ -172,6 +172,11 @@ public sealed class ScopeView : CompositeControl
     /// every hotkey), for computing a "rebuild rate" alongside <see cref="LiveShapeRebuilds"/>.</summary>
     public int ApplyCount { get; private set; }
 
+    // A scope fills its frame's viewport (like RunChart/Plot/Log) rather than growing content-tall to be scrolled:
+    // without this a framed ScopeView is given unbounded height, so the Plot lays out below the visible area and only
+    // its top axis chrome shows through the frame. See ControlFrame's FillsFrameViewport handling.
+    protected override bool FillsFrameViewport => true;
+
     /// <summary>The underlying <see cref="Jumbee.Console.Plot"/>, exposed for tests that want to inspect it directly.</summary>
     public Plot Plot => plot;
     /// <summary>The last decode/compute error surfaced via <see cref="SetError"/>, or null.</summary>
@@ -444,22 +449,60 @@ public sealed class ScopeView : CompositeControl
     }
 
     /// <summary>
-    /// Thin public wrapper around the protected <c>Control.Feed&lt;T&gt;(Func&lt;T&gt;, Action&lt;T&gt;, TimeSpan,
-    /// Action&lt;Exception&gt;?)</c> helper documented in Control.md -- a repeating feed whose background-thread
-    /// <paramref name="produce"/> (here, the NAudio decode) and UI-thread <paramref name="apply"/> are
-    /// auto-cancelled by the framework when this control is <see cref="Control.Dispose"/>d.
+    /// Starts this pane's own self-driving compute feed: every <paramref name="interval"/>, on a background thread,
+    /// it reads the latest decoded frame from the shared <paramref name="bus"/> and (if anything actually changed
+    /// since its last tick) runs the pure <see cref="ComputeFrame"/> for its FIXED <paramref name="mode"/>, then
+    /// marshals the cheap <see cref="Apply"/> onto the UI thread. Three panes each run one of these off the ONE
+    /// <see cref="ChannelBus"/> -- the fan-out that lets a single audio source drive three independent scopes.
     /// </summary>
     /// <remarks>
-    /// Round-6 (item 1): now forwards <paramref name="onError"/> and returns the documented <see cref="FeedHandle"/>
-    /// (not a bare <see cref="CancellationTokenSource"/>) -- see the report for why BOTH additions were exactly
-    /// what closed the round-5 teardown gaps: a thrown decode exception used to vanish silently (nothing observed
-    /// the feed's internal fire-and-forget failure), and <c>Quit()</c> used to dispose the NAudio reader while a
-    /// decode might still be mid-read on the feed's background thread. <c>onError</c> marshals a decode failure
-    /// to a caller-supplied handler on the UI thread; <see cref="FeedHandle.StopAsync"/> lets the caller await the
-    /// in-flight tick before disposing anything the producer touches.
+    /// This is the whole point of the milestone: the heavy per-mode transform (the spectroscope's FFT, the
+    /// oscilloscope's trigger scan) runs on each pane's OWN feed thread, so the three computes overlap instead of
+    /// serializing, and only the mode-agnostic <see cref="Apply"/> touches the UI thread.
+    /// <para/>Threading: <c>Control.Feed</c>'s loop never overlaps a feed's own <c>produce</c> with itself, so the
+    /// per-mode cross-frame accumulator (the spectroscope's history) lives in a producer-local variable here --
+    /// thread-confined to this one feed thread, no marshaling, no race. The shared knobs it reads are immutable
+    /// versioned snapshots taken on the UI thread (<see cref="ChannelBus.Frame"/>, <see cref="GraphConfig.Current"/>),
+    /// so a producer never sees a torn read. The mode's own hotkey knobs are simple scalars read live via
+    /// <see cref="IDisplayMode.Snapshot"/> (a benign one-frame tear at worst, self-healing next tick).
+    /// <para/>Idle-skip: when the bus version, the config version, and this mode's snapshot are all unchanged since
+    /// the last computed frame, <c>produce</c> returns <see langword="null"/> and <c>Apply</c> is skipped -- so a
+    /// pane does no work when nothing moved, yet a paused hotkey edit (which bumps the config version without
+    /// advancing the audio) still re-renders. <paramref name="framerate"/> is read live (an atomic int) for the
+    /// header's fps field. Cancellation/teardown are the usual <see cref="FeedHandle"/> contract (auto-cancel on
+    /// <see cref="Control.Dispose"/>); the panes never touch the disposable reader, so only the pump gates its dispose.
     /// </remarks>
-    public FeedHandle StartAudioFeed(Func<double[][]> produce, Action<double[][]> apply, TimeSpan interval, Action<Exception>? onError = null) =>
-        Feed(produce, apply, interval, onError);
+    public FeedHandle StartComputeFeed(ChannelBus bus, IDisplayMode mode, GraphConfig cfg, Func<int> framerate,
+        TimeSpan interval, Action<Exception>? onError = null)
+    {
+        // Producer-local state, touched ONLY on this feed's background thread (which never overlaps its own produce).
+        long lastChannelVersion = -1, lastConfigVersion = -1;
+        object? lastModeSnapshot = null;
+        object? accumulator = null; // e.g. the spectroscope's FFT history -- threaded produce->produce, never crosses threads
+
+        return Feed<ScopeFrame?>(
+            produce: () =>
+            {
+                var frame = bus.Latest;
+                if (frame is null) return null; // no audio yet
+
+                var config = cfg.Current;
+                var modeSnapshot = mode.Snapshot();
+                if (frame.Version == lastChannelVersion && config.Version == lastConfigVersion
+                    && Equals(modeSnapshot, lastModeSnapshot))
+                    return null; // nothing changed since our last frame -- idle, no recompute, no repaint
+
+                lastChannelVersion = frame.Version;
+                lastConfigVersion = config.Version;
+                lastModeSnapshot = modeSnapshot;
+
+                var computed = ComputeFrame(config.Snapshot, mode, modeSnapshot, accumulator, frame.Channels, framerate());
+                accumulator = computed.NextModeState;
+                return computed;
+            },
+            apply: computed => { if (computed is { } f) Apply(f); },
+            interval, onError);
+    }
 
     /// <summary>
     /// Global-help entry for the mode-agnostic keys every scope-tui mode shares. Mode-specific keys (oscilloscope's
@@ -468,7 +511,7 @@ public sealed class ScopeView : CompositeControl
     /// mode is currently active.
     /// </summary>
     protected override HelpInfo? GetHelpInfo() =>
-        new HelpInfo("Scope", "scope-tui", "Oscilloscope/vectorscope/spectroscope display -- Tab cycles which is shown.")
+        new HelpInfo("Scope", "scope-tui", "One scope pane (oscilloscope, vectorscope, or spectroscope) -- all three are shown together.")
             .WithKey("Up/Down", "Zoom the vertical scale (amplitude) in/out")
             .WithKey("Left/Right", "More/fewer samples per frame (time window)")
             .WithKey("Shift/Ctrl/Alt + arrow", "Same as above, larger/smaller step size")
@@ -477,6 +520,6 @@ public sealed class ScopeView : CompositeControl
             .WithKey("s", "Toggle scatter-plot rendering (points instead of connected lines)")
             .WithKey("r", "Toggle reference lines (zero line / crosshair / decade markers)")
             .WithKey("h", "Hide/show the header and axis captions")
-            .WithKey("Tab", "Cycle oscilloscope -> vectorscope -> spectroscope")
+            .WithKey("Tab / Shift+Tab", "Move focus between the three scope panes")
             .WithKey("q / Ctrl+C / Ctrl+Q / Ctrl+W", "Quit");
 }
