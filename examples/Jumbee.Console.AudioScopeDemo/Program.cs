@@ -196,12 +196,24 @@ root.SetAction(async (parse, ct) =>
     var spectro = new Spectroscope(audio.SampleRate, bufferSamples);
     var vec = new Vectorscope();
 
+    // Header source field -- what this run is actually scoping. 'loop' rather than 'live' when tapping playback,
+    // since the endpoint name alone ("Speakers") wouldn't say which direction it is being read in. The device name is
+    // the FRIENDLY name, not RecordingAudioSource.DeviceId, which on Windows is an unreadable endpoint GUID. 16 is
+    // what the 5-char prefix leaves of the source column's 22 cells on a 100-cell header (see headerPercents);
+    // "Stereo Mix (Realtek(R) Audio)" and the like really are that long, and a column overrun collides with the
+    // next field rather than being cut off.
+    static string Trim(string s, int max) => s.Length <= max ? s : string.Concat(s.AsSpan(0, max - 2), "..");
+    var sourceText = audio is RecordingAudioSource rec
+        ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 10)}"
+        : $"file:{Trim(Path.GetFileName(filePath), 16)}";
+
     // --ticks applies to the two wide, full-width panes only. The vectorscope keeps the default: it is a ~square
     // Lissajous pane about a fifth of the width, and both its axes are amplitude -- not the time/frequency axis whose
-    // grid density is the thing worth thinning.
-    var oscPane = new ScopeView(xTickStep: ticks);
-    var spectroPane = new ScopeView(xTickStep: ticks);
-    var vectorPane = new ScopeView();
+    // grid density is the thing worth thinning. Each pane reports ITS OWN tick step, so the vector pane showing a
+    // different one from the other two is accurate rather than a bug.
+    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
+    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
+    var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels);
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
     ScopeView[] panes = [oscPane, spectroPane, vectorPane];

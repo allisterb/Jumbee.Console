@@ -101,9 +101,18 @@ public readonly record struct ScopeFrame(
 /// </remarks>
 public sealed class ScopeView : CompositeControl
 {
-    // Column percentages copied verbatim from scope-tui's make_header (app.rs): mode/kind, module (trigger/live)
-    // status, scale, samples-per-frame, fps, scatter glyph, pause glyph -- spread across the FULL header width.
-    static readonly int[] headerPercents = [35, 24, 8, 13, 6, 6, 6];
+    // Column percentages, originally copied verbatim from scope-tui's make_header (app.rs): mode/kind, module
+    // (trigger/live) status, scale, samples-per-frame, fps, scatter glyph, pause glyph -- spread across the FULL
+    // header width. Two columns are ours and have no scope-tui counterpart: the INPUT source and a channels/ticks
+    // pair, both of which describe how this scope was configured rather than what it is currently showing. They
+    // are slotted after the mode name (widest, and read first), with the percentages of the scope-tui columns
+    // trimmed to make room -- the originals were generous, e.g. "oscillo::scope-tui" needs 18 of its 35%.
+    // Budgeted so every column still fits its widest text at a 100-cell header, the narrowest width worth
+    // supporting with nine columns: mode "oscillo::scope-tui" 18/20, source 21/22, info "2ch t:24" 8/9, module
+    // "^ 0:1 trigger" 13/13, scale "-1.00x+" 7/7, spf "2048/2048 spf" 13/13, fps 6/6, glyphs 3/5 and 2/5. Anything
+    // wider than that is slack. Columns abut with no separator (as scope-tui's do), so a column that overruns runs
+    // straight into its neighbour rather than being visibly cut -- worth re-checking these if a field grows.
+    static readonly int[] headerPercents = [20, 22, 9, 13, 7, 13, 6, 5, 5];
 
     static int[] HeaderColumnWidths(int width)
     {
@@ -125,6 +134,8 @@ public sealed class ScopeView : CompositeControl
     readonly record struct HeaderSnapshot(string Mode, string Module, string Scale, string Spf, string Fps, string ScatterGlyph, string PauseGlyph, Color ModeColor, Color LabelsColor, Color AxisColor, bool ShowUi);
 
     readonly TextLabel modeLabel;
+    readonly TextLabel sourceLabel;
+    readonly TextLabel infoLabel;
     readonly TextLabel moduleLabel;
     readonly TextLabel scaleLabel;
     readonly TextLabel spfLabel;
@@ -139,6 +150,8 @@ public sealed class ScopeView : CompositeControl
     readonly Plot plot;
     readonly DockPanel dock;
     int headerBuiltForWidth;
+    readonly string sourceText;
+    readonly string infoText;
 
     // Round-8 (item 2): live-series pools + the shape/key bookkeeping that decides whether a pool needs a full
     // Clear()+rebuild (rare: Tab, a toggle, or entering/leaving scatter mode) or just a SetData refresh (every
@@ -190,17 +203,34 @@ public sealed class ScopeView : CompositeControl
     /// <param name="xTickStep">Desired spacing, in cells, between horizontal ticks and their grid lines — bigger is
     /// sparser. 0 drops the grid, tick marks and labels entirely (scope-tui draws none of them). Defaults to the
     /// library's own 11.</param>
-    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11)
+    /// <param name="source">Where the audio comes from, e.g. <c>live/Microphone Array</c> or <c>file/track.mp3</c>,
+    /// shown verbatim in the header after <c>in:</c>. Empty hides the column.</param>
+    /// <param name="channels">Channel count of the source, shown as <c>2ch</c>. 0 hides it.</param>
+    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0)
     {
+        // The source/channels/tick-step strings describe the RUN, not the frame -- nothing mutates them at runtime --
+        // so they are formatted once here rather than carried through ScopeFrame/HeaderSnapshot every tick. They
+        // still live in uiLabels so the 'h' hide-UI toggle blanks and restores them with everything else.
+        // No "in:" label -- the live/ or file/ prefix already says what it is, and the four cells it would cost are
+        // the difference between the device name fitting and being clipped on a narrow header.
+        sourceText = source;
+        infoText = string.Join(' ', new[]
+        {
+            channels > 0 ? $"{channels}ch" : "",
+            xTickStep > 0 ? $"ticks:{xTickStep}" : "ticks:off",
+        }.Where(s => s.Length > 0));
+
         modeLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Red1, decoration: Spectre.Console.Decoration.Bold);
+        sourceLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
+        infoLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         moduleLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         scaleLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         spfLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         fpsLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         scatterLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
         pauseLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
-        uiLabels = [moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
-        allLabels = [modeLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
+        uiLabels = [sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
+        allLabels = [modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
 
         plot = new Plot();
         // Show the background grid, tick marks, and numeric tick labels (ConfigureTicks's IsVisible and
@@ -245,7 +275,7 @@ public sealed class ScopeView : CompositeControl
         // with no further code; the framework re-lays-out automatically, we only had to pick a filling layout.
         headerBuiltForWidth = width;
         var headerRow = new Grid(rowHeights: [1], columnWidths: HeaderColumnWidths(width),
-            controls: [[modeLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
+            controls: [[modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
         dock = new DockPanel(DockedControlPlacement.Top, headerRow, plot);
         SetContent(dock);
     }
@@ -294,8 +324,8 @@ public sealed class ScopeView : CompositeControl
             YMax: yMax,
             XCaption: xCaption,
             YCaption: yCaption,
-            ModeText: $"{mode.ModeStr}::scope-tui",
-            ModuleText: mode.Header(modeState),
+            ModeText: $"{mode.ModeStr}",
+            ModuleText: "",//mode.Header(modeState),
             ScaleText: $"-{g.Scale:0.00}x+",
             SpfText: $"{g.Samples}/{g.Width} spf",
             FpsText: $"{framerate}fps",
@@ -331,7 +361,7 @@ public sealed class ScopeView : CompositeControl
         {
             headerBuiltForWidth = currentWidth;
             dock.DockedControl = new Grid(rowHeights: [1], columnWidths: HeaderColumnWidths(currentWidth),
-                controls: [[modeLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
+                controls: [[modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
         }
 
         ApplyLive(frame);
@@ -455,6 +485,10 @@ public sealed class ScopeView : CompositeControl
         {
             modeLabel.Text = frame.ModeText;
             modeLabel.FgColor = frame.ModeColor;
+            // Constant for the run, but re-set here so the 'h' hide-UI toggle (which blanks every label) restores
+            // them along with the per-frame ones -- ShowUi is part of the snapshot, so toggling it trips this gate.
+            sourceLabel.Text = sourceText;
+            infoLabel.Text = infoText;
             moduleLabel.Text = frame.ModuleText;
             scaleLabel.Text = frame.ScaleText;
             spfLabel.Text = frame.SpfText;
@@ -478,6 +512,7 @@ public sealed class ScopeView : CompositeControl
         modeLabel.FgColor = Color.Red1;
         moduleLabel.Text = message;
         moduleLabel.FgColor = Color.Red1;
+        sourceLabel.Text = infoLabel.Text = "";
         scaleLabel.Text = spfLabel.Text = fpsLabel.Text = scatterLabel.Text = pauseLabel.Text = "";
         lastHeader = null; // force the next ordinary Apply() to repaint the header even if its fields look unchanged
     }

@@ -42,6 +42,11 @@ public sealed class RecordingAudioSource : IAudioSource
     /// and useful when a fallback candidate, not the first choice, is what succeeded.</summary>
     public string DeviceId { get; }
 
+    /// <summary>Human-readable name of the opened endpoint, for display. On Windows that is the WASAPI friendly
+    /// name (<see cref="DeviceId"/> is an unreadable endpoint GUID); on Linux the PCM name is already legible, so
+    /// the two match.</summary>
+    public string DeviceName { get; }
+
     readonly IWaveIn capture;
     readonly float[] rolling; // interleaved; always holds the most-recent bufferSamplesPerChannel * Channels samples
     readonly object gate = new();
@@ -57,7 +62,7 @@ public sealed class RecordingAudioSource : IAudioSource
     /// shared-mode WASAPI dictates the format, so the device's channels are averaged after capture instead.</param>
     public RecordingAudioSource(int bufferSamplesPerChannel, string? device = null, bool loopback = false, bool mono = false)
     {
-        (capture, DeviceId) = CreateCapture(device, loopback, mono);
+        (capture, DeviceId, DeviceName) = CreateCapture(device, loopback, mono);
         // On Windows this is the endpoint's real shared-mode mix format, so the check below is meaningful. On Linux
         // it is not: we ASK for float32 when constructing AlsaIn and it echoes the request straight back, so ALSA /
         // PulseAudio silently convert on our behalf. That conversion is also why a mono source (e.g. WSLg's
@@ -170,7 +175,7 @@ public sealed class RecordingAudioSource : IAudioSource
     #endregion
 
     #region Capture backends
-    static (IWaveIn Capture, string Id) CreateCapture(string? device, bool loopback, bool mono)
+    static (IWaveIn Capture, string Id, string Name) CreateCapture(string? device, bool loopback, bool mono)
     {
         // Only ALSA lets us state the format we want; WASAPI shared mode dictates it, so --mono is folded in the
         // capture callback there instead (see FoldToMono).
@@ -180,7 +185,7 @@ public sealed class RecordingAudioSource : IAudioSource
     }
 
     [SupportedOSPlatform("linux")]
-    static (IWaveIn, string) CreateAlsaCapture(string? device, bool loopback, bool mono)
+    static (IWaveIn, string, string) CreateAlsaCapture(string? device, bool loopback, bool mono)
     {
         // Candidates, tried in order. An explicit --device is taken at face value (one candidate, so a typo reports
         // the real ALSA error rather than silently landing somewhere else).
@@ -190,7 +195,8 @@ public sealed class RecordingAudioSource : IAudioSource
 
         foreach (var name in candidates)
         {
-            try { return (new AlsaIn(name) { WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, mono ? 1 : 2) }, name); }
+            // An ALSA PCM name is already legible ("pulse", "hw:CARD=PCH,DEV=0"), so it doubles as the display name.
+            try { return (new AlsaIn(name) { WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(44100, mono ? 1 : 2) }, name, name); }
             catch (AlsaException) { /* not available -- try the next candidate */ }
         }
 
@@ -256,7 +262,7 @@ public sealed class RecordingAudioSource : IAudioSource
 
 #pragma warning disable CS0618 // WasapiCapture/WasapiLoopbackCapture are obsolete in NAudio 3 (superseded by
     [SupportedOSPlatform("windows")]
-    static (IWaveIn, string) CreateWasapiCapture(string? deviceId, bool loopback)
+    static (IWaveIn, string, string) CreateWasapiCapture(string? deviceId, bool loopback)
     {                                             // WasapiRecorder), but they share the IWaveIn contract with AlsaIn
         var enumerator = new MMDeviceEnumerator(); // -- one cross-platform path
         var device = deviceId is { Length: > 0 } id
@@ -265,7 +271,7 @@ public sealed class RecordingAudioSource : IAudioSource
         // Loopback taps a render endpoint's mix. Note WASAPI delivers NOTHING while that endpoint is silent, so an
         // idle machine leaves the scope showing its last window rather than a flat line.
         IWaveIn capture = loopback ? new WasapiLoopbackCapture(device) : new WasapiCapture(device);
-        return (capture, device.ID);
+        return (capture, device.ID, device.FriendlyName);
     }
 #pragma warning restore CS0618
     #endregion
