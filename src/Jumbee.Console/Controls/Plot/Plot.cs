@@ -71,7 +71,7 @@ public class Plot : Control
         set => SetAtomicProperty(ref _gridColor, value, themeOverride: true, watch: (_, _) => Rebuild());
     }
 
-    /// <summary>Colour of the tick marks. Themed from <see cref="IStyleTheme.PlotTickLabel"/> until set explicitly.</summary>
+    /// <summary>Colour of the tick marks. Themed from <see cref="IStyleTheme.PlotTick"/> until set explicitly.</summary>
     public Color TickColor
     {
         get => _tickColor;
@@ -799,7 +799,7 @@ public class Plot : Control
         if (!IsThemeOverridden(nameof(Background))) _background = theme.PlotSurface.BackgroundColor;
         if (!IsThemeOverridden(nameof(AxisColor))) _axisColor = theme.PlotAxis.ForegroundColor ?? _axisColor;
         if (!IsThemeOverridden(nameof(GridColor))) _gridColor = theme.PlotGrid.ForegroundColor ?? _gridColor;
-        if (!IsThemeOverridden(nameof(TickColor))) _tickColor = theme.PlotTickLabel.ForegroundColor ?? _tickColor;
+        if (!IsThemeOverridden(nameof(TickColor))) _tickColor = theme.PlotTick.ForegroundColor ?? _tickColor;
         if (!IsThemeOverridden(nameof(TickLabelColor))) _tickLabelColor = theme.PlotTickLabel.ForegroundColor ?? _tickLabelColor;
         if (!IsThemeOverridden(nameof(SeriesPalette))) _seriesPalette = theme.PlotSeries;
     }

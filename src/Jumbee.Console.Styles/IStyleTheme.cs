@@ -174,9 +174,13 @@ public interface IStyleTheme
     /// <remarks>Only its foreground colour is used. The grid's dashed/solid <em>brush</em> is a per-plot setting.</remarks>
     Style PlotGrid => Style.Grey;
 
-    /// <summary>The colour of a <c>Plot</c>'s tick marks and its numeric tick labels.</summary>
-    /// <remarks>Only its foreground colour is used. Marks and labels share one token — they read as one piece of
-    /// chrome, and every scheme that has motivated this so far colours them together.</remarks>
+    /// <summary>The colour of a <c>Plot</c>'s tick marks.</summary>
+    /// <remarks>Only its foreground colour is used. Separate from <see cref="PlotTickLabel"/>: scope-style themes
+    /// group the marks with the axis and grid as structure, and colour the numbers with the other text.</remarks>
+    Style PlotTick => Style.White;
+
+    /// <summary>The colour of a <c>Plot</c>'s numeric tick labels.</summary>
+    /// <remarks>Only its foreground colour is used. See <see cref="PlotTick"/> for why this is its own token.</remarks>
     Style PlotTickLabel => Style.White;
 
     /// <summary>The ordered colours a <c>Plot</c> cycles through for series that don't name one. Defaults to

@@ -78,9 +78,9 @@ var monoOpt = new Option<bool>("--mono")
 };
 var schemeOpt = new Option<string>("--scheme")
 {
-    Description = $"Colour scheme for the scope panes: {string.Join(", ", ScopeScheme.Names)}.",
-    DefaultValueFactory = _ => ScopeScheme.ScopeTui.Name,
-}.AcceptOnlyFromAmong(ScopeScheme.Names);
+    Description = $"Colour scheme for the scope panes: {string.Join(", ", ScopeTheme.Names)}.",
+    DefaultValueFactory = _ => ScopeTheme.ScopeTui.Name,
+}.AcceptOnlyFromAmong(ScopeTheme.Names);
 var listDevicesOpt = new Option<bool>("--list-devices")
 {
     Description = "Print the live capture endpoints --device can select (honours --loopback) and exit.",
@@ -107,7 +107,12 @@ root.SetAction(async (parse, ct) =>
     // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
     // stops being readable, and ScopeView clamps again to the pane's own width.
     var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
-    var scheme = ScopeScheme.FromName(parse.GetValue(schemeOpt));
+    // --scheme is a THEME: applying it here, before any control is built, means the panes' plots pick up their
+    // axis/grid/tick/surface colours and series palette from it on construction, and each pane's frame picks up its
+    // at-rest border. Nothing downstream takes a colour argument. (UI.SetTheme also raises ThemeChanged, so already-
+    // built controls would re-capture too -- the ordering here is for clarity, not correctness.)
+    var scheme = ScopeTheme.FromName(parse.GetValue(schemeOpt));
+    UI.SetTheme(scheme, UI.GlyphTheme);
     var live = input.Equals("live", StringComparison.OrdinalIgnoreCase);
 
     // --list-devices is a query, not a run: print the endpoints --device selects and exit before any UI starts.
@@ -194,10 +199,15 @@ root.SetAction(async (parse, ct) =>
     var spectroCfg = NewConfig();
     var vectorCfg = NewConfig();
     GraphConfig[] configs = [oscCfg, spectroCfg, vectorCfg];
-    // --scheme overwrites the palette/label/axis colours the config initializers set. The panes read these through
-    // the ordinary GraphSnapshot, so a scheme needs no special path -- it lands in the same fields a scope-tui
-    // --palette-color/--labels-color/--axis-color would have set.
-    foreach (var c in configs) scheme.ApplyTo(c);
+    // A Series carries its own colour (it is built off the UI thread, from a GraphSnapshot), so the display modes
+    // need the trace colours as DATA as well as the Plot needing them as theme. Source both from the one theme
+    // rather than keeping a second copy in the config's initializers.
+    foreach (var c in configs)
+    {
+        c.Palette = [.. Enumerable.Range(0, scheme.Palette.Count).Select(i => scheme.Palette[i])];
+        c.LabelsColor = scheme.LabelsColor;
+        c.AxisColor = scheme.AxisColor;
+    }
     foreach (var c in configs) c.Publish(); // publish now the object-initializer has set the real field values
 
     // One mode instance and one ScopeView per pane -- each pane is FIXED to its mode. Osc/spectro own their hotkey
@@ -221,9 +231,9 @@ root.SetAction(async (parse, ct) =>
     // Lissajous pane about a fifth of the width, and both its axes are amplitude -- not the time/frequency axis whose
     // grid density is the thing worth thinning. Each pane reports ITS OWN tick step, so the vector pane showing a
     // different one from the other two is accurate rather than a bug.
-    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels, background: scheme.Background);
-    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels, background: scheme.Background);
-    var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels, background: scheme.Background);
+    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
+    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
+    var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels);
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
     ScopeView[] panes = [oscPane, spectroPane, vectorPane];
@@ -233,10 +243,10 @@ root.SetAction(async (parse, ct) =>
     // to the theme's focused colour (BorderFocusedText) while its control is focused, and the at-rest colour
     // (BorderText) otherwise, automatically. So the focused scope's border stands out with zero manual bookkeeping.
     //
-    // A scheme's BorderColor replaces only the AT-REST colour: ControlFrame resolves the focused colour first
-    // (`(focusCueVisible ? focusedBorderFgColor : null) ?? borderFgColor`), so overriding the at-rest colour to match
-    // the scheme leaves the focus cue intact rather than pinning the border to one colour.
-    foreach (var pane in panes) _ = new ControlFrame(pane, borderStyle: BorderStyle.Rounded, borderFgColor: scheme.BorderColor);
+    // The theme supplies the at-rest colour through BorderText; ControlFrame resolves the FOCUSED colour first
+    // (`(focusCueVisible ? focusedBorderFgColor : null) ?? borderFgColor`) and ScopeTheme deliberately leaves
+    // BorderFocusedText at the default, so recolouring a scheme's borders never swallows the focus cue.
+    foreach (var pane in panes) _ = new ControlFrame(pane, borderStyle: BorderStyle.Rounded);
 
     // Layout: oscilloscope full-width on top; spectroscope (wide, left) + vectorscope (square, right) share the row
     // below. Both split positions are recomputed on resize (below) so the top stays ~half and the vector stays ~square.

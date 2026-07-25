@@ -206,10 +206,7 @@ public sealed class ScopeView : CompositeControl
     /// <param name="source">Where the audio comes from, e.g. <c>live/Microphone Array</c> or <c>file/track.mp3</c>,
     /// shown verbatim in the header after <c>in:</c>. Empty hides the column.</param>
     /// <param name="channels">Channel count of the source, shown as <c>2ch</c>. 0 hides it.</param>
-    /// <param name="background">Fill for the plot area AND the header strip (see <see cref="ScopeScheme"/>).
-    /// <see langword="null"/> leaves both on the terminal's own background, which is what scope-tui does.</param>
-    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0,
-        Color? background = null)
+    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0)
     {
         // The source/channels/tick-step strings describe the RUN, not the frame -- nothing mutates them at runtime --
         // so they are formatted once here rather than carried through ScopeFrame/HeaderSnapshot every tick. They
@@ -235,14 +232,15 @@ public sealed class ScopeView : CompositeControl
         uiLabels = [sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
         allLabels = [modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
 
-        // The header is a separate surface from the plot, so a scheme with a background has to paint it too --
-        // otherwise a light scheme puts its dark label text on the terminal's dark strip and the header is
-        // unreadable. Set once: the background never changes at runtime (only the label FOREGROUNDS do, per frame
-        // from LabelsColor).
-        if (background is { } bg) foreach (var l in allLabels) l.BgColor = bg;
+        // The header is a separate surface from the plot, and TextLabel is not itself theme-aware, so the pane has to
+        // paint the strip from PlotSurface -- otherwise a light theme puts its dark label text on the terminal's dark
+        // strip and the header is unreadable. Read once here: a theme swapped at runtime would need this re-read,
+        // which the demo never does (--scheme is applied before the panes are built).
+        if (UI.StyleTheme.PlotSurface.BackgroundColor is { } bg) foreach (var l in allLabels) l.BgColor = bg;
 
+        // The plot takes its surface, axis, grid, tick and series colours from the style theme on construction --
+        // nothing is passed in and nothing is set per frame (see ApplyAxisAndHeader).
         plot = new Plot();
-        plot.WithBackground(background); // null == the terminal's own background, i.e. scope-tui's behaviour
         // Show the background grid, tick marks, and numeric tick labels (ConfigureTicks's IsVisible and
         // Labels.IsVisible are two SEPARATE flags -- Plot.md remarks). The grid pen is dashed by default (a faint
         // dotted grid); SetGridColor/SetTickColor below recolour them to the scope's AxisColor/LabelsColor while
@@ -485,13 +483,10 @@ public sealed class ScopeView : CompositeControl
         if (lastHeader == header) return;
         lastHeader = header;
 
-        // Round-10 (item 1+4): true-RGB chrome, applied whenever this gate trips (so a colour-only change from a
-        // future runtime AxisColor/LabelsColor mutation always repaints, per reviewer #3) rather than once in the
-        // constructor. Retained across Plot.Clear() per Plot.md, so this is cheap even though it runs slightly
-        // more often than the old constructor-only call.
-        plot.SetAxisColor(frame.AxisColor);
-        plot.SetGridColor(frame.AxisColor);
-        plot.SetTickColor(frame.AxisColor, frame.LabelsColor);
+        // The plot's axis/grid/tick colours used to be pushed here every time this gate tripped. They are now theme
+        // tokens the Plot reads for itself, so this does nothing per frame -- and calling the setters would actively
+        // hurt: each one MARKS a theme override, which would pin the plot to these values and make a runtime theme
+        // switch a no-op for the very colours the theme is supposed to own.
 
         if (frame.ShowUi)
         {
