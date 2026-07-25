@@ -18,7 +18,7 @@ using ScopeTui;
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
 // CLI (System.CommandLine): file|live [--path FILE] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter]
-// [--device D] [--loopback] [--mono] [--follow] [--ticks N] [--list-devices]. Two independent clocks
+// [--device D] [--loopback] [--mono] [--follow] [--ticks N] [--scheme NAME] [--list-devices]. Two independent clocks
 // drive the scope: the FEED period (how often the source is sampled and the waveforms recompute) and the UI paint
 // FPS cap. By default the feed follows --fps (1000/N ms); --sample-rate decouples it (1000/HZ ms) so the DATA can
 // refresh at its own rate, and --follow ties it to the audio instead (one buffer per tick, so every frame is fresh
@@ -76,6 +76,11 @@ var monoOpt = new Option<bool>("--mono")
 {
     Description = "Scope a single channel: opens a 1-channel stream where the backend allows it, else averages the device's channels.",
 };
+var schemeOpt = new Option<string>("--scheme")
+{
+    Description = $"Colour scheme for the scope panes: {string.Join(", ", ScopeScheme.Names)}.",
+    DefaultValueFactory = _ => ScopeScheme.ScopeTui.Name,
+}.AcceptOnlyFromAmong(ScopeScheme.Names);
 var listDevicesOpt = new Option<bool>("--list-devices")
 {
     Description = "Print the live capture endpoints --device can select (honours --loopback) and exit.",
@@ -84,7 +89,7 @@ var listDevicesOpt = new Option<bool>("--list-devices")
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
     inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, followOpt, monoOpt,
-    ticksOpt, listDevicesOpt,
+    ticksOpt, schemeOpt, listDevicesOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -102,6 +107,7 @@ root.SetAction(async (parse, ct) =>
     // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
     // stops being readable, and ScopeView clamps again to the pane's own width.
     var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
+    var scheme = ScopeScheme.FromName(parse.GetValue(schemeOpt));
     var live = input.Equals("live", StringComparison.OrdinalIgnoreCase);
 
     // --list-devices is a query, not a run: print the endpoints --device selects and exit before any UI starts.
@@ -188,6 +194,10 @@ root.SetAction(async (parse, ct) =>
     var spectroCfg = NewConfig();
     var vectorCfg = NewConfig();
     GraphConfig[] configs = [oscCfg, spectroCfg, vectorCfg];
+    // --scheme overwrites the palette/label/axis colours the config initializers set. The panes read these through
+    // the ordinary GraphSnapshot, so a scheme needs no special path -- it lands in the same fields a scope-tui
+    // --palette-color/--labels-color/--axis-color would have set.
+    foreach (var c in configs) scheme.ApplyTo(c);
     foreach (var c in configs) c.Publish(); // publish now the object-initializer has set the real field values
 
     // One mode instance and one ScopeView per pane -- each pane is FIXED to its mode. Osc/spectro own their hotkey
@@ -211,9 +221,9 @@ root.SetAction(async (parse, ct) =>
     // Lissajous pane about a fifth of the width, and both its axes are amplitude -- not the time/frequency axis whose
     // grid density is the thing worth thinning. Each pane reports ITS OWN tick step, so the vector pane showing a
     // different one from the other two is accurate rather than a bug.
-    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
-    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
-    var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels);
+    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels, background: scheme.Background);
+    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels, background: scheme.Background);
+    var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels, background: scheme.Background);
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
     ScopeView[] panes = [oscPane, spectroPane, vectorPane];
@@ -222,9 +232,11 @@ root.SetAction(async (parse, ct) =>
     // Each pane gets a border frame -- to separate the panes and to carry the focus cue: a frame recolours its border
     // to the theme's focused colour (BorderFocusedText) while its control is focused, and the at-rest colour
     // (BorderText) otherwise, automatically. So the focused scope's border stands out with zero manual bookkeeping.
-    _ = new ControlFrame(oscPane, borderStyle: BorderStyle.Rounded);
-    _ = new ControlFrame(spectroPane, borderStyle: BorderStyle.Rounded);
-    _ = new ControlFrame(vectorPane, borderStyle: BorderStyle.Rounded);
+    //
+    // A scheme's BorderColor replaces only the AT-REST colour: ControlFrame resolves the focused colour first
+    // (`(focusCueVisible ? focusedBorderFgColor : null) ?? borderFgColor`), so overriding the at-rest colour to match
+    // the scheme leaves the focus cue intact rather than pinning the border to one colour.
+    foreach (var pane in panes) _ = new ControlFrame(pane, borderStyle: BorderStyle.Rounded, borderFgColor: scheme.BorderColor);
 
     // Layout: oscilloscope full-width on top; spectroscope (wide, left) + vectorscope (square, right) share the row
     // below. Both split positions are recomputed on resize (below) so the top stays ~half and the vector stays ~square.

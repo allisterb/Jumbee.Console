@@ -206,7 +206,10 @@ public sealed class ScopeView : CompositeControl
     /// <param name="source">Where the audio comes from, e.g. <c>live/Microphone Array</c> or <c>file/track.mp3</c>,
     /// shown verbatim in the header after <c>in:</c>. Empty hides the column.</param>
     /// <param name="channels">Channel count of the source, shown as <c>2ch</c>. 0 hides it.</param>
-    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0)
+    /// <param name="background">Fill for the plot area AND the header strip (see <see cref="ScopeScheme"/>).
+    /// <see langword="null"/> leaves both on the terminal's own background, which is what scope-tui does.</param>
+    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0,
+        Color? background = null)
     {
         // The source/channels/tick-step strings describe the RUN, not the frame -- nothing mutates them at runtime --
         // so they are formatted once here rather than carried through ScopeFrame/HeaderSnapshot every tick. They
@@ -232,7 +235,14 @@ public sealed class ScopeView : CompositeControl
         uiLabels = [sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
         allLabels = [modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
 
+        // The header is a separate surface from the plot, so a scheme with a background has to paint it too --
+        // otherwise a light scheme puts its dark label text on the terminal's dark strip and the header is
+        // unreadable. Set once: the background never changes at runtime (only the label FOREGROUNDS do, per frame
+        // from LabelsColor).
+        if (background is { } bg) foreach (var l in allLabels) l.BgColor = bg;
+
         plot = new Plot();
+        plot.WithBackground(background); // null == the terminal's own background, i.e. scope-tui's behaviour
         // Show the background grid, tick marks, and numeric tick labels (ConfigureTicks's IsVisible and
         // Labels.IsVisible are two SEPARATE flags -- Plot.md remarks). The grid pen is dashed by default (a faint
         // dotted grid); SetGridColor/SetTickColor below recolour them to the scope's AxisColor/LabelsColor while
