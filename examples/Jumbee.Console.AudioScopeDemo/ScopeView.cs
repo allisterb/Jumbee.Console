@@ -187,7 +187,10 @@ public sealed class ScopeView : CompositeControl
     /// <summary>The last decode/compute error surfaced via <see cref="SetError"/>, or null.</summary>
     public string? Error { get; private set; }
 
-    public ScopeView(int width = 110, int plotHeight = 24)
+    /// <param name="xTickStep">Desired spacing, in cells, between horizontal ticks and their grid lines — bigger is
+    /// sparser. 0 drops the grid, tick marks and labels entirely (scope-tui draws none of them). Defaults to the
+    /// library's own 11.</param>
+    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11)
     {
         modeLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Red1, decoration: Spectre.Console.Decoration.Bold);
         moduleLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);
@@ -206,8 +209,22 @@ public sealed class ScopeView : CompositeControl
         // keeping that dashed brush. The tick labels are recomputed whenever the axis range changes (a Scale/Samples
         // hotkey calls Plot.SetXRange/SetYRange, which rebuilds the plot) -- an ordinary per-tick SetData does not
         // rebuild, but the range is unchanged then, so the labels stay correct and are redrawn every frame.
-        plot.ConfigureGrid(g => g.IsVisible = true);
-        plot.ConfigureTicks(t => { t.IsVisible = true; t.Labels.IsVisible = true; });
+        //
+        // xTickStep feeds TickSettings.DesiredXStep, which the library reads as "a tick roughly every N cells":
+        // CalculateTickStep is NiceNumber((max - min) / (axisCells / DesiredXStep)), so raising it widens both the
+        // tick labels AND the vertical grid lines they anchor. The clamp keeps the step inside the pane, where it
+        // still means something -- ConsolePlot now degrades a wider step to a single tick rather than a NaN axis,
+        // but asking for a step nothing can honour is not a useful request. 0 means "no chrome at all", matching
+        // scope-tui, whose axis() sets only title/style/bounds and never calls .labels(), so ratatui draws no grid
+        // and no tick numbers.
+        var showChrome = xTickStep > 0;
+        plot.ConfigureGrid(g => g.IsVisible = showChrome);
+        plot.ConfigureTicks(t =>
+        {
+            t.IsVisible = showChrome;
+            t.Labels.IsVisible = showChrome;
+            if (showChrome) t.DesiredXStep = Math.Clamp(xTickStep, 1, Math.Max(1, width));
+        });
 
         // Round-9 -> Round-10 (item 4): axis/grid/tick colour and the axis title colour used to be set ONCE here
         // as build-time constants (Plot.md: "Retained across Clear()... set it once at setup rather than per

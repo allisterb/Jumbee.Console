@@ -18,11 +18,13 @@ using ScopeTui;
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
 // CLI (System.CommandLine): file|live [--path FILE] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter]
-// [--device D] [--loopback] [--mono] [--list-devices]. Two independent clocks
+// [--device D] [--loopback] [--mono] [--follow] [--ticks N] [--list-devices]. Two independent clocks
 // drive the scope: the FEED period (how often the source is sampled and the waveforms recompute) and the UI paint
 // FPS cap. By default the feed follows --fps (1000/N ms); --sample-rate decouples it (1000/HZ ms) so the DATA can
-// refresh at its own rate. Both are distinct from NAudio's 44.1kHz PCM rate, which only sets the waveform's scroll
-// speed. --buffer sets how many samples/channel each frame carries (the oscilloscope window and the FFT size).
+// refresh at its own rate, and --follow ties it to the audio instead (one buffer per tick, so every frame is fresh
+// samples rather than a mostly-overlapping window -- see the feed-period note below). Both are distinct from the PCM
+// rate, which only sets the waveform's scroll speed. --buffer sets how many samples/channel each frame carries (the
+// oscilloscope window and the FFT size).
 
 var inputArg = new Argument<string?>("input")
 {
@@ -61,6 +63,15 @@ var loopbackOpt = new Option<bool>("--loopback")
 {
     Description = "Scope what is PLAYING rather than what is recording (WASAPI loopback / PulseAudio monitor).",
 };
+var ticksOpt = new Option<int>("--ticks")
+{
+    Description = "Cells between horizontal ticks/grid lines on the osc + spectro panes; bigger is sparser, 0 removes the chrome.",
+    DefaultValueFactory = _ => 11,
+};
+var followOpt = new Option<bool>("--follow")
+{
+    Description = "Advance one buffer per tick (feed = buffer/sample-rate), so each frame is fresh audio. --fps still caps painting.",
+};
 var monoOpt = new Option<bool>("--mono")
 {
     Description = "Scope a single channel: opens a 1-channel stream where the backend allows it, else averages the device's channels.",
@@ -72,7 +83,8 @@ var listDevicesOpt = new Option<bool>("--list-devices")
 
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
-    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt, listDevicesOpt,
+    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, followOpt, monoOpt,
+    ticksOpt, listDevicesOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -86,6 +98,10 @@ root.SetAction(async (parse, ct) =>
     var deviceSpec = parse.GetValue(deviceOpt);
     var loopback = parse.GetValue(loopbackOpt);
     var mono = parse.GetValue(monoOpt);
+    var follow = parse.GetValue(followOpt);
+    // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
+    // stops being readable, and ScopeView clamps again to the pane's own width.
+    var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
     var live = input.Equals("live", StringComparison.OrdinalIgnoreCase);
 
     // --list-devices is a query, not a run: print the endpoints --device selects and exit before any UI starts.
@@ -112,11 +128,11 @@ root.SetAction(async (parse, ct) =>
         return 1;
     }
 
-    // Feed period: --sample-rate wins (1000/rate); otherwise follow --fps (1000/fps).
-    var feedMs = sampleRate is { } rate
-        ? Math.Max(1, (int)Math.Round(1000.0 / Math.Clamp(rate, 1, 1000)))
-        : Math.Max(1, (int)Math.Round(1000.0 / fps));
-    var feedInterval = TimeSpan.FromMilliseconds(feedMs);
+    if (follow && sampleRate is not null)
+    {
+        Console.Error.WriteLine("--follow and --sample-rate both set the feed rate; pass only one.");
+        return 1;
+    }
 
     // Fixed calibration gain on the decoded samples (see GraphConfig.Gain / Oscilloscope.Process): NAudio's floats
     // are normalized to [-1,1], so a typical passage only fills a small slice; this makes the default view fill the
@@ -134,6 +150,25 @@ root.SetAction(async (parse, ct) =>
         Console.Error.WriteLine($"Could not open audio input '{input}': {ex.Message}");
         return 1;
     }
+
+    // Feed period, in precedence order: --follow, then --sample-rate (1000/rate), else --fps (1000/fps).
+    //
+    // --follow ties the feed to the AUDIO instead of the clock: one buffer's worth of samples per tick, which is the
+    // cadence scope-tui gets for free by blocking on its buffer queue (one frame per capture callback, contiguous and
+    // non-overlapping). Without it the feed runs at its own rate against a rolling latest-window, so consecutive
+    // frames overlap -- at 180fps against a 2048-sample window only ~260 samples per frame are new and the trace
+    // barely moves. A window can only be fully replaced sampleRate/buffer times a second (~23Hz for 2048 @ 48kHz),
+    // so any faster feed MUST re-show samples; --follow just sits exactly on that limit.
+    //
+    // The cadence matches; contiguity is still best-effort. A live device hands us a rolling latest-window rather
+    // than a queue, so timer jitter can re-show or skip a few samples at the seam -- scope-tui cannot, since it
+    // consumes every buffer in order (and drifts behind realtime instead, if the UI stalls).
+    var feedMs = follow
+        ? Math.Max(1, (int)Math.Round(1000.0 * bufferSamples / audio.SampleRate))
+        : sampleRate is { } rate
+            ? Math.Max(1, (int)Math.Round(1000.0 / Math.Clamp(rate, 1, 1000)))
+            : Math.Max(1, (int)Math.Round(1000.0 / fps));
+    var feedInterval = TimeSpan.FromMilliseconds(feedMs);
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
     var bus = new ChannelBus();
@@ -161,8 +196,11 @@ root.SetAction(async (parse, ct) =>
     var spectro = new Spectroscope(audio.SampleRate, bufferSamples);
     var vec = new Vectorscope();
 
-    var oscPane = new ScopeView();
-    var spectroPane = new ScopeView();
+    // --ticks applies to the two wide, full-width panes only. The vectorscope keeps the default: it is a ~square
+    // Lissajous pane about a fifth of the width, and both its axes are amplitude -- not the time/frequency axis whose
+    // grid density is the thing worth thinning.
+    var oscPane = new ScopeView(xTickStep: ticks);
+    var spectroPane = new ScopeView(xTickStep: ticks);
     var vectorPane = new ScopeView();
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
