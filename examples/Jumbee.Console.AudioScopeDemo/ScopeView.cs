@@ -232,11 +232,9 @@ public sealed class ScopeView : CompositeControl
         uiLabels = [sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
         allLabels = [modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel];
 
-        // The header is a separate surface from the plot, and TextLabel is not itself theme-aware, so the pane has to
-        // paint the strip from PlotSurface -- otherwise a light theme puts its dark label text on the terminal's dark
-        // strip and the header is unreadable. Read once here: a theme swapped at runtime would need this re-read,
-        // which the demo never does (--scheme is applied before the panes are built).
-        if (UI.StyleTheme.PlotSurface.BackgroundColor is { } bg) foreach (var l in allLabels) l.BgColor = bg;
+        // The header strip's background used to be painted here, once, from PlotSurface. TextLabel now themes both
+        // its colours from IStyleTheme.LabelText, so the strip re-paints on a runtime theme switch by itself -- and
+        // setting BgColor here would MARK an override and freeze it at the startup theme.
 
         // The plot takes its surface, axis, grid, tick and series colours from the style theme on construction --
         // nothing is passed in and nothing is set per frame (see ApplyAxisAndHeader).

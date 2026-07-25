@@ -84,6 +84,11 @@ public sealed class ScopeTheme : IStyleTheme
 
     /// <summary>Header label text.</summary>
     Style IStyleTheme.Text => LabelsColor;
+
+    /// <summary>The header strip: label text in <see cref="LabelsColor"/> over the pane fill, so the strip repaints
+    /// with the rest of the pane on a theme switch instead of stranding dark text on a dark row.</summary>
+    Style IStyleTheme.LabelText =>
+        BackgroundColor is { } bg ? LabelsColor | Style.Bg(bg) : (Style)LabelsColor;
     #endregion
 
     #region Methods
@@ -93,6 +98,9 @@ public sealed class ScopeTheme : IStyleTheme
     /// <summary>Looks a scheme up by name (case-insensitive), falling back to <see cref="ScopeTui"/>.</summary>
     public static ScopeTheme FromName(string? name) =>
         All.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)) ?? ScopeTui;
+
+    /// <summary>The next scheme in the list, wrapping — what the runtime Ctrl+T cycle steps through.</summary>
+    public ScopeTheme Next() => All[(Array.IndexOf(All, this) + 1) % All.Length];
     #endregion
 
     #region Fields

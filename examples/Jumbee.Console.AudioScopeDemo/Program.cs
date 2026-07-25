@@ -202,13 +202,26 @@ root.SetAction(async (parse, ct) =>
     // A Series carries its own colour (it is built off the UI thread, from a GraphSnapshot), so the display modes
     // need the trace colours as DATA as well as the Plot needing them as theme. Source both from the one theme
     // rather than keeping a second copy in the config's initializers.
-    foreach (var c in configs)
+    // Applying a scheme has TWO halves, and both are needed because the colours are consumed two different ways.
+    // UI.SetTheme covers everything a control reads for itself -- each plot's axis/grid/tick/surface and series
+    // palette, each pane frame's at-rest border, the header strip's background -- via the ThemeChanged re-capture.
+    // But a Series carries its OWN colour (it is built off the UI thread from a GraphSnapshot), so the trace colours
+    // must also be pushed into the configs as data and republished. Used at startup and by the Ctrl+T cycle below.
+    var activeScheme = scheme;
+    void ApplyScheme(ScopeTheme theme)
     {
-        c.Palette = [.. Enumerable.Range(0, scheme.Palette.Count).Select(i => scheme.Palette[i])];
-        c.LabelsColor = scheme.LabelsColor;
-        c.AxisColor = scheme.AxisColor;
+        activeScheme = theme;
+        UI.SetTheme(theme, UI.GlyphTheme);
+        foreach (var c in configs)
+        {
+            c.Palette = [.. Enumerable.Range(0, theme.Palette.Count).Select(i => theme.Palette[i])];
+            c.LabelsColor = theme.LabelsColor;
+            c.AxisColor = theme.AxisColor;
+            c.Publish();
+        }
     }
-    foreach (var c in configs) c.Publish(); // publish now the object-initializer has set the real field values
+
+    ApplyScheme(scheme);   // also publishes, now the object initializers have set the real field values
 
     // One mode instance and one ScopeView per pane -- each pane is FIXED to its mode. Osc/spectro own their hotkey
     // knobs (trigger, FFT window/averaging); vector has none.
@@ -342,6 +355,10 @@ root.SetAction(async (parse, ct) =>
     UI.RegisterHotKey(UI.HotKeys.Char('h'), () => { var c = FocusedConfig(); c.ShowUi = !c.ShowUi; c.Publish(); });
     UI.RegisterHotKey(UI.HotKeys.Char('r'), () => { var c = FocusedConfig(); c.References = !c.References; c.Publish(); });
     UI.RegisterHotKey(UI.HotKeys.Escape, () => { var c = FocusedConfig(); c.Samples = c.Width; c.Scale = 1.0; c.Publish(); });
+
+    // Ctrl+T cycles the colour scheme across ALL THREE panes at once -- unlike the other hotkeys, which act on the
+    // focused pane. It is a theme switch, and a theme is global by definition.
+    UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.T), () => ApplyScheme(activeScheme.Next()));
 
     // Tab / Shift+Tab move keyboard focus between the three panes (clicking a pane also focuses it).
     UI.RegisterHotKey(UI.HotKeys.Tab, () => UI.SetFocus(panes[(FocusedIndex() + 1) % panes.Length]));

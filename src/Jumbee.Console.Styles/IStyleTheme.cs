@@ -33,6 +33,16 @@ public interface IStyleTheme
 
     /// <summary>Disabled text/controls.</summary>
     Style TextDisabled => Style.Grey42 | Style.Dim;
+
+    /// <summary>The colours a plain <c>TextLabel</c> draws with — <em>both</em> halves are read, so a theme can give
+    /// labels a background as well as a foreground.</summary>
+    /// <remarks>
+    /// Defaults to <see cref="Style.Plain"/>, which carries neither colour and so leaves a label exactly as it is
+    /// unthemed: foreground at the terminal default, background transparent. That matters — a label painting an
+    /// opaque background by default would block compositing and dim oddly under an overlay scrim. Distinct from
+    /// <see cref="Text"/>, which is the token for body text a control renders itself.
+    /// </remarks>
+    Style LabelText => Style.Plain;
     #endregion
 
     #region Structural

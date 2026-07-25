@@ -33,9 +33,12 @@ public sealed class TextLabel : Control
         Focusable = false;   // a passive display label: never a focus/tab target, never owns the cursor
         _orientation = orientation;
         _text = text;
-        _fgcolor = fgcolor;
-        _bgcolor = bgcolor;
         _decoration = decoration;
+        // Theme first, then let explicit arguments win AND register as overrides (assigning through the properties
+        // is what marks them), so a later theme switch re-colours only the labels that didn't ask for a colour.
+        CaptureTheme();
+        if (fgcolor is not null) FgColor = fgcolor;
+        if (bgcolor is not null) BgColor = bgcolor;
         chars = new Cell[_text.Length];
         size = orientation == TextLabelOrientation.Horizontal ? new Size(_text.Length, 1) :new Size(1, _text.Length);
         Resize(size);
@@ -43,18 +46,20 @@ public sealed class TextLabel : Control
     #endregion
 
     #region Properties
-    /// <summary>Foreground colour, or <see langword="null"/> for the terminal default.</summary>
+    /// <summary>Foreground colour, or <see langword="null"/> for the terminal default. Themed from
+    /// <see cref="IStyleTheme.LabelText"/> until set explicitly.</summary>
     public Color? FgColor
     {
         get => _fgcolor;
-        set => SetAtomicProperty(ref _fgcolor, value);
+        set => SetAtomicProperty(ref _fgcolor, value, themeOverride: true);
     }
 
-    /// <summary>Background colour, or <see langword="null"/> for transparent (shows whatever is behind).</summary>
+    /// <summary>Background colour, or <see langword="null"/> for transparent (shows whatever is behind). Themed from
+    /// <see cref="IStyleTheme.LabelText"/> until set explicitly.</summary>
     public Color? BgColor
     {
         get => _bgcolor;
-        set => SetAtomicProperty(ref _bgcolor, value);
+        set => SetAtomicProperty(ref _bgcolor, value, themeOverride: true);
     }
 
     /// <summary>Text decoration (e.g. <c>Bold</c>, <c>Underline</c>); <c>None</c> for plain text. Flags combine.</summary>
@@ -120,6 +125,19 @@ public sealed class TextLabel : Control
     #endregion
 
     #region Methods
+    // Both halves of the one LabelText token: a theme that wants labels on a coloured strip supplies a background
+    // there rather than needing every caller to pass one. A token half with no colour leaves that side unset
+    // (null == terminal default / transparent), which is what the Style.Plain default gives.
+    private void CaptureTheme()
+    {
+        var label = UI.StyleTheme.LabelText;
+        if (!IsThemeOverridden(nameof(FgColor))) _fgcolor = label.ForegroundColor;
+        if (!IsThemeOverridden(nameof(BgColor))) _bgcolor = label.BackgroundColor;
+    }
+
+    /// <inheritdoc/>
+    protected override void ApplyTheme() => CaptureTheme();
+
     /// <summary>Renders each character into the label's cell buffer with the configured colours.</summary>
     // We use a 1D buffer to render instead of the 2D consoleBuffer as it's more efficient to access.
     protected override void Render()

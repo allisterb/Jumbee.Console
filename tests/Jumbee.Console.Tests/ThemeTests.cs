@@ -28,6 +28,19 @@ public class ThemeTests
         public Style TextAccent => Style.Magenta1;
     }
 
+    /// <summary>A style theme driving every plot token plus the label token off four colours, so a switch between
+    /// two of these moves every themed surface at once (what a scope colour scheme does).</summary>
+    private sealed class PlotStyleTheme(Color surface, Color axis, Color tick, Color tickLabel) : IStyleTheme
+    {
+        public Style PlotSurface => Style.Bg(surface);
+        public Style PlotAxis => axis;
+        public Style PlotGrid => axis;
+        public Style PlotTick => tick;
+        public Style PlotTickLabel => tickLabel;
+        public PlotPalette PlotSeries => new([axis, tick]);
+        public Style LabelText => tickLabel | Style.Bg(surface);
+    }
+
     /// <summary>A glyph theme that overrides only the scrollbar glyphs.</summary>
     private sealed class BlockScrollGlyphTheme : IGlyphTheme
     {
@@ -364,6 +377,84 @@ public class ThemeTests
             UI.SetTheme(new AccentStyleTheme(), new DefaultGlyphTheme());
             Assert.Equal(Style.Red1, cb.AccentStyle);                                  // overridden → kept
             Assert.Equal(((IStyleTheme)new AccentStyleTheme()).Text, cb.LabelStyle);   // not overridden → followed
+        }
+        finally { UI.SetTheme(new DefaultStyleTheme(), new DefaultGlyphTheme()); }
+    }
+    #endregion
+
+    #region Live theme switching — Plot and TextLabel (the scope colour-scheme path)
+    private static readonly PlotStyleTheme ThemeA =
+        new(new Color(10, 20, 30), new Color(1, 2, 3), new Color(4, 5, 6), new Color(7, 8, 9));
+    private static readonly PlotStyleTheme ThemeB =
+        new(new Color(90, 80, 70), new Color(11, 12, 13), new Color(14, 15, 16), new Color(17, 18, 19));
+
+    [Fact]
+    public void SetTheme_LiveUpdatesEveryPlotToken_OnExistingPlot()
+    {
+        try
+        {
+            UI.SetTheme(ThemeA, new DefaultGlyphTheme());
+            var plot = new Plot();
+            Assert.Equal(new Color(10, 20, 30), plot.Background);
+            Assert.Equal(new Color(1, 2, 3), plot.AxisColor);
+            Assert.Equal(new Color(1, 2, 3), plot.GridColor);
+            Assert.Equal(new Color(4, 5, 6), plot.TickColor);
+            Assert.Equal(new Color(7, 8, 9), plot.TickLabelColor);
+            Assert.Equal(new Color(1, 2, 3), plot.SeriesPalette[0]);
+
+            UI.SetTheme(ThemeB, new DefaultGlyphTheme());   // the live switch under test
+            Assert.Equal(new Color(90, 80, 70), plot.Background);
+            Assert.Equal(new Color(11, 12, 13), plot.AxisColor);
+            Assert.Equal(new Color(11, 12, 13), plot.GridColor);
+            Assert.Equal(new Color(14, 15, 16), plot.TickColor);
+            Assert.Equal(new Color(17, 18, 19), plot.TickLabelColor);
+            Assert.Equal(new Color(11, 12, 13), plot.SeriesPalette[0]);
+        }
+        finally { UI.SetTheme(new DefaultStyleTheme(), new DefaultGlyphTheme()); }
+    }
+
+    [Fact]
+    public void SetTheme_LiveUpdatesBothLabelColours_OnExistingTextLabel()
+    {
+        try
+        {
+            UI.SetTheme(ThemeA, new DefaultGlyphTheme());
+            var label = new TextLabel(TextLabelOrientation.Horizontal, "hdr");
+            Assert.Equal(new Color(7, 8, 9), label.FgColor);
+            Assert.Equal(new Color(10, 20, 30), label.BgColor);   // the token carries a background too
+
+            UI.SetTheme(ThemeB, new DefaultGlyphTheme());
+            Assert.Equal(new Color(17, 18, 19), label.FgColor);
+            Assert.Equal(new Color(90, 80, 70), label.BgColor);
+        }
+        finally { UI.SetTheme(new DefaultStyleTheme(), new DefaultGlyphTheme()); }
+    }
+
+    [Fact]
+    public void DefaultTheme_LeavesTextLabelColoursUnset()
+    {
+        // LabelText defaults to Style.Plain, which carries neither colour — a label must stay transparent by
+        // default, or it would paint an opaque background and break overlay-scrim compositing.
+        var label = new TextLabel(TextLabelOrientation.Horizontal, "plain");
+        Assert.Null(label.FgColor);
+        Assert.Null(label.BgColor);
+    }
+
+    [Fact]
+    public void SetTheme_LeavesExplicitlySetColoursAlone()
+    {
+        try
+        {
+            UI.SetTheme(ThemeA, new DefaultGlyphTheme());
+            var label = new TextLabel(TextLabelOrientation.Horizontal, "x", new Color(200, 100, 50));
+            var plot = new Plot();
+            plot.SetAxisColor(new Color(255, 0, 255));
+
+            UI.SetTheme(ThemeB, new DefaultGlyphTheme());
+            Assert.Equal(new Color(200, 100, 50), label.FgColor);   // ctor colour is an override
+            Assert.Equal(new Color(255, 0, 255), plot.AxisColor);   // SetAxisColor marks one too
+            Assert.Equal(new Color(90, 80, 70), label.BgColor);     // ...but the half left unset still follows
+            Assert.Equal(new Color(11, 12, 13), plot.GridColor);
         }
         finally { UI.SetTheme(new DefaultStyleTheme(), new DefaultGlyphTheme()); }
     }
