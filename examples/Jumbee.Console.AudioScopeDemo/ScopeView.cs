@@ -314,6 +314,8 @@ public sealed class ScopeView : CompositeControl
         // decade-marker height). Equal key => ScopeView.Apply skips references entirely (no SetData, no rebuild).
         var referencesKey = (mode.GetType(), g.References, xMin, xMax, yMin, yMax, g.AxisColor);
 
+        var m = mode.Header(modeState);
+
         return new ScopeFrame(
             References: references,
             Dynamic: processed,
@@ -325,7 +327,7 @@ public sealed class ScopeView : CompositeControl
             XCaption: xCaption,
             YCaption: yCaption,
             ModeText: $"{mode.ModeStr}",
-            ModuleText: "",//mode.Header(modeState),
+            ModuleText: m == "live" ? "" : m,
             ScaleText: $"-{g.Scale:0.00}x+",
             SpfText: $"{g.Samples}/{g.Width} spf",
             FpsText: $"{framerate}fps",
