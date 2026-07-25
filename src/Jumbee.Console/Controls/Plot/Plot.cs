@@ -26,16 +26,74 @@ using CColor = ConsoleGUI.Data.Color;
 public class Plot : Control
 {
     #region Constructors
-    /// <summary>Initializes a new display-only <see cref="Plot"/> (not focusable).</summary>
-    public Plot() => Focusable = false;   // display-only
+    /// <summary>Initializes a new display-only <see cref="Plot"/> (not focusable), with its chrome colours and
+    /// series palette taken from the current style theme.</summary>
+    public Plot()
+    {
+        Focusable = false;   // display-only
+        CaptureTheme();
+
+        // ONE chrome action, closing over `this` so it reads whatever the colour fields hold at replay time. The
+        // alternative -- a fresh closure per recolour -- leaks: ConfigureChrome APPENDS to _chrome, _chrome is never
+        // trimmed, and it is replayed in full on every rebuild. A live scope recolours as often as its header
+        // changes (once a second, when the fps figure ticks over), so that list would grow without bound.
+        ConfigureChrome(p =>
+        {
+            p.Axis.Pen = new LinePen(p.Axis.Pen.Brush, (CColor)_axisColor);
+            p.Grid.Pen = new LinePen(p.Grid.Pen.Brush, (CColor)_gridColor);
+            p.Ticks.Pen = new LinePen(p.Ticks.Pen.Brush, (CColor)_tickColor);
+            p.Ticks.Labels.Color = (CColor)_tickLabelColor;
+        });
+    }
     #endregion
 
     #region Properties
-    /// <summary>Background colour painted behind the plot, or <see langword="null"/> (the default) for transparent.</summary>
+    /// <summary>Background colour painted behind the plot, or <see langword="null"/> (the default) for transparent.
+    /// Themed from <see cref="IStyleTheme.PlotSurface"/> until set explicitly.</summary>
     public Color? Background
     {
         get => _background;
-        set => SetAtomicProperty(ref _background, value, watch: (_, _) => _dirty = true);
+        set => SetAtomicProperty(ref _background, value, themeOverride: true, watch: (_, _) => _dirty = true);
+    }
+
+    /// <summary>Colour of the axis lines. Themed from <see cref="IStyleTheme.PlotAxis"/> until set explicitly.</summary>
+    public Color AxisColor
+    {
+        get => _axisColor;
+        set => SetAtomicProperty(ref _axisColor, value, themeOverride: true, watch: (_, _) => Rebuild());
+    }
+
+    /// <summary>Colour of the background grid lines. Themed from <see cref="IStyleTheme.PlotGrid"/> until set
+    /// explicitly.</summary>
+    public Color GridColor
+    {
+        get => _gridColor;
+        set => SetAtomicProperty(ref _gridColor, value, themeOverride: true, watch: (_, _) => Rebuild());
+    }
+
+    /// <summary>Colour of the tick marks. Themed from <see cref="IStyleTheme.PlotTickLabel"/> until set explicitly.</summary>
+    public Color TickColor
+    {
+        get => _tickColor;
+        set => SetAtomicProperty(ref _tickColor, value, themeOverride: true, watch: (_, _) => Rebuild());
+    }
+
+    /// <summary>Colour of the numeric tick labels. Themed from <see cref="IStyleTheme.PlotTickLabel"/> until set
+    /// explicitly.</summary>
+    public Color TickLabelColor
+    {
+        get => _tickLabelColor;
+        set => SetAtomicProperty(ref _tickLabelColor, value, themeOverride: true, watch: (_, _) => Rebuild());
+    }
+
+    /// <summary>Colours cycled for series added without an explicit colour. Themed from
+    /// <see cref="IStyleTheme.PlotSeries"/> until set explicitly.</summary>
+    /// <remarks>Applies to series added <em>after</em> it changes: a series' colour is baked into its pen when it is
+    /// added, so recolouring existing series means re-adding them.</remarks>
+    public PlotPalette SeriesPalette
+    {
+        get => _seriesPalette;
+        set => SetAtomicProperty(ref _seriesPalette, value, themeOverride: true, watch: (_, _) => Rebuild());
     }
     #endregion
 
@@ -63,7 +121,7 @@ public class Plot : Control
         UI.Invoke(() =>
         {
             var p = pen.Equals(default(PointPen))
-                ? new PointPen(SystemPointBrushes.Braille, Palette[_seriesCount % Palette.Length])
+                ? new PointPen(SystemPointBrushes.Braille, SeriesColor(_seriesCount))
                 : pen;
             AddElement(plot => plot.AddSeries(xs, ys, p));
         });
@@ -84,7 +142,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var pen = new PointPen(BrushFor(brush), (CColor?)color ?? Palette[_seriesCount % Palette.Length]);
+            var pen = new PointPen(BrushFor(brush), (CColor?)color ?? SeriesColor(_seriesCount));
             AddElement(plot => plot.AddSeries(xs, ys, pen));
         });
         return this;
@@ -105,7 +163,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var pen = new PointPen(BrushFor(brush), (CColor?)color ?? Palette[_seriesCount % Palette.Length]);
+            var pen = new PointPen(BrushFor(brush), (CColor?)color ?? SeriesColor(_seriesCount));
             AddElement(plot => plot.AddScatter(xs, ys, pen));
         });
         return this;
@@ -120,7 +178,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var pen = new PointPen(SystemPointBrushes.Dot, (CColor?)color ?? Palette[_seriesCount % Palette.Length]);
+            var pen = new PointPen(SystemPointBrushes.Dot, (CColor?)color ?? SeriesColor(_seriesCount));
             AddElement(plot => plot.AddStem(xs, ys, pen, baseline));
         });
         return this;
@@ -138,7 +196,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             AddElement(plot => plot.AddBars(xs, ys, c, baseline, width));
         });
         return this;
@@ -158,7 +216,7 @@ public class Plot : Control
         {
             var (mids, counts) = Histogram(values, bins);
             if (mids.Length == 0) return;
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             // Width 1.0 so adjacent bins touch, as a histogram should.
             AddElement(plot => plot.AddBars(mids, counts, c, 0, 1.0));
         });
@@ -221,7 +279,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             var m = (CColor?)medianColor ?? c;
             AddElement(plot => plot.AddBox(xs, mins, q1s, medians, q3s, maxes, c, m, width));
         });
@@ -257,7 +315,7 @@ public class Plot : Control
             }
 
             if (xs.Count == 0) return;
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             var m = (CColor?)medianColor ?? c;
             AddElement(plot => plot.AddBox(xs, mins, q1s, medians, q3s, maxes, c, m, width));
         });
@@ -313,7 +371,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             AddElement(plot => plot.AddErrorBars(xs, ys, errLows, errHighs, c, capWidth));
         });
         return this;
@@ -370,7 +428,7 @@ public class Plot : Control
     {
         UI.Invoke(() =>
         {
-            var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+            var c = (CColor?)color ?? SeriesColor(_seriesCount);
             AddElement(plot => plot.AddHBars(positions, values, c, baseline, width));
         });
         return this;
@@ -521,12 +579,13 @@ public class Plot : Control
     private static readonly CColor[] GrayscaleStops = [new(15, 15, 15), new(245, 245, 245)];
     private static readonly CColor[] CoolStops = [new(0, 220, 220), new(120, 120, 240), new(230, 60, 230)];
 
-    // One colour per series: the caller's colours where given, else the palette cycled by series index.
-    private static IReadOnlyList<CColor> ColorsFor(int count, IReadOnlyList<Color>? colors)
+    // One colour per series: the caller's colours where given, else the palette cycled by series index. Instance
+    // rather than static since the palette became per-plot (themed) state.
+    private IReadOnlyList<CColor> ColorsFor(int count, IReadOnlyList<Color>? colors)
     {
         var result = new CColor[count];
         for (int j = 0; j < count; j++)
-            result[j] = colors is not null && j < colors.Count ? (CColor)colors[j] : Palette[j % Palette.Length];
+            result[j] = colors is not null && j < colors.Count ? (CColor)colors[j] : SeriesColor(j);
         return result;
     }
 
@@ -570,7 +629,7 @@ public class Plot : Control
     /// </remarks>
     public PlotSeries AddLiveSeries(Color? color = null, PlotBrush brush = PlotBrush.Braille)
     {
-        var pen = new PointPen(BrushFor(brush), (CColor?)color ?? Palette[_seriesCount % Palette.Length]);
+        var pen = new PointPen(BrushFor(brush), (CColor?)color ?? SeriesColor(_seriesCount));
         var handle = new PlotSeries(this, (cplot, xs, ys) => cplot.AddSeries(xs, ys, pen));
         RegisterLive(handle);
         return handle;
@@ -588,7 +647,7 @@ public class Plot : Control
     /// </remarks>
     public PlotSeries AddLiveScatter(Color? color = null, PlotBrush brush = PlotBrush.Braille)
     {
-        var pen = new PointPen(BrushFor(brush), (CColor?)color ?? Palette[_seriesCount % Palette.Length]);
+        var pen = new PointPen(BrushFor(brush), (CColor?)color ?? SeriesColor(_seriesCount));
         var handle = new PlotSeries(this, (cplot, xs, ys) => cplot.AddScatter(xs, ys, pen));
         RegisterLive(handle);
         return handle;
@@ -603,7 +662,7 @@ public class Plot : Control
     /// </remarks>
     public PlotSeries AddLiveBars(Color? color = null, double baseline = 0, double width = 0.8)
     {
-        var c = (CColor?)color ?? Palette[_seriesCount % Palette.Length];
+        var c = (CColor?)color ?? SeriesColor(_seriesCount);
         var handle = new PlotSeries(this, (cplot, xs, ys) => cplot.AddBars(xs, ys, c, baseline, width));
         RegisterLive(handle);
         return handle;
@@ -695,27 +754,64 @@ public class Plot : Control
 
     /// <summary>Recolours the axis lines, in a full-RGB <see cref="Color"/> (keeping the current brush) — a
     /// convenience that hides ConsolePlot's immutable pen. Retained across <see cref="Clear"/>.</summary>
-    public Plot SetAxisColor(Color color) =>
-        ConfigureChrome(p => p.Axis.Pen = new LinePen(p.Axis.Pen.Brush, (CColor)color));
+    /// <remarks>Sets <see cref="AxisColor"/>, so it also marks the axis colour as explicitly chosen and a later
+    /// theme switch will leave it alone.</remarks>
+    public Plot SetAxisColor(Color color)
+    {
+        AxisColor = color;
+        return this;
+    }
 
     /// <summary>Recolours the background grid lines, in a full-RGB <see cref="Color"/> (keeping the current brush).
     /// Retained across <see cref="Clear"/>.</summary>
-    public Plot SetGridColor(Color color) =>
-        ConfigureChrome(p => p.Grid.Pen = new LinePen(p.Grid.Pen.Brush, (CColor)color));
+    /// <remarks>Sets <see cref="GridColor"/> — see <see cref="SetAxisColor"/> on theme overriding.</remarks>
+    public Plot SetGridColor(Color color)
+    {
+        GridColor = color;
+        return this;
+    }
 
     /// <summary>Recolours the tick marks and, when <paramref name="labelColor"/> is given, the numeric tick labels —
     /// in full-RGB <see cref="Color"/>s (keeping the tick brush). Retained across <see cref="Clear"/>.</summary>
-    public Plot SetTickColor(Color color, Color? labelColor = null) =>
-        ConfigureChrome(p =>
-        {
-            p.Ticks.Pen = new LinePen(p.Ticks.Pen.Brush, (CColor)color);
-            if (labelColor is { } lc) p.Ticks.Labels.Color = (CColor)lc;
-        });
+    /// <remarks>Sets <see cref="TickColor"/>/<see cref="TickLabelColor"/> — see <see cref="SetAxisColor"/> on theme
+    /// overriding.</remarks>
+    public Plot SetTickColor(Color color, Color? labelColor = null)
+    {
+        TickColor = color;
+        if (labelColor is { } lc) TickLabelColor = lc;
+        return this;
+    }
 
     // Records persistent axis/grid/tick styling. Unlike Configure/AddSeries (which land in the per-data _config list
     // that Clear() empties), chrome is replayed on every rebuild AND survives Clear(), so a plot rebuilt or cleared to
     // swap data each frame keeps how it's drawn — the fix for a per-frame Clear()+AddSeries loop silently dropping the
     // configured chrome (e.g. a hidden grid reappearing on the first frame after setup).
+    /// <summary>The colour for series <paramref name="index"/>, from <see cref="SeriesPalette"/> (which wraps).</summary>
+    private CColor SeriesColor(int index) => (CColor)_seriesPalette[index];
+
+    // Re-reads the themed chrome from the current style theme, leaving anything the caller set explicitly alone.
+    // Called from the constructor (nothing is overridden yet, so everything is captured) and on a runtime theme
+    // switch. PlotSurface contributes a BACKGROUND colour, the rest foregrounds; a token with no colour of the kind
+    // it is read for leaves the corresponding field at its existing value.
+    private void CaptureTheme()
+    {
+        var theme = UI.StyleTheme;
+        if (!IsThemeOverridden(nameof(Background))) _background = theme.PlotSurface.BackgroundColor;
+        if (!IsThemeOverridden(nameof(AxisColor))) _axisColor = theme.PlotAxis.ForegroundColor ?? _axisColor;
+        if (!IsThemeOverridden(nameof(GridColor))) _gridColor = theme.PlotGrid.ForegroundColor ?? _gridColor;
+        if (!IsThemeOverridden(nameof(TickColor))) _tickColor = theme.PlotTickLabel.ForegroundColor ?? _tickColor;
+        if (!IsThemeOverridden(nameof(TickLabelColor))) _tickLabelColor = theme.PlotTickLabel.ForegroundColor ?? _tickLabelColor;
+        if (!IsThemeOverridden(nameof(SeriesPalette))) _seriesPalette = theme.PlotSeries;
+    }
+
+    /// <inheritdoc/>
+    protected override void ApplyTheme()
+    {
+        CaptureTheme();
+        _dirty = true;
+        Rebuild();   // the chrome action reads the fields above, so a replay is what actually recolours the plot
+    }
+
     private Plot ConfigureChrome(Action<CPlot> configure)
     {
         UI.Invoke(() => { _chrome.Add(configure); Rebuild(); });
@@ -787,13 +883,11 @@ public class Plot : Control
     private const int MinWidth = 8;
     private const int MinHeight = 4;
 
-    // Pleasant, high-contrast default series colours, cycled by series index. Avoids ConsolePlot's own default
-    // palette, whose first entry is black — invisible on a dark terminal.
-    private static readonly CColor[] Palette =
-    [
-        new(89, 145, 240),  new(240, 120, 100), new(120, 200, 120), new(230, 190, 90),
-        new(190, 130, 230), new(110, 205, 220), new(235, 140, 200), new(160, 170, 180),
-    ];
+    private Color _axisColor;
+    private Color _gridColor;
+    private Color _tickColor;
+    private Color _tickLabelColor;
+    private PlotPalette _seriesPalette;
 
     private readonly List<Action<CPlot>> _config = [];
     // Persistent axis/grid/tick styling — replayed on every rebuild and NOT emptied by Clear() (see ConfigureChrome).

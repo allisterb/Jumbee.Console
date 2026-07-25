@@ -31,7 +31,7 @@ public class ValueTypeEqualityTests
     public static TheoryData<string> Types => new()
     {
         "ButtonStyle", "GaugeStyle", "ScrollBarStyle", "ScrollBarGlyphs", "TitleStyle", "JColor",
-        "Size", "Position", "Rect", "Offset", "Vector", "CColor", "Character",
+        "Size", "Position", "Rect", "Offset", "Vector", "CColor", "Character", "PlotPalette",
     };
 
     [Theory]
@@ -53,6 +53,13 @@ public class ValueTypeEqualityTests
             case "Vector": Check(new Vector(1, 2), new Vector(1, 2), new Vector(1, 3)); break;
             case "CColor": Check(new CColor(1, 2, 3), new CColor(1, 2, 3), new CColor(1, 2, 4)); break;
             case "Character": Check(new Character('a'), new Character('a'), new Character('b')); break;
+            // Two SEPARATELY-constructed palettes with the same colours: the point of the type is that these are
+            // equal, where the bare arrays behind them would not be.
+            case "PlotPalette":
+                Check(new PlotPalette([new JColor(1, 2, 3), new JColor(4, 5, 6)]),
+                      new PlotPalette([new JColor(1, 2, 3), new JColor(4, 5, 6)]),
+                      new PlotPalette([new JColor(1, 2, 3), new JColor(4, 5, 7)]));
+                break;
             default: throw new ArgumentOutOfRangeException(nameof(type), type, "unmapped");
         }
     }

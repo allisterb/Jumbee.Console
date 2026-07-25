@@ -158,6 +158,31 @@ public interface IStyleTheme
     /// <see cref="Scrim"/> fill. Defaults to 0.6.</summary>
     float ScrimDim => 0.6f;
     #endregion
+
+    #region Plot
+    /// <summary>The fill painted behind a <c>Plot</c>'s drawing area.</summary>
+    /// <remarks>Only its background colour is used; the default has none, leaving a plot transparent so whatever is
+    /// behind it shows through.</remarks>
+    Style PlotSurface => Style.Plain;
+
+    /// <summary>The colour of a <c>Plot</c>'s axis lines.</summary>
+    /// <remarks>Only its foreground colour is used. The axis <em>captions</em> are set per-plot with
+    /// <c>SetAxisTitles</c> and are not themed.</remarks>
+    Style PlotAxis => Style.White;
+
+    /// <summary>The colour of a <c>Plot</c>'s background grid lines.</summary>
+    /// <remarks>Only its foreground colour is used. The grid's dashed/solid <em>brush</em> is a per-plot setting.</remarks>
+    Style PlotGrid => Style.Grey;
+
+    /// <summary>The colour of a <c>Plot</c>'s tick marks and its numeric tick labels.</summary>
+    /// <remarks>Only its foreground colour is used. Marks and labels share one token — they read as one piece of
+    /// chrome, and every scheme that has motivated this so far colours them together.</remarks>
+    Style PlotTickLabel => Style.White;
+
+    /// <summary>The ordered colours a <c>Plot</c> cycles through for series that don't name one. Defaults to
+    /// <see cref="PlotPalette.Default"/>.</summary>
+    PlotPalette PlotSeries => PlotPalette.Default;
+    #endregion
 }
 
 /// <summary>The built-in style theme: every token uses <see cref="IStyleTheme"/>'s default values.</summary>
