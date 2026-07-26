@@ -323,6 +323,11 @@ public sealed class RecordingAudioSource : IAudioSource
         return FileAudioSource.Deinterleave(snapshot, Channels);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>No-op. This source is a rolling latest-window, so how much consecutive frames share is decided
+    /// entirely by how often <see cref="NextFrame"/> is called — there is nothing to configure here.</remarks>
+    public void SetOverlap(double overlap) { }
+
     public void Dispose()
     {
         capture.DataAvailable -= OnData;

@@ -107,12 +107,17 @@ public sealed class ScopeView : CompositeControl
     // pair, both of which describe how this scope was configured rather than what it is currently showing. They
     // are slotted after the mode name (widest, and read first), with the percentages of the scope-tui columns
     // trimmed to make room -- the originals were generous, e.g. "oscillo::scope-tui" needs 18 of its 35%.
-    // Budgeted so every column still fits its widest text at a 100-cell header, the narrowest width worth
-    // supporting with nine columns: mode "oscillo::scope-tui" 18/20, source 21/22, info "2ch t:24" 8/9, module
-    // "^ 0:1 trigger" 13/13, scale "-1.00x+" 7/7, spf "2048/2048 spf" 13/13, fps 6/6, glyphs 3/5 and 2/5. Anything
-    // wider than that is slack. Columns abut with no separator (as scope-tui's do), so a column that overruns runs
-    // straight into its neighbour rather than being visibly cut -- worth re-checking these if a field grows.
-    static readonly int[] headerPercents = [20, 22, 9, 13, 7, 13, 6, 5, 5];
+    // Budgeted against each column's WIDEST text, which totals ~116 cells: mode "oscillo" 7, source
+    // "file/02 - Girlfrien.." 21, info "2ch ticks:11 ov:95" 18, module -- the spectroscope's, and by far the widest
+    // -- "4x avg (0.7s)  hann  1.465Hz bins" 33, scale "-1.00x+" 7, spf "8192/8192 spf" 13, fps 6, glyphs 3 and 2.
+    // So ~120 cells is the narrowest header that fits everything; narrower than that and the widest fields clip.
+    // Columns abut with no separator (as scope-tui's do), so an overrun runs into its neighbour rather than being
+    // visibly cut -- re-check these whenever a field grows.
+    //
+    // Both ends of this have already moved once: dropping "::scope-tui" from the mode text freed 13 cells, which is
+    // what pays for the info column now carrying the overlap readout. A capture at ~100 cells was clipping
+    // "2ch ticks:11" to "2ch ticks" before this re-budget.
+    static readonly int[] headerPercents = [7, 19, 17, 28, 7, 11, 5, 3, 3];
 
     static int[] HeaderColumnWidths(int width)
     {
@@ -122,6 +127,27 @@ public sealed class ScopeView : CompositeControl
         widths[1] += width - used; // remainder from integer truncation
         return widths;
     }
+
+    /// <summary>Updates the header's overlap readout. Called on EVERY pane when the shared feed is retuned — overlap
+    /// is a property of the one audio source, not of a pane, unlike scale/samples/trigger/averaging.</summary>
+    public void ShowOverlap(double value)
+    {
+        overlap = value;
+        infoText = BuildInfo();
+        infoLabel.Text = infoText;
+        lastHeader = null;   // the equality gate tracks frame fields only; without this it would swallow the change
+    }
+
+    // The overlap term appears ONLY when engaged: the info column is budgeted tight (see headerPercents) and at the
+    // default of 0 there is nothing to report.
+    string BuildInfo() => string.Join(' ', new[]
+    {
+        channelCount > 0 ? $"{channelCount}ch" : "",
+        tickStep > 0 ? $"ticks:{tickStep}" : "ticks:off",
+        // No unit suffix, matching "ticks:NN" -- and it keeps the field one cell narrower, which is the difference
+        // between fitting and clipping on a ~100-cell header.
+        overlap > 0 ? $"ov:{overlap * 100:0}" : "",
+    }.Where(s => s.Length > 0));
 
     /// <summary>Round-9 (item 3): the compact subset of a frame's header fields that actually drive the header
     /// <c>TextLabel</c>s, used to gate <see cref="ApplyAxisAndHeader"/>'s per-tick text/colour reassignment on a
@@ -151,7 +177,10 @@ public sealed class ScopeView : CompositeControl
     readonly DockPanel dock;
     int headerBuiltForWidth;
     readonly string sourceText;
-    readonly string infoText;
+    readonly int channelCount;
+    readonly int tickStep;
+    double overlap;
+    string infoText;
 
     // Round-8 (item 2): live-series pools + the shape/key bookkeeping that decides whether a pool needs a full
     // Clear()+rebuild (rare: Tab, a toggle, or entering/leaving scatter mode) or just a SetData refresh (every
@@ -214,11 +243,9 @@ public sealed class ScopeView : CompositeControl
         // No "in:" label -- the live/ or file/ prefix already says what it is, and the four cells it would cost are
         // the difference between the device name fitting and being clipped on a narrow header.
         sourceText = source;
-        infoText = string.Join(' ', new[]
-        {
-            channels > 0 ? $"{channels}ch" : "",
-            xTickStep > 0 ? $"ticks:{xTickStep}" : "ticks:off",
-        }.Where(s => s.Length > 0));
+        channelCount = channels;
+        tickStep = xTickStep;
+        infoText = BuildInfo();
 
         modeLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Red1, decoration: Spectre.Console.Decoration.Bold);
         sourceLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Cyan1);

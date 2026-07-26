@@ -17,23 +17,25 @@ using ScopeTui;
 // the platform's default recording endpoint; --loopback scopes what is PLAYING instead, and --device picks a
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
-// CLI (System.CommandLine): file|live [path FILE] [--fps N] [--buffer N] [--scatter] [--device D] [--loopback]
-// [--mono] [--ticks N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as "path", with no
-// leading dashes, so it is spelled `file path C:\track.mp3` -- unlike every other option here.)
+// CLI (System.CommandLine): file|live [path FILE] [--fps N] [--buffer N] [--overlap F] [--scatter] [--device D]
+// [--loopback] [--mono] [--ticks N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as
+// "path", with no leading dashes, so it is spelled `file path C:\track.mp3` -- unlike every other option here.)
 //
 // Two independent clocks drive the scope, and only one of them is an option:
 //
-//   The FEED period -- how often the source is sampled and the waveforms recompute -- is FIXED at the wall-clock
-//   duration of one buffer (--buffer / the PCM rate), so every frame carries one buffer of fresh audio. It is not
-//   configurable because every other value is wrong in one of two directions: faster only re-shows samples already
-//   on screen, slower drops audio that is never displayed. See the feed-period note below.
+//   The FEED period -- how often the source is sampled and the waveforms recompute -- is DERIVED, not set directly:
+//   it is the wall-clock duration of the new audio in each frame, i.e. --buffer / the PCM rate, scaled down by
+//   --overlap. At the default (no overlap) every frame carries one whole buffer of fresh audio, which is the only
+//   rate that neither re-shows nor drops anything. --overlap deliberately re-uses part of each frame to refresh
+//   faster without shrinking the FFT -- see the feed-period note below.
 //
 //   --fps is purely the UI paint/input loop cap. It does NOT affect what data is produced -- painting more often
 //   than the data changes costs almost nothing (the loop skips compositing when nothing is dirty), and the loop is
 //   also where input is drained, so a healthy rate keeps the app responsive no matter how big --buffer is.
 //
-// --buffer therefore sets three things at once: the oscilloscope window, the FFT size (and so the frequency-bin
-// resolution), and -- via the fixed feed -- the refresh rate. A bigger buffer buys resolution and costs refresh.
+// --buffer sets three things at once: the oscilloscope window, the FFT size (and so the frequency-bin resolution),
+// and -- via the derived feed -- the refresh rate. A bigger buffer buys resolution and costs refresh; --overlap is
+// how you buy the refresh back.
 
 var inputArg = new Argument<string?>("input")
 {
@@ -68,6 +70,11 @@ var loopbackOpt = new Option<bool>("--loopback")
 {
     Description = "Scope what is PLAYING rather than what is recording (WASAPI loopback / PulseAudio monitor).",
 };
+var overlapOpt = new Option<double>("--overlap")
+{
+    Description = "Fraction of each frame the next one re-uses (0-0.95). Refreshes faster than one buffer at a time, at no cost in FFT size.",
+    DefaultValueFactory = _ => 0.0,
+};
 var ticksOpt = new Option<int>("--ticks")
 {
     Description = "Cells between horizontal ticks/grid lines on the osc + spectro panes; bigger is sparser, 0 removes the chrome.",
@@ -90,7 +97,7 @@ var listDevicesOpt = new Option<bool>("--list-devices")
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
     inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt,
-    ticksOpt, schemeOpt, listDevicesOpt,
+    overlapOpt, ticksOpt, schemeOpt, listDevicesOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -106,6 +113,8 @@ root.SetAction(async (parse, ct) =>
     // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
     // stops being readable, and ScopeView clamps again to the pane's own width.
     var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
+    // Capped below 1: at 1.0 a frame would be entirely re-used audio, i.e. an infinitely fast feed showing nothing new.
+    var overlap = Math.Clamp(parse.GetValue(overlapOpt), 0.0, 0.95);
     // --scheme is a THEME: applying it here, before any control is built, means the panes' plots pick up their
     // axis/grid/tick/surface colours and series palette from it on construction, and each pane's frame picks up its
     // at-rest border. Nothing downstream takes a colour argument. (UI.SetTheme also raises ThemeChanged, so already-
@@ -146,8 +155,10 @@ root.SetAction(async (parse, ct) =>
     try
     {
         audio = live
+            // A live device already hands out a rolling latest-window, so overlapping is purely a matter of sampling
+            // it more often -- nothing to configure on the source. A file has to retain the previous frame's tail.
             ? new RecordingAudioSource(bufferSamples, RecordingAudioSource.ResolveDevice(deviceSpec, loopback), loopback, mono)
-            : new FileAudioSource(filePath, bufferSamples);     // decode the mp3 (default)
+            : new FileAudioSource(filePath, bufferSamples, overlap);
     }
     catch (Exception ex)
     {
@@ -155,11 +166,16 @@ root.SetAction(async (parse, ct) =>
         return 1;
     }
 
-    // The feed period is the wall-clock duration of one buffer -- one buffer's worth of samples per tick. This is
-    // the only rate that is neither wasteful nor lossy, which is why it isn't an option: a window can be fully
-    // replaced exactly sampleRate/buffer times a second (~23Hz for 2048 @ 48kHz), so a FASTER feed can only re-show
-    // samples already on screen, and a SLOWER one drops audio that is never displayed at all. It is also the cadence
-    // scope-tui gets for free by blocking on its capture queue -- one frame per callback, contiguous.
+    // The feed period is the wall-clock duration of the NEW audio in each frame: a whole buffer by default, or the
+    // non-overlapping part of one when --overlap is given. Without overlap this is the only rate that is neither
+    // wasteful nor lossy -- a window can be fully replaced exactly sampleRate/buffer times a second (~23Hz for 2048
+    // @ 48kHz), so a faster feed could only re-show samples already on screen and a slower one would drop audio
+    // outright. It is also the cadence scope-tui gets for free by blocking on its capture queue.
+    //
+    // --overlap buys refresh rate back at no cost in resolution, which is the trade a spectrum analyser makes: at
+    // --buffer 8192 the bins are 5.9Hz wide but a full window only arrives 5.9 times a second, and --overlap 0.75
+    // puts the display back at ~23Hz by re-using three quarters of each frame. Re-showing samples is the POINT
+    // there, rather than the accident it would be at a mismatched fixed rate.
     //
     // The cadence matches; contiguity is best-effort. A live device hands us a rolling latest-window rather than a
     // queue, so timer jitter can re-show or skip a few samples at the seam -- scope-tui cannot, since it consumes
@@ -170,8 +186,9 @@ root.SetAction(async (parse, ct) =>
     // feed no longer keeps up with the audio, so windows have gaps -- acceptable, since 64 samples is a degenerate
     // display anyway, and the alternative is a self-inflicted busy loop.
     const int MinFeedMs = 4;
-    var feedMs = Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples / audio.SampleRate));
-    var feedInterval = TimeSpan.FromMilliseconds(feedMs);
+    TimeSpan FeedIntervalFor(double ov) => TimeSpan.FromMilliseconds(
+        Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples * (1.0 - ov) / audio.SampleRate)));
+    var feedInterval = FeedIntervalFor(overlap);
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
     var bus = new ChannelBus();
@@ -297,16 +314,27 @@ root.SetAction(async (parse, ct) =>
     bus.Publish(audio.NextFrame());
 
     // --- The fan-out: each pane runs its OWN self-driving compute feed off the one shared bus. -------------------
-    FeedHandle[] paneFeeds =
-    [
-        oscPane.StartComputeFeed(bus, osc, oscCfg, () => framerate, feedInterval, ex => oscPane.SetError($"render failed: {ex.Message}")),
-        spectroPane.StartComputeFeed(bus, spectro, spectroCfg, () => framerate, feedInterval, ex => spectroPane.SetError($"render failed: {ex.Message}")),
-        vectorPane.StartComputeFeed(bus, vec, vectorCfg, () => framerate, feedInterval, ex => vectorPane.SetError($"render failed: {ex.Message}")),
-    ];
+    // Factored into a function because [ / ] retune the feed at runtime, and a FeedHandle's interval is fixed when it
+    // is created -- there is no way to re-time a running feed, so changing the rate means stopping and re-starting all
+    // four of them. The pump is started LAST so no decode is in flight while the source is being reconfigured.
+    var paneFeeds = new FeedHandle[panes.Length];
+    void StartFeeds(TimeSpan interval)
+    {
+        for (var i = 0; i < panes.Length; i++)
+        {
+            var pane = panes[i];   // captured per iteration, so each error handler targets its own pane
+            paneFeeds[i] = pane.StartComputeFeed(bus, paneModes[i], configs[i], () => framerate, interval,
+                ex => pane.SetError($"render failed: {ex.Message}"));
+        }
 
-    // The single decode pump (it keeps its own feed handle for teardown). A decode failure is surfaced on all three
-    // panes, since it affects them all.
-    pump.Start(feedInterval, onError: ex => { foreach (var p in panes) p.SetError($"decode failed: {ex.Message}"); });
+        // The single decode pump. A decode failure is surfaced on all three panes, since it affects them all.
+        pump.Start(interval, onError: ex => { foreach (var p in panes) p.SetError($"decode failed: {ex.Message}"); });
+    }
+
+    StartFeeds(feedInterval);
+    // Prime the header readout with the startup --overlap. Without this only the [ / ] handler ever told the panes,
+    // so `--overlap 0.75` ran at the right rate but reported nothing.
+    foreach (var p in panes) p.ShowOverlap(overlap);
 
     // --- Scope-adjusting hotkeys apply to the FOCUSED pane's own GraphConfig, then Publish so that pane picks up the
     // change (the others are untouched). ---
@@ -351,6 +379,34 @@ root.SetAction(async (parse, ct) =>
     // Ctrl+T cycles the colour scheme across ALL THREE panes at once -- unlike the other hotkeys, which act on the
     // focused pane. It is a theme switch, and a theme is global by definition.
     UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.T), () => ApplyScheme(activeScheme.Next()));
+
+    // [ and ] adjust the feed overlap. Deliberately NOT pane-routed and deliberately not PageUp/PageDown: overlap
+    // belongs to the one audio source every pane reads, so it cannot be per-pane the way scale/samples/trigger/
+    // averaging are, and PageUp/PageDown already mean the trigger threshold on the oscilloscope and the FFT
+    // averaging depth on the spectroscope. Dedicated global keys keep all three meanings distinct.
+    var retuning = false;
+    async void SetOverlap(double next)
+    {
+        next = Math.Clamp(next, 0.0, 0.95);
+        // Re-entrancy guard: each change tears down and rebuilds four feeds asynchronously, so a held key would
+        // otherwise interleave two rebuilds and leak a feed.
+        if (retuning || quitting || Math.Abs(next - overlap) < 1e-9) return;
+        retuning = true;
+        try
+        {
+            overlap = next;
+            await pump.StopAsync();                      // join the in-flight decode BEFORE touching the source...
+            foreach (var f in paneFeeds) f.Cancel();     // ...panes read only immutable bus frames, so no join needed
+            audio.SetOverlap(overlap);                   // ...and only then is it safe to reconfigure
+            if (quitting) return;                        // quit may have landed while we were awaiting
+            StartFeeds(FeedIntervalFor(overlap));
+            foreach (var p in panes) p.ShowOverlap(overlap);
+        }
+        finally { retuning = false; }
+    }
+
+    UI.RegisterHotKey(UI.HotKeys.Char(']'), () => SetOverlap(overlap + 0.05));
+    UI.RegisterHotKey(UI.HotKeys.Char('['), () => SetOverlap(overlap - 0.05));
 
     // Tab / Shift+Tab move keyboard focus between the three panes (clicking a pane also focuses it).
     UI.RegisterHotKey(UI.HotKeys.Tab, () => UI.SetFocus(panes[(FocusedIndex() + 1) % panes.Length]));

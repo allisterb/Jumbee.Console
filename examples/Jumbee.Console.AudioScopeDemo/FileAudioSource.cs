@@ -20,9 +20,14 @@ public sealed class FileAudioSource : IAudioSource
 
     readonly WaveStream reader;
     readonly ISampleProvider sampler;
-    readonly float[] scratch;
+    readonly float[] window;      // interleaved; the frame handed out, retained across calls when overlapping
+    int advance;                  // interleaved samples of NEW audio per frame (window.Length when not overlapping)
+    bool primed;
 
-    public FileAudioSource(string path, int bufferSamplesPerChannel)
+    /// <param name="overlap">Fraction of each frame re-used by the next one, 0 (none) to just under 1. Overlapping
+    /// makes consecutive frames share audio so the display can refresh faster than one whole buffer at a time —
+    /// what a spectrum analyser does to keep a large FFT watchable.</param>
+    public FileAudioSource(string path, int bufferSamplesPerChannel, double overlap = 0.0)
     {
         reader = Path.GetExtension(path).ToLowerInvariant() switch
         {
@@ -34,8 +39,17 @@ public sealed class FileAudioSource : IAudioSource
         sampler = reader.ToSampleProvider();
         Channels = reader.WaveFormat.Channels;
         SampleRate = reader.WaveFormat.SampleRate;
-        scratch = new float[bufferSamplesPerChannel * Channels];
+        window = new float[bufferSamplesPerChannel * Channels];
+        // Retain-and-shift rather than seeking the reader back: a shift is exact and codec-agnostic, where rewinding
+        // an MP3 snaps to a frame boundary. The pump ticks proportionally faster (see Program.cs), so the file still
+        // advances at realtime -- overlapping changes how much of each frame is NEW, not how fast the track plays.
+        SetOverlap(overlap);
     }
+
+    /// <inheritdoc/>
+    public void SetOverlap(double overlap) =>
+        // At least one frame of audio per call, so a read always makes progress however extreme the overlap.
+        advance = Math.Max(Channels, (int)Math.Round(window.Length * (1.0 - Math.Clamp(overlap, 0.0, 0.95))));
 
     /// <summary>
     /// Reads the next buffer's worth of samples (looping back to the start at end-of-file, since this is a
@@ -44,15 +58,32 @@ public sealed class FileAudioSource : IAudioSource
     /// </summary>
     public double[][] NextFrame()
     {
-        // NAudio 3's ISampleProvider.Read is Span-based (no offset/count) -- read into the whole buffer, then top up
-        // from the start of the stream if we hit EOF mid-buffer.
-        var read = sampler.Read(scratch);
-        if (read < scratch.Length)
+        if (!primed || advance >= window.Length)
+        {
+            // First frame, or no overlap: the whole window is new audio.
+            primed = true;
+            var read = ReadLooping(window);
+            return Deinterleave(window, Channels, read);
+        }
+
+        // Overlapping: keep the tail of the previous frame, slide it to the front, and read only the new audio in
+        // behind it. Every sample is still valid, so no partial-length de-interleave.
+        Array.Copy(window, advance, window, 0, window.Length - advance);
+        ReadLooping(window.AsSpan(window.Length - advance));
+        return Deinterleave(window, Channels);
+    }
+
+    // NAudio 3's ISampleProvider.Read is Span-based (no offset/count) -- read into the whole span, then top up from
+    // the start of the stream if we hit EOF mid-read (this is a decode-only demo source, so it loops).
+    int ReadLooping(Span<float> destination)
+    {
+        var read = sampler.Read(destination);
+        if (read < destination.Length)
         {
             reader.Position = 0;
-            read += sampler.Read(scratch.AsSpan(read));
+            read += sampler.Read(destination[read..]);
         }
-        return Deinterleave(scratch, Channels, read);
+        return read;
     }
 
     /// <summary>
