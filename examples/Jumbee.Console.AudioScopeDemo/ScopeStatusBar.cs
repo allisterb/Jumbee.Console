@@ -56,7 +56,10 @@ public sealed class ScopeStatusBar : RenderableControl
 
         var left = $" {_source}";
         if (_channels.Length > 0) left += $"  {_channels}";
-        if (_overlap > 0) left += $"  overlap:{_overlap * 100:0}";
+        // Threshold rather than > 0: the feed period is a whole number of milliseconds, so even a run that asked for
+        // no overlap re-uses ~1% of each frame (a 46ms tick against a 46.44ms window). That is real but it is
+        // quantisation, not a setting, and reporting it would imply the run was configured for it.
+        if (_overlap >= 0.02) left += $"  overlap:{_overlap * 100:0}";
         left += $"  {_framerate}fps";
 
         // Right-align the hints when there is room; otherwise concatenate and let the line clip.

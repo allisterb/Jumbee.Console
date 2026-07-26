@@ -75,7 +75,12 @@ var loopbackOpt = new Option<bool>("--loopback")
 var overlapOpt = new Option<double>("--overlap")
 {
     Description = "Fraction of each frame the next one re-uses (0-0.95). Refreshes faster than one buffer at a time, at no cost in FFT size.",
-    DefaultValueFactory = _ => 0.0,
+    // Defaulted ON. Measured over 10s wall at the default buffer: 17% of a core at 0, 23% at 0.75, and 23% at 0.95 --
+    // the paint loop dominates and the extra feed work barely registers, so the smoother display is nearly free.
+    // 0.75 rather than higher because it is the conventional analyser value, every paint still gets a fresh frame
+    // (86 feeds/sec against a 60fps cap), and it stays clear of the MinFeedMs floor that makes ~0.95 quietly
+    // deliver ~0.91.
+    DefaultValueFactory = _ => 0.75,
 };
 var tickOpt = new Option<int>("--tick")
 {
@@ -192,6 +197,20 @@ root.SetAction(async (parse, ct) =>
     TimeSpan FeedIntervalFor(double ov) => TimeSpan.FromMilliseconds(
         Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples * (1.0 - ov) / audio.SampleRate)));
     var feedInterval = FeedIntervalFor(overlap);
+
+    // What the feed ACHIEVES, which the floor above (and the ms rounding) can hold below what was asked for -- at the
+    // default buffer, --overlap 0.95 really runs at 0.91. Report the achieved value so the readout never overstates.
+    double AchievedOverlap(double ov) =>
+        Math.Max(0.0, 1.0 - (FeedIntervalFor(ov).TotalMilliseconds * audio.SampleRate / 1000.0 / bufferSamples));
+
+    // The floor also caps how much overlap is REACHABLE: once the tick is at MinFeedMs it cannot get shorter, so every
+    // higher request lands on the same feed and changes nothing. Clamp to that ceiling rather than accepting values
+    // that do nothing -- at --buffer 384 / 48kHz one window is 8ms, so the ceiling is 0.50 and without this the
+    // readout sat at 50 while [ ] silently rebuilt all four feeds on every press. Small buffers are already fast
+    // enough that they need little overlap: 384 samples refreshes 125 times a second before any is applied.
+    var maxOverlap = Math.Clamp(1.0 - (MinFeedMs * audio.SampleRate / 1000.0 / bufferSamples), 0.0, 0.95);
+    overlap = Math.Min(overlap, maxOverlap);
+    feedInterval = FeedIntervalFor(overlap);
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
     var bus = new ChannelBus();
@@ -349,7 +368,7 @@ root.SetAction(async (parse, ct) =>
     StartFeeds(feedInterval);
     // Prime the header readout with the startup --overlap. Without this only the [ / ] handler ever told the panes,
     // so `--overlap 0.75` ran at the right rate but reported nothing.
-    statusBar.Overlap = overlap;
+    statusBar.Overlap = AchievedOverlap(overlap);
 
     // --- Scope-adjusting hotkeys apply to the FOCUSED pane's own GraphConfig, then Publish so that pane picks up the
     // change (the others are untouched). ---
@@ -402,7 +421,7 @@ root.SetAction(async (parse, ct) =>
     var retuning = false;
     async void SetOverlap(double next)
     {
-        next = Math.Clamp(next, 0.0, 0.95);
+        next = Math.Clamp(next, 0.0, maxOverlap);
         // Re-entrancy guard: each change tears down and rebuilds four feeds asynchronously, so a held key would
         // otherwise interleave two rebuilds and leak a feed.
         if (retuning || quitting || Math.Abs(next - overlap) < 1e-9) return;
@@ -415,13 +434,30 @@ root.SetAction(async (parse, ct) =>
             audio.SetOverlap(overlap);                   // ...and only then is it safe to reconfigure
             if (quitting) return;                        // quit may have landed while we were awaiting
             StartFeeds(FeedIntervalFor(overlap));
-            statusBar.Overlap = overlap;
+            statusBar.Overlap = AchievedOverlap(overlap);
         }
         finally { retuning = false; }
     }
 
-    UI.RegisterHotKey(UI.HotKeys.Char(']'), () => SetOverlap(overlap + 0.05));
-    UI.RegisterHotKey(UI.HotKeys.Char('['), () => SetOverlap(overlap - 0.05));
+    // Step until the FEED actually differs, rather than by a fixed 0.05. The feed period is a whole number of
+    // milliseconds, so a short window quantises coarsely -- at --buffer 384 (an 8.7ms window) there are only about
+    // nine distinct periods, and a 0.05 step lands on the same one two presses running, making the key look dead.
+    // Skipping to the next distinct period means every press changes something at any buffer size.
+    void StepOverlap(int direction)
+    {
+        var currentMs = FeedIntervalFor(overlap).TotalMilliseconds;
+        var next = overlap;
+        for (var i = 0; i < 40; i++)   // bounded: 0..maxOverlap can hold at most 20 steps of 0.05 either way
+        {
+            next = Math.Clamp(next + (direction * 0.05), 0.0, maxOverlap);
+            if (FeedIntervalFor(next).TotalMilliseconds != currentMs) break;
+            if (next <= 0.0 || next >= maxOverlap) break;   // at an end: nothing further to reach
+        }
+        SetOverlap(next);
+    }
+
+    UI.RegisterHotKey(UI.HotKeys.Char(']'), () => StepOverlap(+1));
+    UI.RegisterHotKey(UI.HotKeys.Char('['), () => StepOverlap(-1));
 
     // Tab / Shift+Tab move keyboard focus between the three panes (clicking a pane also focuses it).
     UI.RegisterHotKey(UI.HotKeys.Tab, () => UI.SetFocus(panes[(FocusedIndex() + 1) % panes.Length]));
