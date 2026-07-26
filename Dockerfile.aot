@@ -45,7 +45,8 @@ RUN dotnet publish examples/Jumbee.Console.Examples/Jumbee.Console.Examples.cspr
         -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/examples
 RUN dotnet publish examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj \
         -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
-
+RUN dotnet publish examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj \
+        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
 # ── Stage 2: minimal runtime image (no SDK, no .NET runtime — just OS deps) ───
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 

@@ -35,12 +35,13 @@ WORKDIR /src
 COPY . .
 RUN dotnet build examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj -c Release
 
-# Also build the two standalone demos so one image can run any of the three apps (the entry-point script below picks
+# Also build the thre standalone demos so one image can run any of the three apps (the entry-point script below picks
 # which). The VS Code–style IDE demo opens a bundled sample C# project you can edit and `dotnet build`/`dotnet run`
 # right in its terminal pane (the SDK above makes that work in-container); the agent-harness demo is a Claude-desktop-
-# style agent UI (session rail, chat transcript, live task list, document pane).
+# style agent UI (session rail, chat transcript, live task list, document pane). The AudioScope demo is a real-time three-pane audio oscilloscope/spectroscope/vectorscope.
 RUN dotnet build examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj -c Release
 RUN dotnet build examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj -c Release
+RUN dotnet build examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj -c Release
 
 # The apps are INTERACTIVE full-screen TUIs (mouse, alternate screen, raw key input), so the container MUST be given a
 # TTY. examples.sh is the single entry point; its first argument selects the app (no argument = the examples browser):

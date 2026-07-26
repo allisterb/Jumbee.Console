@@ -41,15 +41,20 @@ using ScopeTui;
 
 var inputArg = new Argument<string?>("input")
 {
-    Arity = ArgumentArity.ExactlyOne,
+    Arity = ArgumentArity.ZeroOrOne,
     Description = "Selects the audio input: 'file' decodes the mp3 argument; 'live' captures the default recording device.",
+    DefaultValueFactory = _ => "file"
 }
-.AcceptOnlyFromAmong("file", "live"); ;
+.AcceptOnlyFromAmong("file", "live");
+
+
 var pathOpt = new Option<string?>("--path")
 {
     Arity = ArgumentArity.ZeroOrOne,
     Description = "Path to an MP3 file to decode. Defaults to the bundled sample track.",
-}.AcceptLegalFilePathsOnly();
+}
+.AcceptLegalFilePathsOnly();
+
 var fpsOpt = new Option<int>("--fps")
 {
     Description = "UI paint-rate cap in frames/sec. Purely the paint/input loop -- the data rate follows --buffer.",
@@ -110,7 +115,7 @@ var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, an
 root.SetAction(async (parse, ct) =>
 {
     var input = parse.GetValue(inputArg)!;
-    var filePath = parse.GetValue(pathOpt) ?? @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
+    var filePath = parse.GetValue(pathOpt) ?? Path.Combine("media", "06_arido_III_the_oscilloscope_rmx.mp3");
     var fps = Math.Clamp(parse.GetValue(fpsOpt), 1, 240);
     var bufferSamples = Math.Clamp(parse.GetValue(bufferOpt), 64, 1 << 16);
     var startScatter = parse.GetValue(scatterOpt);
