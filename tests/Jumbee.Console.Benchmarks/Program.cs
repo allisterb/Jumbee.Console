@@ -21,4 +21,12 @@ if (args.Length >= 1 && args[0] == "--scope")
     return;
 }
 
+// Damage tracking on vs off on the LIVE plot path, including the ANSI bytes/frame each costs the terminal:
+//   dotnet run -c Release --project tests/Jumbee.Console.Benchmarks -- --damage
+if (args.Length >= 1 && args[0] == "--damage")
+{
+    Jumbee.Console.Benchmarks.ScopeDamageDiagnostics.Diagnose();
+    return;
+}
+
 BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args);

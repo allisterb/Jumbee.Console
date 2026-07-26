@@ -238,7 +238,20 @@ public sealed class ScopeView : CompositeControl
 
         // The plot takes its surface, axis, grid, tick and series colours from the style theme on construction --
         // nothing is passed in and nothing is set per frame (see ApplyAxisAndHeader).
-        plot = new Plot();
+        //
+        // DamageTracking is the textbook case here: a scope pane is mostly empty, and what moves between frames is a
+        // thin trace. The grid, axes and tick labels are redrawn every frame but with identical values, so they cost
+        // nothing in damage and only the trace's old-plus-new extent is re-composited -- 120 cells instead of 1200 on
+        // a 60x20 plot with the trace jumping top-to-bottom.
+        //
+        // Measured on the live SetData path this pane uses (`Benchmarks -- --damage`, 220x53). A quiet trace at 15%
+        // of the Y range: 11660 -> 1966 dirty cells, and the composite 1336us -> 271us, roughly halving the frame.
+        // A full-scale trace at 95%: no saving at all (it dirties every cell either way) and ~4% worse overall.
+        // Left on because a scope signal spends most of its time nowhere near the rails.
+        //
+        // What it does NOT buy is terminal load: the ANSI payload was 15620 vs 15739 bytes/frame, unchanged. The
+        // renderer already diffs per cell before emitting, so damage narrows what is SCANNED, never what is SENT.
+        plot = new Plot { DamageTracking = true };
         // Show the background grid, tick marks, and numeric tick labels (ConfigureTicks's IsVisible and
         // Labels.IsVisible are two SEPARATE flags -- Plot.md remarks). The grid pen is dashed by default (a faint
         // dotted grid); SetGridColor/SetTickColor below recolour them to the scope's AxisColor/LabelsColor while

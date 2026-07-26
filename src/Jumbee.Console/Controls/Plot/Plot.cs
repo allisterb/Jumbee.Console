@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using ConsoleGUI.Space;
+
 using ConsolePlot.Drawing.Tools;
 using ConsolePlot.Plotting;
 
@@ -84,6 +86,25 @@ public class Plot : Control
     {
         get => _tickLabelColor;
         set => SetAtomicProperty(ref _tickLabelColor, value, themeOverride: true, watch: (_, _) => Rebuild());
+    }
+
+    /// <summary>
+    /// Opts into partial redraw: the plot reports only the cells each draw actually changed, so the compositor can
+    /// skip the rest of its rect. Off by default.
+    /// </summary>
+    /// <remarks>
+    /// Worth turning on for a plot whose figure is <em>sparse and localised</em> — a live scope trace, a small
+    /// marker set — where most of the area is empty or static from frame to frame. The grid, axes and tick labels
+    /// are rewritten every draw but with identical values, so they cost nothing in damage; only the data actually
+    /// moving is reported. A figure that fills its area (a dense heatmap) has nothing to skip and should leave this
+    /// off, since the diff is then pure overhead.
+    /// </remarks>
+    public bool DamageTracking
+    {
+        get => _damageTracking;
+        // Rebuild: the damage recorder is part of the buffer chain the plot draws through, so adding or removing it
+        // means rebuilding the plot around a new chain.
+        set => SetAtomicProperty(ref _damageTracking, value, watch: (_, _) => _dirty = true);
     }
 
     /// <summary>Colours cycled for series added without an explicit colour. Themed from
@@ -846,12 +867,14 @@ public class Plot : Control
         if (w <= 0 || h <= 0) return;
 
         // Rebuild the underlying plot when the content changed or the control was resized.
+        var rebuilt = false;
         if (_dirty || _plot is null || _builtWidth != w || _builtHeight != h)
         {
             _dirty = false;
             _builtWidth = w;
             _builtHeight = h;
             _plot = BuildPlot(w, h);
+            rebuilt = true;
         }
 
         // Skip when there's nothing to draw or no room for the axes/labels. Draw won't run to fill the buffer here, so
@@ -865,14 +888,33 @@ public class Plot : Control
         }
 
         // Draw straight into consoleBuffer — PlotImage's cell surface IS this buffer, so there's no copy pass. Draw's
-        // own Clear() fills every cell each frame, so a separate consoleBuffer.Initialize() would be redundant work.
+        // own Clear() erases the previous draw's cells, so a separate consoleBuffer.Initialize() would be redundant.
+        _damage?.BeginFrame();
         _plot.Draw();
+
+        if (!_damageTracking) return;
+        if (_damage is null || rebuilt)
+        {
+            // A rebuild replaces the whole figure (and a resize replaces the buffer), so nothing about the previous
+            // frame carries over — report everything once rather than diff against a surface that no longer applies.
+            DamageAll();
+            return;
+        }
+
+        _damage.ResetRows();
+        var changedRows = _damage.Flush();
+        if (changedRows < 0) { DamageAll(); return; }   // too dense to track: report everything
+        if (changedRows == 0) return;
+        for (var y = 0; y < h; y++)
+            if (_damage.ChangedRow(y, out var first, out var last))
+                Damage(new Rect(first, y, last - first + 1, 1));
     }
 
     private PlotImage? BuildPlot(int width, int height)
     {
         if (_config.Count == 0 && _chrome.Count == 0) return null;
-        var plot = new PlotImage(consoleBuffer, (CColor?)_background);
+        _damage = _damageTracking ? new DamageBuffer(consoleBuffer) : null;
+        var plot = new PlotImage(consoleBuffer, (CColor?)_background, _damage);
         foreach (var apply in _chrome) apply(plot);    // persistent styling first (axis/grid/ticks)
         foreach (var apply in _config) apply(plot);    // then per-data series/labels/ranges
         return plot;
@@ -883,6 +925,11 @@ public class Plot : Control
     private const int MinWidth = 8;
     private const int MinHeight = 4;
 
+    /// <summary>Whether this plot reports partial damage (see <see cref="DamageTracking"/>).</summary>
+    protected override bool TracksDamage => _damageTracking;
+
+    private bool _damageTracking;
+    private DamageBuffer? _damage;
     private Color _axisColor;
     private Color _gridColor;
     private Color _tickColor;

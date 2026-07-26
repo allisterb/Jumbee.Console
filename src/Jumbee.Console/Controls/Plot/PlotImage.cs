@@ -17,10 +17,19 @@ internal sealed class PlotImage : CPlot
 {
     #region Constructors
     /// <summary>Creates a plot that renders into <paramref name="buffer"/>. When <paramref name="background"/> is set,
-    /// transparent cells are filled with it (what the old copy pass did); otherwise writes go straight through.</summary>
-    public PlotImage(ConsoleBuffer buffer, CColor? background = null)
-        : base(background is { } bg ? (IConsoleBuffer)new BackgroundBuffer(buffer, bg) : buffer)
+    /// transparent cells are filled with it (what the old copy pass did); otherwise writes go straight through.
+    /// <paramref name="damage"/>, when given, records which cells each draw changed.</summary>
+    public PlotImage(ConsoleBuffer buffer, CColor? background = null, DamageBuffer? damage = null)
+        : base(Compose(buffer, background, damage))
     {
+    }
+
+    // Damage sits INSIDE the background fill, closest to the real buffer, so it compares the values actually stored
+    // (background applied) rather than the transparent ones the renderer emitted.
+    private static IConsoleBuffer Compose(ConsoleBuffer buffer, CColor? background, DamageBuffer? damage)
+    {
+        IConsoleBuffer target = damage ?? (IConsoleBuffer)buffer;
+        return background is { } bg ? new BackgroundBuffer(target, bg) : target;
     }
     #endregion
 
@@ -38,7 +47,7 @@ internal sealed class PlotImage : CPlot
 internal sealed class BackgroundBuffer : IConsoleBuffer
 {
     #region Constructors
-    public BackgroundBuffer(ConsoleBuffer inner, CColor background)
+    public BackgroundBuffer(IConsoleBuffer inner, CColor background)
     {
         _inner = inner;
         _background = background;
@@ -55,7 +64,7 @@ internal sealed class BackgroundBuffer : IConsoleBuffer
     #endregion
 
     #region Fields
-    private readonly ConsoleBuffer _inner;
+    private readonly IConsoleBuffer _inner;
     private readonly CColor _background;
     #endregion
 }
