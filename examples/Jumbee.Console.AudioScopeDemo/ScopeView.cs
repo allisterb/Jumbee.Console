@@ -107,17 +107,19 @@ public sealed class ScopeView : CompositeControl
     // pair, both of which describe how this scope was configured rather than what it is currently showing. They
     // are slotted after the mode name (widest, and read first), with the percentages of the scope-tui columns
     // trimmed to make room -- the originals were generous, e.g. "oscillo::scope-tui" needs 18 of its 35%.
-    // Budgeted against each column's WIDEST text, which totals ~116 cells: mode "oscillo" 7, source
-    // "file/02 - Girlfrien.." 21, info "2ch tick:2048 ov:95" 19, module -- the spectroscope's, and by far the widest
-    // -- "4x avg (0.7s)  hann  1.465Hz bins" 33, scale "-1.00x+" 7, spf "8192/8192 spf" 13, fps 6, glyphs 3 and 2.
-    // So ~120 cells is the narrowest header that fits everything; narrower than that and the widest fields clip.
+    // ONLY the per-pane fields live here now: mode, info (the oscilloscope's tick step), module (trigger status or
+    // the spectroscope's FFT line), scale, samples-per-frame, and the scatter/pause glyphs. Device, channels,
+    // overlap and fps moved to the shared ScopeStatusBar -- they are properties of the run, and repeating them
+    // three times cost the width that made this row impossible to budget.
+    //
+    // Sized for the NARROWEST pane rather than the widest text. The vectorscope is ~55 cells (a fifth of the width,
+    // kept square) and needs mode 6 + scale 7 + spf 13 + glyphs 5 = 31 of them, with a trivial "live" module; the
+    // spectroscope is ~170 cells and its module is the widest text anywhere ("4x avg (0.7s)  hann  1.465Hz bins",
+    // 33). Budgeting for the wide pane starved the narrow one, so these proportions fit the vectorscope exactly and
+    // leave the wider panes with slack -- which reads as the spread-out scope-tui header anyway.
     // Columns abut with no separator (as scope-tui's do), so an overrun runs into its neighbour rather than being
     // visibly cut -- re-check these whenever a field grows.
-    //
-    // Both ends of this have already moved once: dropping "::scope-tui" from the mode text freed 13 cells, which is
-    // what pays for the info column now carrying the overlap readout. A capture at ~100 cells was clipping
-    // "2ch tick:200" to "2ch tick" before this re-budget.
-    static readonly int[] headerPercents = [7, 19, 17, 28, 7, 11, 5, 3, 3];
+    static readonly int[] headerPercents = [12, 10, 22, 13, 24, 9, 10];
 
     static int[] HeaderColumnWidths(int width)
     {
@@ -138,16 +140,9 @@ public sealed class ScopeView : CompositeControl
         lastHeader = null;   // the equality gate tracks frame fields only; without this it would swallow the change
     }
 
-    // The overlap term appears ONLY when engaged: the info column is budgeted tight (see headerPercents) and at the
-    // default of 0 there is nothing to report.
-    string BuildInfo() => string.Join(' ', new[]
-    {
-        channelCount > 0 ? $"{channelCount}ch" : "",
-        tickInfoText,
-        // No unit suffix, matching "tick:NN" -- and it keeps the field one cell narrower, which is the difference
-        // between fitting and clipping on a ~100-cell header.
-        overlap > 0 ? $"ov:{overlap * 100:0}" : "",
-    }.Where(s => s.Length > 0));
+    // Just this pane's tick step now. Channels and overlap moved to ScopeStatusBar; the fields behind them are kept
+    // (see ShowOverlap) so the plumbing is intact if a pane ever needs to report something per-pane here again.
+    string BuildInfo() => tickInfoText;
 
     /// <summary>Round-9 (item 3): the compact subset of a frame's header fields that actually drive the header
     /// <c>TextLabel</c>s, used to gate <see cref="ApplyAxisAndHeader"/>'s per-tick text/colour reassignment on a
@@ -328,7 +323,7 @@ public sealed class ScopeView : CompositeControl
         // with no further code; the framework re-lays-out automatically, we only had to pick a filling layout.
         headerBuiltForWidth = width;
         var headerRow = new Grid(rowHeights: [1], columnWidths: HeaderColumnWidths(width),
-            controls: [[modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
+            controls: [[modeLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, scatterLabel, pauseLabel]]);
         dock = new DockPanel(DockedControlPlacement.Top, headerRow, plot);
         SetContent(dock);
     }
@@ -416,7 +411,7 @@ public sealed class ScopeView : CompositeControl
         {
             headerBuiltForWidth = currentWidth;
             dock.DockedControl = new Grid(rowHeights: [1], columnWidths: HeaderColumnWidths(currentWidth),
-                controls: [[modeLabel, sourceLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, fpsLabel, scatterLabel, pauseLabel]]);
+                controls: [[modeLabel, infoLabel, moduleLabel, scaleLabel, spfLabel, scatterLabel, pauseLabel]]);
         }
 
         ApplyLive(frame);

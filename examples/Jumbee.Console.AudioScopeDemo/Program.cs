@@ -17,9 +17,11 @@ using ScopeTui;
 // the platform's default recording endpoint; --loopback scopes what is PLAYING instead, and --device picks a
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
-// CLI (System.CommandLine): file|live [path FILE] [--fps N] [--buffer N] [--overlap F] [--scatter] [--device D]
-// [--loopback] [--mono] [--tick N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as
-// "path", with no leading dashes, so it is spelled `file path C:\track.mp3` -- unlike every other option here.)
+// CLI (System.CommandLine): file|live [--path FILE] [--fps N] [--buffer N] [--overlap F] [--scatter] [--device D]
+// [--loopback] [--mono] [--tick N] [--scheme NAME] [--list-devices].
+//
+// The three scopes sit under a shared one-line ScopeStatusBar carrying the values that belong to the RUN -- input
+// device, channels, overlap, paint rate. Each pane's own header carries only what its hotkeys can change.
 //
 // Two independent clocks drive the scope, and only one of them is an option:
 //
@@ -246,9 +248,12 @@ root.SetAction(async (parse, ct) =>
     // "Stereo Mix (Realtek(R) Audio)" and the like really are that long, and a column overrun collides with the
     // next field rather than being cut off.
     static string Trim(string s, int max) => s.Length <= max ? s : string.Concat(s.AsSpan(0, max - 2), "..");
+    // Generous limits now that this sits on its own full-width row rather than in a ninth of a pane header:
+    // "Microphone Array (Realtek(R) Audio)" is 35 and "Speakers (Steam Streaming Speakers)" 35, so 44 shows the
+    // real endpoint names whole and only trims the pathological ones.
     var sourceText = audio is RecordingAudioSource rec
-        ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 10)}"
-        : $"file:{Trim(Path.GetFileName(filePath), 16)}";
+        ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 44)}"
+        : $"file:{Trim(Path.GetFileName(filePath), 44)}";
 
     // Each pane gets the tick scheme its x axis actually calls for, which is why --tick governs only the first:
     //   oscillo  x = sample index      -> a gridline every --tick samples, labelled with the sample number
@@ -280,6 +285,11 @@ root.SetAction(async (parse, ct) =>
     var bottomSplit = new SplitPanel(SplitOrientation.Horizontal, spectroPane, vectorPane, splitPosition: 70);
     var outerSplit = new SplitPanel(SplitOrientation.Vertical, oscPane, bottomSplit, splitPosition: 12);
 
+    // One shared line above the scopes for the run-wide values (device, channels, overlap, fps). Docked Top so the
+    // splits below keep the rest -- see the remarks on ScopeStatusBar for why these left the pane headers.
+    var statusBar = new ScopeStatusBar(sourceText, audio.Channels);
+    var rootLayout = new DockPanel(DockedControlPlacement.Bottom, statusBar, outerSplit);
+
     // Which pane currently has keyboard focus (set by a click -- ScopeView opts into the mouse for click-to-focus --
     // or Tab). Hotkeys route to this pane; defaults to the top pane before the first focus lands.
     int FocusedIndex()
@@ -298,7 +308,7 @@ root.SetAction(async (parse, ct) =>
     {
         paintCount++;
         var now = DateTime.UtcNow;
-        if ((now - lastPoll).TotalSeconds >= 1) { framerate = paintCount; paintCount = 0; lastPoll = now; }
+        if ((now - lastPoll).TotalSeconds >= 1) { framerate = paintCount; paintCount = 0; lastPoll = now; statusBar.Framerate = framerate; }
 
         // Only reproportion on an ACTUAL terminal resize -- not every frame -- so a manual divider drag survives
         // between resizes (setting SplitPosition every frame would fight the drag and snap it back).
@@ -339,7 +349,7 @@ root.SetAction(async (parse, ct) =>
     StartFeeds(feedInterval);
     // Prime the header readout with the startup --overlap. Without this only the [ / ] handler ever told the panes,
     // so `--overlap 0.75` ran at the right rate but reported nothing.
-    foreach (var p in panes) p.ShowOverlap(overlap);
+    statusBar.Overlap = overlap;
 
     // --- Scope-adjusting hotkeys apply to the FOCUSED pane's own GraphConfig, then Publish so that pane picks up the
     // change (the others are untouched). ---
@@ -405,7 +415,7 @@ root.SetAction(async (parse, ct) =>
             audio.SetOverlap(overlap);                   // ...and only then is it safe to reconfigure
             if (quitting) return;                        // quit may have landed while we were awaiting
             StartFeeds(FeedIntervalFor(overlap));
-            foreach (var p in panes) p.ShowOverlap(overlap);
+            statusBar.Overlap = overlap;
         }
         finally { retuning = false; }
     }
@@ -452,7 +462,7 @@ root.SetAction(async (parse, ct) =>
     // Focus the top pane once the loop is running (controls are registered by then); its frame border highlights.
     UI.Post(() => UI.SetFocus(oscPane));
 
-    var uiTask = UI.Start(outerSplit, width: 110, height: 25, fps: fps);
+    var uiTask = UI.Start(rootLayout, width: 110, height: 25, fps: fps);
     await uiTask;
 
     // Safety net: reachable if the UI stopped via some path other than our quit handlers. Guarded by `quitting` so a
