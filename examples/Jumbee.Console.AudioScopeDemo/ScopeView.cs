@@ -640,7 +640,7 @@ public sealed class ScopeView : CompositeControl
     /// mode is currently active.
     /// </summary>
     protected override HelpInfo? GetHelpInfo() =>
-        new HelpInfo("Scope", "scope-tui", "One scope pane (oscilloscope, vectorscope, or spectroscope) of three shown together. Click a pane or Tab to focus it; these keys act on the focused pane.")
+        new HelpInfo("Scope", "AudioScope", "A real-time 3-pane (oscilloscope, vectorscope, or spectroscope) audio scope. Click a pane or Tab to focus it; these keys act on the focused pane.")
             .WithKey("Up/Down", "Zoom the vertical scale (amplitude) in/out")
             .WithKey("Left/Right", "More/fewer samples per frame (time window)")
             .WithKey("Shift/Ctrl/Alt + arrow", "Same as above, larger/smaller step size")

@@ -3,7 +3,7 @@ using System.CommandLine;
 using Jumbee.Console;
 using ScopeTui;
 
-// --- scope-tui as THREE simultaneous panes, all fed from ONE audio source ---------------------------------------
+// --- Jumbee.Console AudioScope  demo ---------------------------------------
 // An oscilloscope across the top, a spectroscope (bottom-left) and a vectorscope (bottom-right) below -- each its
 // own ScopeView control, each driven by its OWN Control.Feed, all reading the SAME audio from one ChannelBus. The
 // IAudioSource (a decoded file, or a live capture device) is single-threaded, so exactly ONE pump reads and
