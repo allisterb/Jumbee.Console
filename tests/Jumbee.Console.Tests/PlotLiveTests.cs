@@ -36,6 +36,58 @@ public class PlotLiveTests
         Assert.NotEqual(first, second);   // the plot reflects the new data
     }
 
+    // Clear erases only the cells drawn since the last clear, not the whole surface (ConsoleImage.ClearDrawn). That
+    // is only correct if a cell the figure VACATES is erased — miss one and the trace ghosts a trail of stale glyphs.
+    // These two pin that down: nothing survives where the trace no longer is, in the two ways a live plot moves.
+    [Fact]
+    public void LiveSeries_MovedTrace_LeavesNoGhostInVacatedRows()
+    {
+        static string[] Rows(Plot p) => ConsoleSnapshot.ToText(p, 50, 16).Split('\n');
+
+        var plot = new Plot();
+        plot.ConfigureGrid(g => g.IsVisible = false);
+        plot.ConfigureTicks(t => { t.IsVisible = false; t.Labels.IsVisible = false; });
+        plot.SetYRange(-1, 1);
+        var line = plot.AddLiveSeries();
+
+        // Flat trace near the TOP: the upper rows carry braille, the lower ones do not.
+        line.SetData([0, 1, 2, 3], [0.9, 0.9, 0.9, 0.9]);
+        var high = Rows(plot);
+        Assert.True(high.Take(4).Any(HasBraille), "the trace should render in the upper rows");
+
+        // Same handle, trace moved to the BOTTOM. The rows it left must come back blank.
+        line.SetData([0, 1, 2, 3], [-0.9, -0.9, -0.9, -0.9]);
+        var low = Rows(plot);
+        Assert.True(low.Skip(11).Any(HasBraille), "the trace should have moved to the lower rows");
+        Assert.False(low.Take(4).Any(HasBraille), "vacated upper rows must be erased, not ghosted");
+    }
+
+    [Fact]
+    public void LiveSeries_ShorterData_LeavesNoGhostInVacatedColumns()
+    {
+        static string[] Rows(Plot p) => ConsoleSnapshot.ToText(p, 50, 16).Split('\n');
+
+        var plot = new Plot();
+        plot.ConfigureGrid(g => g.IsVisible = false);
+        plot.ConfigureTicks(t => { t.IsVisible = false; t.Labels.IsVisible = false; });
+        plot.SetXRange(0, 10);
+        plot.SetYRange(-1, 1);
+        var line = plot.AddLiveSeries();
+
+        // Past the halfway column. An ABSOLUTE index, not a fraction of the row: ConsoleSnapshot right-trims each
+        // row, so a row's length tracks its last non-blank cell rather than the plot width.
+        static bool BrailleRightOfCentre(Plot p) =>
+            Rows(p).Any(r => r.Length > 25 && HasBraille(r[25..]));
+
+        // A trace spanning the full x range, then one confined to the left. With the axis pinned, the right-hand
+        // columns are vacated rather than rescaled — so anything left there is a ghost.
+        line.SetData([0, 2, 4, 6, 8, 10], [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+        Assert.True(BrailleRightOfCentre(plot), "the wide trace should reach the right");
+
+        line.SetData([0, 1, 2], [0.5, 0.5, 0.5]);
+        Assert.False(BrailleRightOfCentre(plot), "vacated columns must be erased");
+    }
+
     [Fact]
     public void LiveSeries_PushRollingWindow_RendersAndDoesNotThrow()
     {
