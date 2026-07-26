@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot>True</PublishAot>
+    <PublishTrimmed>True</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>

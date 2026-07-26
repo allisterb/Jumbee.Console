@@ -17,14 +17,23 @@ using ScopeTui;
 // the platform's default recording endpoint; --loopback scopes what is PLAYING instead, and --device picks a
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
-// CLI (System.CommandLine): file|live [--path FILE] [--fps N] [--sample-rate HZ] [--buffer N] [--scatter]
-// [--device D] [--loopback] [--mono] [--follow] [--ticks N] [--scheme NAME] [--list-devices]. Two independent clocks
-// drive the scope: the FEED period (how often the source is sampled and the waveforms recompute) and the UI paint
-// FPS cap. By default the feed follows --fps (1000/N ms); --sample-rate decouples it (1000/HZ ms) so the DATA can
-// refresh at its own rate, and --follow ties it to the audio instead (one buffer per tick, so every frame is fresh
-// samples rather than a mostly-overlapping window -- see the feed-period note below). Both are distinct from the PCM
-// rate, which only sets the waveform's scroll speed. --buffer sets how many samples/channel each frame carries (the
-// oscilloscope window and the FFT size).
+// CLI (System.CommandLine): file|live [path FILE] [--fps N] [--buffer N] [--scatter] [--device D] [--loopback]
+// [--mono] [--ticks N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as "path", with no
+// leading dashes, so it is spelled `file path C:\track.mp3` -- unlike every other option here.)
+//
+// Two independent clocks drive the scope, and only one of them is an option:
+//
+//   The FEED period -- how often the source is sampled and the waveforms recompute -- is FIXED at the wall-clock
+//   duration of one buffer (--buffer / the PCM rate), so every frame carries one buffer of fresh audio. It is not
+//   configurable because every other value is wrong in one of two directions: faster only re-shows samples already
+//   on screen, slower drops audio that is never displayed. See the feed-period note below.
+//
+//   --fps is purely the UI paint/input loop cap. It does NOT affect what data is produced -- painting more often
+//   than the data changes costs almost nothing (the loop skips compositing when nothing is dirty), and the loop is
+//   also where input is drained, so a healthy rate keeps the app responsive no matter how big --buffer is.
+//
+// --buffer therefore sets three things at once: the oscilloscope window, the FFT size (and so the frequency-bin
+// resolution), and -- via the fixed feed -- the refresh rate. A bigger buffer buys resolution and costs refresh.
 
 var inputArg = new Argument<string?>("input")
 {
@@ -32,19 +41,15 @@ var inputArg = new Argument<string?>("input")
     Description = "Selects the audio input: 'file' decodes the mp3 argument; 'live' captures the default recording device.",
 }
 .AcceptOnlyFromAmong("file", "live"); ;
-var pathOpt = new Option<string?>("path")
+var pathOpt = new Option<string?>("--path")
 {
     Arity = ArgumentArity.ZeroOrOne,
     Description = "Path to an MP3 file to decode. Defaults to the bundled sample track.",
 }.AcceptLegalFilePathsOnly();
 var fpsOpt = new Option<int>("--fps")
 {
-    Description = "UI paint-rate cap in frames/sec. Also sets the data refresh rate unless --sample-rate is given.",
-    DefaultValueFactory = _ => 24,
-};
-var sampleRateOpt = new Option<int?>("--sample-rate")
-{
-    Description = "How many times/sec the source is sampled, decoupling the data rate from --fps (feed = 1000/HZ ms).",
+    Description = "UI paint-rate cap in frames/sec. Purely the paint/input loop -- the data rate follows --buffer.",
+    DefaultValueFactory = _ => 60,
 };
 var bufferOpt = new Option<int>("--buffer")
 {
@@ -68,10 +73,6 @@ var ticksOpt = new Option<int>("--ticks")
     Description = "Cells between horizontal ticks/grid lines on the osc + spectro panes; bigger is sparser, 0 removes the chrome.",
     DefaultValueFactory = _ => 11,
 };
-var followOpt = new Option<bool>("--follow")
-{
-    Description = "Advance one buffer per tick (feed = buffer/sample-rate), so each frame is fresh audio. --fps still caps painting.",
-};
 var monoOpt = new Option<bool>("--mono")
 {
     Description = "Scope a single channel: opens a 1-channel stream where the backend allows it, else averages the device's channels.",
@@ -88,7 +89,7 @@ var listDevicesOpt = new Option<bool>("--list-devices")
 
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
-    inputArg, pathOpt, fpsOpt, sampleRateOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, followOpt, monoOpt,
+    inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt,
     ticksOpt, schemeOpt, listDevicesOpt,
 };
 
@@ -97,13 +98,11 @@ root.SetAction(async (parse, ct) =>
     var input = parse.GetValue(inputArg)!;
     var filePath = parse.GetValue(pathOpt) ?? @"C:\Projects\Jumbee.Console\reference\media\02 - Girlfriend.mp3";
     var fps = Math.Clamp(parse.GetValue(fpsOpt), 1, 240);
-    var sampleRate = parse.GetValue(sampleRateOpt);
     var bufferSamples = Math.Clamp(parse.GetValue(bufferOpt), 64, 1 << 16);
     var startScatter = parse.GetValue(scatterOpt);
     var deviceSpec = parse.GetValue(deviceOpt);
     var loopback = parse.GetValue(loopbackOpt);
     var mono = parse.GetValue(monoOpt);
-    var follow = parse.GetValue(followOpt);
     // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
     // stops being readable, and ScopeView clamps again to the pane's own width.
     var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
@@ -139,12 +138,6 @@ root.SetAction(async (parse, ct) =>
         return 1;
     }
 
-    if (follow && sampleRate is not null)
-    {
-        Console.Error.WriteLine("--follow and --sample-rate both set the feed rate; pass only one.");
-        return 1;
-    }
-
     // Fixed calibration gain on the decoded samples (see GraphConfig.Gain / Oscilloscope.Process): NAudio's floats
     // are normalized to [-1,1], so a typical passage only fills a small slice; this makes the default view fill the
     // axis the way scope-tui's raw-sample-space plot does, without touching the interactive Scale knob.
@@ -162,23 +155,22 @@ root.SetAction(async (parse, ct) =>
         return 1;
     }
 
-    // Feed period, in precedence order: --follow, then --sample-rate (1000/rate), else --fps (1000/fps).
+    // The feed period is the wall-clock duration of one buffer -- one buffer's worth of samples per tick. This is
+    // the only rate that is neither wasteful nor lossy, which is why it isn't an option: a window can be fully
+    // replaced exactly sampleRate/buffer times a second (~23Hz for 2048 @ 48kHz), so a FASTER feed can only re-show
+    // samples already on screen, and a SLOWER one drops audio that is never displayed at all. It is also the cadence
+    // scope-tui gets for free by blocking on its capture queue -- one frame per callback, contiguous.
     //
-    // --follow ties the feed to the AUDIO instead of the clock: one buffer's worth of samples per tick, which is the
-    // cadence scope-tui gets for free by blocking on its buffer queue (one frame per capture callback, contiguous and
-    // non-overlapping). Without it the feed runs at its own rate against a rolling latest-window, so consecutive
-    // frames overlap -- at 180fps against a 2048-sample window only ~260 samples per frame are new and the trace
-    // barely moves. A window can only be fully replaced sampleRate/buffer times a second (~23Hz for 2048 @ 48kHz),
-    // so any faster feed MUST re-show samples; --follow just sits exactly on that limit.
+    // The cadence matches; contiguity is best-effort. A live device hands us a rolling latest-window rather than a
+    // queue, so timer jitter can re-show or skip a few samples at the seam -- scope-tui cannot, since it consumes
+    // every buffer in order (and drifts behind realtime instead, if the UI stalls).
     //
-    // The cadence matches; contiguity is still best-effort. A live device hands us a rolling latest-window rather
-    // than a queue, so timer jitter can re-show or skip a few samples at the seam -- scope-tui cannot, since it
-    // consumes every buffer in order (and drifts behind realtime instead, if the UI stalls).
-    var feedMs = follow
-        ? Math.Max(1, (int)Math.Round(1000.0 * bufferSamples / audio.SampleRate))
-        : sampleRate is { } rate
-            ? Math.Max(1, (int)Math.Round(1000.0 / Math.Clamp(rate, 1, 1000)))
-            : Math.Max(1, (int)Math.Round(1000.0 / fps));
+    // The 4ms floor (250 ticks/sec) guards the small-buffer end: --buffer 64 at 48kHz is a 1.3ms window, which would
+    // otherwise run the pump ~750 times a second and fan out to three pane computes on each. Below that floor the
+    // feed no longer keeps up with the audio, so windows have gaps -- acceptable, since 64 samples is a degenerate
+    // display anyway, and the alternative is a self-inflicted busy loop.
+    const int MinFeedMs = 4;
+    var feedMs = Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples / audio.SampleRate));
     var feedInterval = TimeSpan.FromMilliseconds(feedMs);
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
