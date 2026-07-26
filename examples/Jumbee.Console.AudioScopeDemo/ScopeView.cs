@@ -108,7 +108,7 @@ public sealed class ScopeView : CompositeControl
     // are slotted after the mode name (widest, and read first), with the percentages of the scope-tui columns
     // trimmed to make room -- the originals were generous, e.g. "oscillo::scope-tui" needs 18 of its 35%.
     // Budgeted against each column's WIDEST text, which totals ~116 cells: mode "oscillo" 7, source
-    // "file/02 - Girlfrien.." 21, info "2ch ticks:11 ov:95" 18, module -- the spectroscope's, and by far the widest
+    // "file/02 - Girlfrien.." 21, info "2ch tick:2048 ov:95" 19, module -- the spectroscope's, and by far the widest
     // -- "4x avg (0.7s)  hann  1.465Hz bins" 33, scale "-1.00x+" 7, spf "8192/8192 spf" 13, fps 6, glyphs 3 and 2.
     // So ~120 cells is the narrowest header that fits everything; narrower than that and the widest fields clip.
     // Columns abut with no separator (as scope-tui's do), so an overrun runs into its neighbour rather than being
@@ -116,7 +116,7 @@ public sealed class ScopeView : CompositeControl
     //
     // Both ends of this have already moved once: dropping "::scope-tui" from the mode text freed 13 cells, which is
     // what pays for the info column now carrying the overlap readout. A capture at ~100 cells was clipping
-    // "2ch ticks:11" to "2ch ticks" before this re-budget.
+    // "2ch tick:200" to "2ch tick" before this re-budget.
     static readonly int[] headerPercents = [7, 19, 17, 28, 7, 11, 5, 3, 3];
 
     static int[] HeaderColumnWidths(int width)
@@ -143,8 +143,8 @@ public sealed class ScopeView : CompositeControl
     string BuildInfo() => string.Join(' ', new[]
     {
         channelCount > 0 ? $"{channelCount}ch" : "",
-        tickStep > 0 ? $"ticks:{tickStep}" : "ticks:off",
-        // No unit suffix, matching "ticks:NN" -- and it keeps the field one cell narrower, which is the difference
+        tickInfoText,
+        // No unit suffix, matching "tick:NN" -- and it keeps the field one cell narrower, which is the difference
         // between fitting and clipping on a ~100-cell header.
         overlap > 0 ? $"ov:{overlap * 100:0}" : "",
     }.Where(s => s.Length > 0));
@@ -178,7 +178,8 @@ public sealed class ScopeView : CompositeControl
     int headerBuiltForWidth;
     readonly string sourceText;
     readonly int channelCount;
-    readonly int tickStep;
+    readonly string tickInfoText;
+    readonly Func<double, double, int, IReadOnlyList<(double Value, string Label)>>? xTicks;
     double overlap;
     string infoText;
 
@@ -229,14 +230,20 @@ public sealed class ScopeView : CompositeControl
     /// <summary>The last decode/compute error surfaced via <see cref="SetError"/>, or null.</summary>
     public string? Error { get; private set; }
 
-    /// <param name="xTickStep">Desired spacing, in cells, between horizontal ticks and their grid lines — bigger is
-    /// sparser. 0 drops the grid, tick marks and labels entirely (scope-tui draws none of them). Defaults to the
-    /// library's own 11.</param>
+    /// <param name="xTickStep">Fallback spacing, in cells, between horizontal ticks and their grid lines when
+    /// <paramref name="xTicks"/> is <see langword="null"/> — bigger is sparser. 0 drops the grid, tick marks and
+    /// labels entirely (scope-tui draws none of them). Defaults to the library's own 11.</param>
+    /// <param name="xTicks">Builds explicit ticks for the current x range and pane width, replacing the
+    /// spacing heuristic. <see langword="null"/> keeps the heuristic.</param>
     /// <param name="source">Where the audio comes from, e.g. <c>live/Microphone Array</c> or <c>file/track.mp3</c>,
     /// shown verbatim in the header after <c>in:</c>. Empty hides the column.</param>
     /// <param name="channels">Channel count of the source, shown as <c>2ch</c>. 0 hides it.</param>
-    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0)
+    /// <param name="tickInfo">What the header's info field reports about this pane's ticks, e.g. <c>tick:200</c>.
+    /// Passed in rather than derived, because only the oscilloscope's ticks are expressed in a unit worth showing.</param>
+    public ScopeView(int width = 110, int plotHeight = 24, int xTickStep = 11, string source = "", int channels = 0,
+        Func<double, double, int, IReadOnlyList<(double Value, string Label)>>? xTicks = null, string tickInfo = "")
     {
+        this.xTicks = xTicks;
         // The source/channels/tick-step strings describe the RUN, not the frame -- nothing mutates them at runtime --
         // so they are formatted once here rather than carried through ScopeFrame/HeaderSnapshot every tick. They
         // still live in uiLabels so the 'h' hide-UI toggle blanks and restores them with everything else.
@@ -244,7 +251,7 @@ public sealed class ScopeView : CompositeControl
         // the difference between the device name fitting and being clipped on a narrow header.
         sourceText = source;
         channelCount = channels;
-        tickStep = xTickStep;
+        tickInfoText = tickInfo;
         infoText = BuildInfo();
 
         modeLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Color.Red1, decoration: Spectre.Console.Decoration.Bold);
@@ -423,6 +430,9 @@ public sealed class ScopeView : CompositeControl
         if (frame.XMin != lastXMin || frame.XMax != lastXMax)
         {
             plot.SetXRange(frame.XMin, frame.XMax);
+            // Explicit ticks are positions in DATA space, so they only stay right while the range does. The
+            // oscilloscope's range follows Samples (Left/Right, Escape), so rebuild them on the same gate.
+            if (xTicks is not null) plot.SetXTicks(xTicks(frame.XMin, frame.XMax, ActualWidth));
             lastXMin = frame.XMin;
             lastXMax = frame.XMax;
         }

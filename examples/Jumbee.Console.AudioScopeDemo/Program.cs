@@ -18,7 +18,7 @@ using ScopeTui;
 // specific endpoint (by index, partial name, or raw ID) out of --list-devices.
 //
 // CLI (System.CommandLine): file|live [path FILE] [--fps N] [--buffer N] [--overlap F] [--scatter] [--device D]
-// [--loopback] [--mono] [--ticks N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as
+// [--loopback] [--mono] [--tick N] [--scheme NAME] [--list-devices].   (NB: the file path option is declared as
 // "path", with no leading dashes, so it is spelled `file path C:\track.mp3` -- unlike every other option here.)
 //
 // Two independent clocks drive the scope, and only one of them is an option:
@@ -75,10 +75,10 @@ var overlapOpt = new Option<double>("--overlap")
     Description = "Fraction of each frame the next one re-uses (0-0.95). Refreshes faster than one buffer at a time, at no cost in FFT size.",
     DefaultValueFactory = _ => 0.0,
 };
-var ticksOpt = new Option<int>("--ticks")
+var tickOpt = new Option<int>("--tick")
 {
-    Description = "Cells between horizontal ticks/grid lines on the osc + spectro panes; bigger is sparser, 0 removes the chrome.",
-    DefaultValueFactory = _ => 11,
+    Description = "Samples between the oscilloscope's vertical grid lines (0 removes its grid/labels). Spectroscope ticks are fixed frequencies.",
+    DefaultValueFactory = _ => 200,
 };
 var monoOpt = new Option<bool>("--mono")
 {
@@ -97,7 +97,7 @@ var listDevicesOpt = new Option<bool>("--list-devices")
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
     inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt,
-    overlapOpt, ticksOpt, schemeOpt, listDevicesOpt,
+    overlapOpt, tickOpt, schemeOpt, listDevicesOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -110,9 +110,10 @@ root.SetAction(async (parse, ct) =>
     var deviceSpec = parse.GetValue(deviceOpt);
     var loopback = parse.GetValue(loopbackOpt);
     var mono = parse.GetValue(monoOpt);
-    // Upper bound is a usability limit, not a safety one: past ~40 cells a pane has so few ticks left that the axis
-    // stops being readable, and ScopeView clamps again to the pane's own width.
-    var ticks = Math.Clamp(parse.GetValue(ticksOpt), 0, 40);
+    // In SAMPLES, so it is bounded by the window rather than by the pane: one gridline per sample is meaningless,
+    // and a step wider than the window would draw none at all. XTickBuilders thins further if the pane is too narrow
+    // to draw them all.
+    var tick = Math.Clamp(parse.GetValue(tickOpt), 0, bufferSamples);
     // Capped below 1: at 1.0 a frame would be entirely re-used audio, i.e. an infinitely fast feed showing nothing new.
     var overlap = Math.Clamp(parse.GetValue(overlapOpt), 0.0, 0.95);
     // --scheme is a THEME: applying it here, before any control is built, means the panes' plots pick up their
@@ -249,12 +250,16 @@ root.SetAction(async (parse, ct) =>
         ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 10)}"
         : $"file:{Trim(Path.GetFileName(filePath), 16)}";
 
-    // --ticks applies to the two wide, full-width panes only. The vectorscope keeps the default: it is a ~square
-    // Lissajous pane about a fifth of the width, and both its axes are amplitude -- not the time/frequency axis whose
-    // grid density is the thing worth thinning. Each pane reports ITS OWN tick step, so the vector pane showing a
-    // different one from the other two is accurate rather than a bug.
-    var oscPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
-    var spectroPane = new ScopeView(xTickStep: ticks, source: sourceText, channels: audio.Channels);
+    // Each pane gets the tick scheme its x axis actually calls for, which is why --tick governs only the first:
+    //   oscillo  x = sample index      -> a gridline every --tick samples, labelled with the sample number
+    //   spectro  x = ln(frequency)     -> fixed frequencies, labelled in Hz ("100", "1k") instead of the raw ln
+    //                                     values the axis would otherwise show ("4.6", "6.9")
+    //   vector   x = amplitude         -> the library's spacing heuristic; neither scheme means anything here
+    // Passing --tick to the spectroscope would be nonsense: 200 ln-units spans the whole axis several times over.
+    var oscPane = new ScopeView(xTickStep: tick, source: sourceText, channels: audio.Channels,
+        xTicks: tick > 0 ? XTickBuilders.Every(tick) : null, tickInfo: tick > 0 ? $"tick:{tick}" : "tick:off");
+    var spectroPane = new ScopeView(source: sourceText, channels: audio.Channels,
+        xTicks: XTickBuilders.Frequencies());
     var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels);
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
