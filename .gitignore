@@ -420,3 +420,4 @@ FodyWeavers.xsd
 reference/*
 BenchmarkDotNet.Artifacts/*
 /publish*
+/media/*
