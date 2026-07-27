@@ -19,8 +19,10 @@
 # Ctrl+Q; it restores your terminal on exit.
 # NOTE: the ext/* git submodules must be initialised on the host first
 # (`git submodule update --init --recursive`).
-# NOTE: `audio-scope live` (device capture) needs libasound2, which the slim
-# runtime-deps base does not ship — file input, the default, needs nothing.
+# NOTE: `audio-scope live` (device capture) works only on a LINUX host and needs
+# the sound devices passed in: `--device /dev/snd`. Docker Desktop on Windows/macOS
+# has no audio in its VM, so there is nothing to pass through. File input (the
+# default) needs neither.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build + NativeAOT-publish the two AOT-eligible demos ────────────
@@ -71,9 +73,15 @@ RUN mkdir -p /app/media \
 # ── Stage 2: minimal runtime image (no SDK, no .NET runtime — just OS deps) ───
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 
-# Patch base OS packages to trim CVEs (same rationale as the full image).
+# Patch base OS packages to trim CVEs (same rationale as the full image), and add the ALSA runtime so
+# `audio-scope live` (device capture) works on a Linux host — see the live-capture section in docker.md for the
+# `--device /dev/snd` invocation. The package-name and unversioned-symlink details are explained in ./Dockerfile;
+# both bases need the same treatment. `libasound2-plugins` is deliberately left out (ffmpeg/librsvg bloat).
 RUN apt-get update \
     && apt-get -y upgrade \
+    && (apt-get install -y --no-install-recommends libasound2t64 \
+        || apt-get install -y --no-install-recommends libasound2) \
+    && ln -sf "$(ldconfig -p | awk '/libasound\.so\.2 /{print $NF; exit}')" /usr/lib/libasound.so \
     && rm -rf /var/lib/apt/lists/*
 
 # UTF-8 (box-drawing glyphs) and a colour-capable TERM for the TUI.

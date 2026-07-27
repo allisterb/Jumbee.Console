@@ -7,7 +7,7 @@ Run the interactive examples browser with nothing installed on your machine but 
 No clone, no build. Docker pulls the image ([`allisterb/jumbee-console`](https://hub.docker.com/r/allisterb/jumbee-console) on Docker Hub) on first run:
 
 ```sh
-docker run --rm -it allisterb/jumbee-console
+docker run --rm -it --pull=always allisterb/jumbee-console
 ```
 
 One image bundles four apps. The first argument picks which; with none, the examples browser runs:
@@ -20,7 +20,7 @@ One image bundles four apps. The first argument picks which; with none, the exam
 | `audio-scope` | Real-time oscilloscope, vectorscope and spectroscope over a bundled audio track |
 
 ```sh
-docker run --rm -it allisterb/jumbee-console audio-scope
+docker run --rm -it --pull=always allisterb/jumbee-console audio-scope
 ```
 
 The examples are a full-screen TUI (mouse, alternate screen, raw key input), so the container **must** be given an
@@ -31,11 +31,28 @@ interactive terminal — the `-i` (keep stdin open) and `-t` (allocate a TTY) fl
 - `--rm` removes the container when you quit.
 - If colours or box-drawing look off, forward your terminal type: `docker run --rm -it -e TERM=$TERM allisterb/jumbee-console`.
 
+### Getting the current image
+
+`docker run` defaults to `--pull=missing`: if *any* copy of the image is already on the machine it runs that one and
+never contacts the registry. Since `latest` is a moving tag, a machine that ran an earlier release keeps running it
+indefinitely — which is why the commands above pass **`--pull=always`**. It is cheap when you are already current:
+Docker re-resolves the tag to a manifest digest and re-downloads only layers that actually changed, so an up-to-date
+machine pays one small request rather than the full image.
+
+To pin a specific release instead, name its version tag — no staleness question, and `--pull=always` becomes
+unnecessary:
+
+```sh
+docker run --rm -it allisterb/jumbee-console:0.1.6 audio-scope
+```
+
+(Not to be confused with `docker build --pull` further down, which refreshes the *base* image during a build.)
+
 > The published image is `linux/amd64` (native on Windows/WSL2 and Intel Linux/macOS; Apple Silicon runs it under emulation).
 
 ## Build it yourself
 
-The [`Dockerfile`](Dockerfile) uses the full **.NET 10 SDK** image (Debian-slim) — not just the runtime — so the
+The [`Dockerfile`](Dockerfile) uses the full **.NET 10 SDK** image (Ubuntu 24.04) — not just the runtime — so the
 `dotnet` build tools stay available inside the container. It copies the repo and builds the examples project in
 Release, baking the build into the image.
 
@@ -72,6 +89,40 @@ error inside the demo.
 > with the album say BY-NC 3.0 while archive.org lists BY-NC-ND 4.0. The images redistribute it **unmodified**, which
 > both permit, and ship the album's credits file next to it. The NonCommercial term means these demo images must not
 > be used commercially with the track in place; the ND term means don't ship a trimmed or remixed excerpt.
+
+### Scoping a live audio device (Linux hosts)
+
+`audio-scope` can capture a real input instead of the file. Both images ship the ALSA runtime, so all that is needed
+is passing the host's sound devices in:
+
+```sh
+docker run --rm -it --device /dev/snd allisterb/jumbee-console-aot audio-scope live
+```
+
+List what `--device` can select first (this also works without `/dev/snd`, it just finds nothing but ALSA's `null`):
+
+```sh
+docker run --rm -it --device /dev/snd allisterb/jumbee-console-aot audio-scope --list-devices
+```
+
+A few caveats worth knowing:
+
+- **Linux hosts only.** Docker Desktop on Windows and macOS runs containers in a VM with no audio hardware attached —
+  `/dev/snd` does not exist there, so it cannot be passed through and there is no supported workaround. Run the demo
+  natively instead; on Windows that also gets you WASAPI `--loopback` (scope what is *playing*).
+- **Non-root images** additionally need `--group-add audio`. These images run as root, which can open `/dev/snd`
+  directly.
+- **On a Linux desktop, PipeWire or PulseAudio usually already holds the capture device**, so raw ALSA may come back
+  busy. Headless servers are the easy case. To route through the host's sound server instead, share its socket and
+  add the ALSA `pulse` plugin — deliberately *not* preinstalled, because `libasound2-plugins` pulls in ffmpeg and
+  librsvg for a path most users never take:
+
+  ```sh
+  docker run --rm -it -v /run/user/$(id -u)/pulse/native:/tmp/pulse -e PULSE_SERVER=unix:/tmp/pulse allisterb/jumbee-console audio-scope live --device pulse:DEVICE=your-source
+  ```
+
+  Add `RUN apt-get update && apt-get install -y libasound2-plugins` to a derived image to get the plugin. `--loopback`
+  on Linux means pointing at a sink's `.monitor` source rather than a WASAPI loopback endpoint.
 
 The build patches the base OS packages (`apt-get upgrade`) to trim the CVEs Docker Scout reports in the SDK image's
 build tools. Those are mostly medium-severity issues in tools (`git`, `wget`, `tar`, …) the running TUI never uses, so
