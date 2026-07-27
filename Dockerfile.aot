@@ -3,21 +3,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Jumbee.Console — SLIM, NATIVE-AOT image.
 #
-# Unlike the full playground image (./Dockerfile), this ships only the two
-# AOT-eligible demos — the examples browser and the agent-harness demo — each
-# compiled to a self-contained native binary with NativeAOT. No .NET runtime and
-# no SDK in the final image. The IDE demo is excluded on purpose: it needs the
-# in-container `dotnet` (edit + build/run a project in its terminal pane), so keep
-# using ./Dockerfile for that one.
+# Unlike the full playground image (./Dockerfile), this ships only the three
+# AOT-eligible demos — the examples browser, the agent-harness demo and the
+# AudioScope demo — each compiled to a self-contained native binary with NativeAOT.
+# No .NET runtime and no SDK in the final image. The IDE demo is excluded on
+# purpose: it needs the in-container `dotnet` (edit + build/run a project in its
+# terminal pane), so keep using ./Dockerfile for that one.
 #
 #     docker build -f Dockerfile.aot -t jumbee-console-aot .
 #     docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #     docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
+#     docker run --rm -it jumbee-console-aot audio-scope     # AudioScope demo (bundled sample track)
 #
 # The first `docker run` argument picks the app (see examples-aot.sh). Quit with
 # Ctrl+Q; it restores your terminal on exit.
 # NOTE: the ext/* git submodules must be initialised on the host first
 # (`git submodule update --init --recursive`).
+# NOTE: `audio-scope live` (device capture) needs libasound2, which the slim
+# runtime-deps base does not ship — file input, the default, needs nothing.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build + NativeAOT-publish the two AOT-eligible demos ────────────
@@ -46,7 +49,25 @@ RUN dotnet publish examples/Jumbee.Console.Examples/Jumbee.Console.Examples.cspr
 RUN dotnet publish examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj \
         -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
 RUN dotnet publish examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj \
-        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
+        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/audioscope
+
+# Stage the AudioScope demo's default input (the bundled sample track) into the layout the runtime stage copies from.
+# media/ is NOT tracked in git (see docker.md), so this is deliberately soft: a checkout without it still produces a
+# working image, just one where `audio-scope` needs an explicit --path. The README.txt keeps the directory non-empty
+# so the COPY in stage 2 succeeds either way, and the credits file rides along to satisfy the track's CC BY-NC
+# attribution requirement.
+RUN mkdir -p /app/media \
+    && echo "AudioScope sample media. Any bundled track is Creative Commons Attribution-NonCommercial;" \
+            "see M028_Of_Arido.txt for its credits and licence terms." > /app/media/README.txt \
+    && if [ -f media/06_arido_III_the_oscilloscope_rmx.mp3 ]; then \
+         cp media/06_arido_III_the_oscilloscope_rmx.mp3 /app/media/; \
+         cp media/M028_Of_Arido.txt /app/media/ 2>/dev/null || true; \
+         echo "AudioScope: bundled sample track staged at /app/media."; \
+       else \
+         echo "AudioScope WARNING: media/06_arido_III_the_oscilloscope_rmx.mp3 is missing from the build context;" \
+              "'audio-scope' will need an explicit --path. See docker.md for the download link."; \
+       fi
+
 # ── Stage 2: minimal runtime image (no SDK, no .NET runtime — just OS deps) ───
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 
@@ -63,6 +84,10 @@ ENV LANG=C.UTF-8 \
 WORKDIR /app
 COPY --from=build /app/examples/ ./examples/
 COPY --from=build /app/agent/ ./agent/
+COPY --from=build /app/audioscope/ ./audioscope/
+# The AudioScope demo resolves its default --path relative to the working directory, which examples-aot.sh pins to
+# /app — so the track has to land at /app/media, not next to the binary.
+COPY --from=build /app/media/ ./media/
 COPY examples-aot.sh ./
 
 # The demos are INTERACTIVE full-screen TUIs (mouse, alternate screen, raw key input), so the container MUST be given

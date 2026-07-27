@@ -13,6 +13,15 @@ dotnet build examples\Jumbee.Console.AgentHarnessDemo\Jumbee.Console.AgentHarnes
 if errorlevel 1 exit /b 1
 dotnet build examples\Jumbee.Console.IdeDemo\Jumbee.Console.IdeDemo.csproj /p:Configuration=Release
 if errorlevel 1 exit /b 1
+dotnet build examples\Jumbee.Console.AudioScopeDemo\Jumbee.Console.AudioScopeDemo.csproj /p:Configuration=Release
+if errorlevel 1 exit /b 1
+
+rem The AudioScope demo defaults to the bundled sample track, which is not tracked in git — warn before an image is
+rem built without it (see docker.md for the download link).
+if not exist "media\06_arido_III_the_oscilloscope_rmx.mp3" (
+  echo WARNING: media\06_arido_III_the_oscilloscope_rmx.mp3 is missing, so the images will have no default 1>&2
+  echo          AudioScope track. See docker.md for where to download it. 1>&2
+)
 
 rem Read the shared version (ProjectAssemblyVersion, defined in src\Directory.Build.props) from a src project — the
 rem examples projects live under examples\ and don't import that props file, so query Jumbee.Console for it.
@@ -27,7 +36,8 @@ echo Building Docker image jumbee-console:%VERSION% (also tagged latest)...
 docker build %* -t jumbee-console:%VERSION% -t jumbee-console:latest .
 if errorlevel 1 exit /b 1
 
-rem Also build the slim NativeAOT image (examples browser only, single native binary; see Dockerfile.aot).
+rem Also build the slim NativeAOT image (examples browser, agent harness and AudioScope as native binaries; see
+rem Dockerfile.aot — the IDE demo is excluded there because it needs the in-container SDK).
 echo Building NativeAOT Docker image jumbee-console-aot:%VERSION% (also tagged latest)...
 docker build %* -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest .
 if errorlevel 1 exit /b 1

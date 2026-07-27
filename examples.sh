@@ -6,6 +6,7 @@
 #   ./examples.sh                       docker run --rm -it jumbee-console
 #   ./examples.sh agent-harness         docker run --rm -it jumbee-console agent-harness
 #   ./examples.sh ide [project-dir]     docker run --rm -it jumbee-console ide [project-dir]
+#   ./examples.sh audio-scope           docker run --rm -it jumbee-console audio-scope
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -15,7 +16,8 @@ Jumbee.Console demos — pick one to run:
 
   examples          Interactive examples browser (default)
   agent-harness     Claude-style agent harness demo
-  audio-scope       Real-time oscilloscope,vectorscope, and spectroscope displsy that reads audio data from a recording device or file
+  audio-scope       Real-time oscilloscope, vectorscope and spectroscope reading audio from a file or recording device
+                    (no arguments plays the bundled sample track; --help lists --path, --live, --scheme and the rest)
   ide  [dir]        VS Code-style IDE demo (opens an optional project directory)
 
 Usage:
@@ -45,7 +47,8 @@ audioscope="examples/Jumbee.Console.AudioScopeDemo/bin/Release/net10.0/Jumbee.Co
 case "${1:-}" in
   agent-harness|agent|ah)  shift; run "agent harness demo" "$agent"       "$@" ;;
   ide)                     shift; run "IDE demo"           "$ide"         "$@" ;;
-  audio-scope)             shift; run "audio scope demo"   "$audioscope"  "$@" ;;
+  audio-scope|audioscope|scope)
+                           shift; run "audio scope demo"   "$audioscope"  "$@" ;;
   examples|browser)        shift; run "examples browser"   "$examples"    "$@" ;;
   -h|--help|help)          usage; exit 0 ;;
   '')                      run "examples browser" "$examples" ;;
