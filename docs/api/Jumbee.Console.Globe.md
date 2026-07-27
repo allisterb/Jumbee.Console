@@ -221,6 +221,12 @@ public bool DamageTracking { get; set; }
 
  bool
 
+#### Remarks
+
+On by default because the disc is inscribed in the control, so the margins are always skippable
+    whatever the globe is doing. See <xref href="Jumbee.Console.Control.TracksDamage" data-throw-if-not-resolved="false"></xref> for when partial redraw pays in
+    general.
+
 ### <a id="Jumbee_Console_Globe_DisplayNight"></a> DisplayNight
 
 When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, shade the sphere by a fixed light so a day/night terminator is drawn;

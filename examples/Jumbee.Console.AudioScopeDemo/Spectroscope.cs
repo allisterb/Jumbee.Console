@@ -33,11 +33,11 @@ public sealed record SpectroscopeAccumulator(double[][][] ChannelHistory);
 /// is flagged as a capability gap (NAudio has no documented arbitrary-length transform) rather than silently
 /// worked around.
 ///
-/// ROUND-7: <see cref="NAudio.Dsp.FastFourierTransform.FFT"/>'s forward transform ALSO differs from rustfft in
+/// <see cref="NAudio.Dsp.FastFourierTransform.FFT"/>'s forward transform ALSO differs from rustfft in
 /// scale -- it divides by N where rustfft does not (undocumented on NAudio's side; found empirically, not from
 /// any doc page). <see cref="FftMagnitudeSpectrum"/> multiplies the magnitude back by N to match rustfft's
 /// convention, which is what the axis bounds/gridlines below assume; see the comment at the multiplication site
-/// for the full account of round-6's blank-spectrum bug this caused.
+/// for the full account of the blank-spectrum bug this caused.
 /// </remarks>
 public sealed class Spectroscope(int sampleRate, int bufferSize) : IDisplayMode
 {
@@ -113,7 +113,7 @@ public sealed class Spectroscope(int sampleRate, int bufferSize) : IDisplayMode
         var mag = new double[bins - 1];
         for (var i = 1; i < bins; i++)
         {
-            // ROUND-7 FIX: NAudio.Dsp.FastFourierTransform.FFT(forward: true, ...) normalizes the forward transform
+            // NAudio.Dsp.FastFourierTransform.FFT(forward: true, ...) normalizes the forward transform
             // by 1/N (undocumented in NAudio's own XML docs -- confirmed empirically: a known tone's raw magnitude
             // came out ~1/N of the expected value). Rust's rustfft (the reference, spectroscope.rs) does NOT
             // normalize its forward transform. Every downstream constant in this port -- the log-Y axis bounds

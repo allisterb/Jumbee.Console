@@ -508,7 +508,25 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     /// the unchanged remainder. Default <see langword="false"/> (report the full rect every paint, as before).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A control that opts in MUST report every changed cell; over-reporting is safe, under-reporting drops updates.
+    /// </para>
+    /// <para>
+    /// Opt in only when the control has a <em>large drawing area of which little changes per frame</em> — a live
+    /// trace, a moving sprite, a marker set over a static backdrop. It is not a free win, for two reasons. The scan
+    /// it replaces is a <em>linear</em> walk of the double buffer, the friendliest access pattern there is, whereas
+    /// damage bookkeeping is scattered by nature (save the previous value on first touch, then flush a list of
+    /// touched indices); a cell avoided is therefore cheaper than a cell tracked, so trading N scanned cells for N
+    /// tracked ones is a net loss and only a large ratio wins. And the recorder sits in the write path, so every
+    /// cell write pays for it whether or not the frame benefits. A control that redraws its whole area every frame
+    /// should leave this off — there the bookkeeping is pure overhead.
+    /// </para>
+    /// <para>
+    /// It also does not reduce terminal output. The renderer already diffs per cell before emitting, so the escape
+    /// sequences sent are decided by which cells genuinely differ, never by which rects were declared damaged.
+    /// Damage narrows what is <em>scanned</em>, never what is <em>sent</em>. Measure rather than assume; see
+    /// "When damage tracking pays" in <c>docs/internal/Rendering Model.md</c>.
+    /// </para>
     /// </remarks>
     protected virtual bool TracksDamage => false;
 

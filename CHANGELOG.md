@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.6
+
+### Added
+
+- **`PlotPalette`** (`Jumbee.Console.Styles`) and **`IStyleTheme.PlotSeries`** — plot colours are now themeable: the axis, grid, tick and surface chrome plus the series palette come from the active theme instead of being passed per call, so a runtime theme switch re-colours existing plots.
+- **`Plot.DamageTracking`** — opt-in partial redraw. The plot reports only the sub-rectangles a draw actually changed and the compositor skips the rest; roughly 5× off the composite for a sparse figure. Off by default — see the remarks on the property for when it pays and when it costs.
+- **`ConsolePlot`: axis ticks can be set to `0`**, which removes that axis's grid lines and labels.
+
+### Changed
+
+- **`TextLabel` takes its colours from `IStyleTheme.LabelText`** (both foreground and background) until one is set explicitly. Colours passed to the constructor still win and now register as theme overrides, so a later theme switch re-colours only the labels that never asked for a colour. A theme supplying a background lets labels sit on a coloured strip without every caller passing one.
+
+### Fixed
+
+- **`CompositeControl` swallowed clicks on display composites.** A composite that opted into the mouse (`WantsMouse`) but whose children were not themselves focusable or mouse-listening produced cells with no listener, so a click anywhere over such a child never reached the composite. Those cells now carry the composite's own listener, restoring click-to-focus for panes like a plot; a child with its own listener is unaffected.
+- `ConsolePlot`: custom tick values are honoured, and `Clear` no longer rewrites the whole buffer.
+
+### Docs
+
+- Documented the **cost model of damage tracking**, not just its benefit: it narrows what the compositor *scans* and never what the terminal *receives*, and because the scan it replaces is a linear buffer walk while damage bookkeeping is scattered, break-even needs the changing region to be a small fraction of the control — see `Control.TracksDamage` and "When damage tracking pays" in `docs/internal/Rendering Model.md`.
+
+### Examples
+
+- **New AudioScope demo** — a real-time oscilloscope, spectroscope and vectorscope over one shared audio source. Fully managed and cross-platform: MP3/WAV decode through NLayer, capture through WASAPI (Windows) or ALSA (Linux), with device selection, loopback, mono, `--overlap`, `--tick` and four colour schemes.
+- Both Docker images gained an `audio-scope` target with a bundled sample track, and now ship the ALSA runtime so `audio-scope live` works on a Linux host given `--device /dev/snd`.
+
 ## 0.1.5
 
 

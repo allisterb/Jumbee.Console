@@ -575,7 +575,7 @@ public sealed class ScopeView : CompositeControl
     /// <see cref="ChannelBus"/> -- the fan-out that lets a single audio source drive three independent scopes.
     /// </summary>
     /// <remarks>
-    /// This is the whole point of the milestone: the heavy per-mode transform (the spectroscope's FFT, the
+    /// The heavy per-mode transform (the spectroscope's FFT, the
     /// oscilloscope's trigger scan) runs on each pane's OWN feed thread, so the three computes overlap instead of
     /// serializing, and only the mode-agnostic <see cref="Apply"/> touches the UI thread.
     /// <para/>Threading: <c>Control.Feed</c>'s loop never overlaps a feed's own <c>produce</c> with itself, so the

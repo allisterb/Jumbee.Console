@@ -5,15 +5,6 @@ using Jumbee.Console;
 /// <summary>Immutable, cheap-to-copy snapshot of the <see cref="GraphConfig"/> knobs the heavy per-frame transform
 /// reads. Taken on the UI thread (a plain field copy) so a background thread can safely compute a frame without
 /// racing the hotkey handlers that mutate <see cref="GraphConfig"/> on the UI thread.</summary>
-/// <remarks>
-/// Round-10 (item 3): <see cref="Gain"/> rides along on the shared snapshot every mode already receives, instead
-/// of a separate <c>oscilloscopeGain</c> parameter threaded only into <see cref="ScopeView.ComputeFrame"/>'s
-/// special-cased Oscilloscope branch. Only <see cref="Oscilloscope.Process"/> reads it; Vectorscope/Spectroscope
-/// ignore the field, exactly like they already ignore <see cref="Scatter"/>/<see cref="Palette"/> fields they
-/// don't need. This restores a single, uniform <see cref="IDisplayMode.Process"/> call in <c>ComputeFrame</c> --
-/// no more <c>mode is Oscilloscope ? Oscilloscope.Process(...) : mode.Process(...)</c> concrete-type check, and no
-/// more second gain-blind entry point on Oscilloscope.
-/// </remarks>
 public readonly record struct GraphSnapshot(
     bool Pause, int Samples, int Width, double Scale, bool Scatter, bool References, bool ShowUi,
     Color[] Palette, Color LabelsColor, Color AxisColor, double Gain = 1.0)

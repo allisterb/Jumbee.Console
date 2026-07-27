@@ -140,8 +140,7 @@ public class Oscilloscope : IDisplayMode
         return outSeries;
     }
 
-    /// <summary>Round-6: t/e/p/threshold/depth, taken over from Program.cs's old concrete-type-checked hotkeys.
-    /// Mirrors Oscilloscope::handle in oscilloscope.rs.</summary>
+    /// <remarks>Mirrors Oscilloscope::handle in oscilloscope.rs.</remarks>    
     public bool HandleKey(ConsoleKeyInfo key, double magnitude)
     {
         switch (key.Key)

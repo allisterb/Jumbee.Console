@@ -106,6 +106,9 @@ public class Globe : Control
     /// <summary>When <see langword="true"/> (the default), the globe reports only its drawn disc as damaged each
     /// frame so the compositor skips the blank margins around it (opt-in partial redraw). Set <see langword="false"/>
     /// to fall back to reporting the whole control rect — used to A/B the optimization.</summary>
+    /// <remarks>On by default because the disc is inscribed in the control, so the margins are always skippable
+    /// whatever the globe is doing. See <see cref="Control.TracksDamage"/> for when partial redraw pays in
+    /// general.</remarks>
     public bool DamageTracking
     {
         get => _damageTracking;

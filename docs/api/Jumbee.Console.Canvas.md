@@ -191,9 +191,11 @@ public bool DamageTracking { get; set; }
 #### Remarks
 
 This is what makes a mostly-static canvas cheap to update — a world map whose coastline never moves but whose
-few markers and labels do costs about what the markers cost, not what the map costs. It is pure win when little
-changes and roughly free otherwise (a canvas that changes everywhere just reports everything), so it is on by
-default; set <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> to fall back to reporting the whole area.
+few markers and labels do costs about what the markers cost, not what the map costs. That is the usual canvas
+workload, so it is on by default. It is not free when the picture changes everywhere, though: the recorder
+sits in the write path, so a canvas that redraws its whole area every frame pays the bookkeeping and skips
+nothing — measurably a few percent worse than leaving it off. Set <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> for that case, or
+to A/B the optimization. See <xref href="Jumbee.Console.Control.TracksDamage" data-throw-if-not-resolved="false"></xref> for the cost model.
 
 ### <a id="Jumbee_Console_Canvas_FillsFrameViewport"></a> FillsFrameViewport
 

@@ -93,11 +93,23 @@ public class Plot : Control
     /// skip the rest of its rect. Off by default.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Worth turning on for a plot whose figure is <em>sparse and localised</em> — a live scope trace, a small
     /// marker set — where most of the area is empty or static from frame to frame. The grid, axes and tick labels
     /// are rewritten every draw but with identical values, so they cost nothing in damage; only the data actually
     /// moving is reported. A figure that fills its area (a dense heatmap) has nothing to skip and should leave this
     /// off, since the diff is then pure overhead.
+    /// </para>
+    /// <para>
+    /// Measured on a 220×53 live scope: a trace at 15% of the Y range drops the composite from ~1340µs to ~270µs
+    /// (11660 dirty cells to 1966), roughly halving the frame; a full-scale trace at 95% saves nothing and costs
+    /// about 4%, because the recorder sits in the write path and is paid for whether or not the frame benefits.
+    /// The break-even is worse than a cell count suggests — see <see cref="Control.TracksDamage"/> for why.
+    /// </para>
+    /// <para>
+    /// It does not reduce terminal output: ANSI bytes per frame were unchanged (15620 vs 15739), since the renderer
+    /// already diffs per cell before emitting. Terminal load is set by data density, not by this flag.
+    /// </para>
     /// </remarks>
     public bool DamageTracking
     {
