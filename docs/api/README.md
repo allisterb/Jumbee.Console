@@ -122,6 +122,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [FooterHint](Jumbee.Console.FooterHint.md) — A single key-binding hint shown in a `Footer`: the key chord and what it does.
 - [GaugeStyle](Jumbee.Console.GaugeStyle.md) — The per-part `Style` a `Gauge` composes: the filled portion of the bar, the empty track behind it, and the percent/value readout (and any inline label).
 - [HScroll](Jumbee.Console.HScroll.md) — An opt-in horizontal-scroll offset for controls that render a fixed-width buffer wider than their viewport and window it in `Blit` (the `ControlFrame` only scrolls vertically).
+- [PlotPalette](Jumbee.Console.PlotPalette.md) — The ordered colours a plot cycles through for series that don't name one.
 - [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md) — The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track behind it, and the two end arrows.
 - [ScrollBarStyle](Jumbee.Console.ScrollBarStyle.md) — The per-part `Style` (foreground/background/decoration, no glyph) a control frame applies to its vertical scrollbar.
 - [Style](Jumbee.Console.Style.md) — A text style — foreground/background colour and text decoration — wrapping a Spectre.Console style. Exposes the named colour palette (`Red1`, `Cyan1`, …) and decoration presets (`Bold`, `Italic`, …) as ready-made tokens; combine them with `|`.

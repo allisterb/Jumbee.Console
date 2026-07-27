@@ -8,7 +8,6 @@ Jumbee.Console is a .NET library for advanced TUIs that focuses on performance a
 
 
 ## Features
-
 * 100% managed AOT-compatible code.
 * Retained-mode GUI framework with a modern API designed to be easy to use and extend.
 * Sub-ms frame rendering times and minimal CPU consumption even with complex displays like multi-tab document editing and syntax highlighting.
@@ -28,8 +27,24 @@ Jumbee.Console is a .NET library for advanced TUIs that focuses on performance a
 ## Requirements
 * .NET 10.0 SDK
 
-## Building
+## Running the examples from Docker
+You can run the exammple apps from Docker without needing .NET 10 or anything installed:
 
+Pull the latest image and run the examples browser. docker run --rm -it allisterb/jumbee-console:latest
+
+Pull the latest image and run the agent harness example: docker run --rm -it allisterb/jumbee-console:latest agent-harness
+
+Pull the latest AOT image and run the audio scope example: docker run --rm -it allisterb/jumbee-console-aot:latest audio-scope
+
+
+## Installation 
+Install the package from NuGet:
+
+`dotnet add package Jumbee.Console`
+
+Note that Jumbee.Console uses its own compatible version of the Spectre.Console library - you shouldn't add both to your projects.
+
+## Building
 * Clone the repo **with submodules** — the build depends on the vendored forks in `ext/`:
   `git clone --recurse-submodules https://github.com/allisterb/Jumbee.Console`
   Already cloned without them? Run `git submodule update --init --recursive`.
@@ -39,12 +54,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for building, testing, and how the `ext/`
 
 
 ## Getting Started
-
-Install the package:
-
-`dotnet add package Jumbee.Console`
-
-Note that Jumbee.Console uses its own compatible version of the Spectre.Console library - you shouldn't add both to your projects.
 
 A first app — a label and a button that increments a counter:
 

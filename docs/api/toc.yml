@@ -295,6 +295,8 @@
       href: Jumbee.Console.GaugeStyle.md
     - name: HScroll
       href: Jumbee.Console.HScroll.md
+    - name: PlotPalette
+      href: Jumbee.Console.PlotPalette.md
     - name: ScrollBarGlyphs
       href: Jumbee.Console.ScrollBarGlyphs.md
     - name: ScrollBarStyle

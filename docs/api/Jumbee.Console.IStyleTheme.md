@@ -168,6 +168,122 @@ Style Info { get; }
 
  [Style](Jumbee.Console.Style.md)
 
+### <a id="Jumbee_Console_IStyleTheme_LabelText"></a> LabelText
+
+The colours a plain <code>TextLabel</code> draws with — <em>both</em> halves are read, so a theme can give
+    labels a background as well as a foreground.
+
+```csharp
+Style LabelText { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Defaults to <xref href="Jumbee.Console.Style.Plain" data-throw-if-not-resolved="false"></xref>, which carries neither colour and so leaves a label exactly as it is
+unthemed: foreground at the terminal default, background transparent. That matters — a label painting an
+opaque background by default would block compositing and dim oddly under an overlay scrim. Distinct from
+<xref href="Jumbee.Console.IStyleTheme.Text" data-throw-if-not-resolved="false"></xref>, which is the token for body text a control renders itself.
+
+### <a id="Jumbee_Console_IStyleTheme_PlotAxis"></a> PlotAxis
+
+The colour of a <code>Plot</code>'s axis lines.
+
+```csharp
+Style PlotAxis { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Only its foreground colour is used. The axis <em>captions</em> are set per-plot with
+    <code>SetAxisTitles</code> and are not themed.
+
+### <a id="Jumbee_Console_IStyleTheme_PlotGrid"></a> PlotGrid
+
+The colour of a <code>Plot</code>'s background grid lines.
+
+```csharp
+Style PlotGrid { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Only its foreground colour is used. The grid's dashed/solid <em>brush</em> is a per-plot setting.
+
+### <a id="Jumbee_Console_IStyleTheme_PlotSeries"></a> PlotSeries
+
+The ordered colours a <code>Plot</code> cycles through for series that don't name one. Defaults to
+    <xref href="Jumbee.Console.PlotPalette.Default" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+PlotPalette PlotSeries { get; }
+```
+
+#### Property Value
+
+ [PlotPalette](Jumbee.Console.PlotPalette.md)
+
+### <a id="Jumbee_Console_IStyleTheme_PlotSurface"></a> PlotSurface
+
+The fill painted behind a <code>Plot</code>'s drawing area.
+
+```csharp
+Style PlotSurface { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Only its background colour is used; the default has none, leaving a plot transparent so whatever is
+    behind it shows through.
+
+### <a id="Jumbee_Console_IStyleTheme_PlotTick"></a> PlotTick
+
+The colour of a <code>Plot</code>'s tick marks.
+
+```csharp
+Style PlotTick { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Only its foreground colour is used. Separate from <xref href="Jumbee.Console.IStyleTheme.PlotTickLabel" data-throw-if-not-resolved="false"></xref>: scope-style themes
+    group the marks with the axis and grid as structure, and colour the numbers with the other text.
+
+### <a id="Jumbee_Console_IStyleTheme_PlotTickLabel"></a> PlotTickLabel
+
+The colour of a <code>Plot</code>'s numeric tick labels.
+
+```csharp
+Style PlotTickLabel { get; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+#### Remarks
+
+Only its foreground colour is used. See <xref href="Jumbee.Console.IStyleTheme.PlotTick" data-throw-if-not-resolved="false"></xref> for why this is its own token.
+
 ### <a id="Jumbee_Console_IStyleTheme_Primary"></a> Primary
 
 A primary action surface at rest (e.g. a default button).

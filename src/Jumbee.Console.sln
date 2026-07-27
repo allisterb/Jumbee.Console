@@ -114,6 +114,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScopeTui", "..\..\..\Users\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.AudioScopeDemo", "..\examples\Jumbee.Console.AudioScopeDemo\Jumbee.Console.AudioScopeDemo.csproj", "{46D57208-AB87-1161-1E91-6765217F4424}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{DE981FA1-44B9-40DE-964A-97E4ECCF9D54}"
+	ProjectSection(SolutionItems) = preProject
+		..\docs\api\README.md = ..\docs\api\README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -486,6 +491,7 @@ Global
 		{F37CCE7F-A958-DEC8-E5DF-A6E968A179F0} = {4C83C951-031C-4109-AEC5-6746CCD3F4DC}
 		{2908182D-5647-5FF6-12B6-5FD0BA5D61C7} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{46D57208-AB87-1161-1E91-6765217F4424} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
+		{DE981FA1-44B9-40DE-964A-97E4ECCF9D54} = {C9B2828B-DAC4-4D99-B75E-890596A0B988}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}

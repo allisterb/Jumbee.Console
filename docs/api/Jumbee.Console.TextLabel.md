@@ -106,7 +106,8 @@ public TextLabel(TextLabelOrientation orientation, string text, Color? fgcolor =
 
 ### <a id="Jumbee_Console_TextLabel_BgColor"></a> BgColor
 
-Background colour, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for transparent (shows whatever is behind).
+Background colour, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for transparent (shows whatever is behind). Themed from
+    <xref href="Jumbee.Console.IStyleTheme.LabelText" data-throw-if-not-resolved="false"></xref> until set explicitly.
 
 ```csharp
 public Color? BgColor { get; set; }
@@ -130,7 +131,8 @@ public Decoration Decoration { get; set; }
 
 ### <a id="Jumbee_Console_TextLabel_FgColor"></a> FgColor
 
-Foreground colour, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the terminal default.
+Foreground colour, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the terminal default. Themed from
+    <xref href="Jumbee.Console.IStyleTheme.LabelText" data-throw-if-not-resolved="false"></xref> until set explicitly.
 
 ```csharp
 public Color? FgColor { get; set; }
@@ -165,6 +167,20 @@ public override Cell this[Position position] { get; }
  Cell
 
 ## Methods
+
+### <a id="Jumbee_Console_TextLabel_ApplyTheme"></a> ApplyTheme\(\)
+
+Re-captures this control's themed colours/glyphs from the current <xref href="Jumbee.Console.UI.StyleTheme" data-throw-if-not-resolved="false"></xref>/
+<xref href="Jumbee.Console.UI.GlyphTheme" data-throw-if-not-resolved="false"></xref>. The default is a no-op for controls that don't use the theme.
+
+```csharp
+protected override void ApplyTheme()
+```
+
+#### Remarks
+
+Called by themed controls from their constructor and again on a runtime theme switch (<xref href="Jumbee.Console.UI.SetTheme(Jumbee.Console.IStyleTheme%2cJumbee.Console.IGlyphTheme)" data-throw-if-not-resolved="false"></xref>).
+Must read the themes <em>only here</em> (and in the constructor), never on the render path.
 
 ### <a id="Jumbee_Console_TextLabel_IntrinsicHeight"></a> IntrinsicHeight\(\)
 

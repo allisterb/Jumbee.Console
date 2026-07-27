@@ -535,6 +535,10 @@ the empty track behind it, and the percent/value readout (and any inline label).
 An opt-in horizontal-scroll offset for controls that render a fixed-width buffer wider than their viewport and
 window it in <code>Blit</code> (the <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> only scrolls vertically).
 
+ [PlotPalette](Jumbee.Console.PlotPalette.md)
+
+The ordered colours a plot cycles through for series that don't name one.
+
  [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md)
 
 The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track

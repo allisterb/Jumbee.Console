@@ -141,7 +141,8 @@ the live path mutates the data in place without re-allocating the plot, and it k
 
 ### <a id="Jumbee_Console_Plot__ctor"></a> Plot\(\)
 
-Initializes a new display-only <xref href="Jumbee.Console.Plot" data-throw-if-not-resolved="false"></xref> (not focusable).
+Initializes a new display-only <xref href="Jumbee.Console.Plot" data-throw-if-not-resolved="false"></xref> (not focusable), with its chrome colours and
+    series palette taken from the current style theme.
 
 ```csharp
 public Plot()
@@ -149,9 +150,22 @@ public Plot()
 
 ## Properties
 
+### <a id="Jumbee_Console_Plot_AxisColor"></a> AxisColor
+
+Colour of the axis lines. Themed from <xref href="Jumbee.Console.IStyleTheme.PlotAxis" data-throw-if-not-resolved="false"></xref> until set explicitly.
+
+```csharp
+public Color AxisColor { get; set; }
+```
+
+#### Property Value
+
+ [Color](Jumbee.Console.Color.md)
+
 ### <a id="Jumbee_Console_Plot_Background"></a> Background
 
 Background colour painted behind the plot, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> (the default) for transparent.
+    Themed from <xref href="Jumbee.Console.IStyleTheme.PlotSurface" data-throw-if-not-resolved="false"></xref> until set explicitly.
 
 ```csharp
 public Color? Background { get; set; }
@@ -161,12 +175,101 @@ public Color? Background { get; set; }
 
  [Color](Jumbee.Console.Color.md)?
 
+### <a id="Jumbee_Console_Plot_DamageTracking"></a> DamageTracking
+
+Opts into partial redraw: the plot reports only the cells each draw actually changed, so the compositor can
+skip the rest of its rect. Off by default.
+
+```csharp
+public bool DamageTracking { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+Worth turning on for a plot whose figure is <em>sparse and localised</em> — a live scope trace, a small
+marker set — where most of the area is empty or static from frame to frame. The grid, axes and tick labels
+are rewritten every draw but with identical values, so they cost nothing in damage; only the data actually
+moving is reported. A figure that fills its area (a dense heatmap) has nothing to skip and should leave this
+off, since the diff is then pure overhead.
+
 ### <a id="Jumbee_Console_Plot_FillsFrameViewport"></a> FillsFrameViewport
 
 Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: the plot fills its frame's viewport and is never scrolled.
 
 ```csharp
 protected override bool FillsFrameViewport { get; }
+```
+
+#### Property Value
+
+ bool
+
+### <a id="Jumbee_Console_Plot_GridColor"></a> GridColor
+
+Colour of the background grid lines. Themed from <xref href="Jumbee.Console.IStyleTheme.PlotGrid" data-throw-if-not-resolved="false"></xref> until set
+    explicitly.
+
+```csharp
+public Color GridColor { get; set; }
+```
+
+#### Property Value
+
+ [Color](Jumbee.Console.Color.md)
+
+### <a id="Jumbee_Console_Plot_SeriesPalette"></a> SeriesPalette
+
+Colours cycled for series added without an explicit colour. Themed from
+    <xref href="Jumbee.Console.IStyleTheme.PlotSeries" data-throw-if-not-resolved="false"></xref> until set explicitly.
+
+```csharp
+public PlotPalette SeriesPalette { get; set; }
+```
+
+#### Property Value
+
+ [PlotPalette](Jumbee.Console.PlotPalette.md)
+
+#### Remarks
+
+Applies to series added <em>after</em> it changes: a series' colour is baked into its pen when it is
+    added, so recolouring existing series means re-adding them.
+
+### <a id="Jumbee_Console_Plot_TickColor"></a> TickColor
+
+Colour of the tick marks. Themed from <xref href="Jumbee.Console.IStyleTheme.PlotTick" data-throw-if-not-resolved="false"></xref> until set explicitly.
+
+```csharp
+public Color TickColor { get; set; }
+```
+
+#### Property Value
+
+ [Color](Jumbee.Console.Color.md)
+
+### <a id="Jumbee_Console_Plot_TickLabelColor"></a> TickLabelColor
+
+Colour of the numeric tick labels. Themed from <xref href="Jumbee.Console.IStyleTheme.PlotTickLabel" data-throw-if-not-resolved="false"></xref> until set
+    explicitly.
+
+```csharp
+public Color TickLabelColor { get; set; }
+```
+
+#### Property Value
+
+ [Color](Jumbee.Console.Color.md)
+
+### <a id="Jumbee_Console_Plot_TracksDamage"></a> TracksDamage
+
+Whether this plot reports partial damage (see <xref href="Jumbee.Console.Plot.DamageTracking" data-throw-if-not-resolved="false"></xref>).
+
+```csharp
+protected override bool TracksDamage { get; }
 ```
 
 #### Property Value
@@ -776,6 +879,20 @@ public Plot AddStem(double[] xs, double[] ys, Color? color = null, double baseli
 
 <code class="paramref">color</code> defaults to the palette.
 
+### <a id="Jumbee_Console_Plot_ApplyTheme"></a> ApplyTheme\(\)
+
+Re-captures this control's themed colours/glyphs from the current <xref href="Jumbee.Console.UI.StyleTheme" data-throw-if-not-resolved="false"></xref>/
+<xref href="Jumbee.Console.UI.GlyphTheme" data-throw-if-not-resolved="false"></xref>. The default is a no-op for controls that don't use the theme.
+
+```csharp
+protected override void ApplyTheme()
+```
+
+#### Remarks
+
+Called by themed controls from their constructor and again on a runtime theme switch (<xref href="Jumbee.Console.UI.SetTheme(Jumbee.Console.IStyleTheme%2cJumbee.Console.IGlyphTheme)" data-throw-if-not-resolved="false"></xref>).
+Must read the themes <em>only here</em> (and in the constructor), never on the render path.
+
 ### <a id="Jumbee_Console_Plot_AutoRangeX"></a> AutoRangeX\(\)
 
 Restores auto-scaling of the horizontal axis (undoes <xref href="Jumbee.Console.Plot.SetXRange(System.Double%2cSystem.Double)" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.Plot.SetXWindow(System.Double)" data-throw-if-not-resolved="false"></xref>).
@@ -931,6 +1048,11 @@ public Plot SetAxisColor(Color color)
 
  [Plot](Jumbee.Console.Plot.md)
 
+#### Remarks
+
+Sets <xref href="Jumbee.Console.Plot.AxisColor" data-throw-if-not-resolved="false"></xref>, so it also marks the axis colour as explicitly chosen and a later
+    theme switch will leave it alone.
+
 ### <a id="Jumbee_Console_Plot_SetAxisTitles_System_String_System_String_System_Nullable_Jumbee_Console_Color__"></a> SetAxisTitles\(string?, string?, Color?\)
 
 Sets the screen-anchored axis captions and (optionally) their colour, in <xref href="Jumbee.Console.Color" data-throw-if-not-resolved="false"></xref>s — a
@@ -976,6 +1098,10 @@ public Plot SetGridColor(Color color)
 
  [Plot](Jumbee.Console.Plot.md)
 
+#### Remarks
+
+Sets <xref href="Jumbee.Console.Plot.GridColor" data-throw-if-not-resolved="false"></xref> — see <xref href="Jumbee.Console.Plot.SetAxisColor(Jumbee.Console.Color)" data-throw-if-not-resolved="false"></xref> on theme overriding.
+
 ### <a id="Jumbee_Console_Plot_SetTickColor_Jumbee_Console_Color_System_Nullable_Jumbee_Console_Color__"></a> SetTickColor\(Color, Color?\)
 
 Recolours the tick marks and, when <code class="paramref">labelColor</code> is given, the numeric tick labels —
@@ -994,6 +1120,11 @@ public Plot SetTickColor(Color color, Color? labelColor = null)
 #### Returns
 
  [Plot](Jumbee.Console.Plot.md)
+
+#### Remarks
+
+Sets <xref href="Jumbee.Console.Plot.TickColor" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.Plot.TickLabelColor" data-throw-if-not-resolved="false"></xref> — see <xref href="Jumbee.Console.Plot.SetAxisColor(Jumbee.Console.Color)" data-throw-if-not-resolved="false"></xref> on theme
+    overriding.
 
 ### <a id="Jumbee_Console_Plot_SetXRange_System_Double_System_Double_"></a> SetXRange\(double, double\)
 
