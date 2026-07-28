@@ -1,13 +1,19 @@
 # Jumbee.Console Galleru
 
 ### Examples Browser Demo 1
-![](https://i.imgur.com/oCTmJul.gif)
+![](https://i.imgur.com/wG2V8qY.gif)
+
 ### Graphics Demo
 ![](https://i.imgur.com/pUu2luL.gif)
+
+### Audio Scope Demo
+[![](https://i.imgur.com/YUle2HI.gif)](../examples/Jumbee.Console.AudioScopeDemo)
 
 ### Agent Harness Demo
 ![](https://imgur.com/zM24PDY.gif)
 
+### Data Visualization Demo
+![https://i.imgur.com/eKxFXBO.gif]
 ### Spectre.Console control compatibility
 ![](https://i.imgur.com/f7WWwmH.png)
 
