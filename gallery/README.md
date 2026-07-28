@@ -3,6 +3,9 @@
 ### Graphics Demo
 ![](https://i.imgur.com/pUu2luL.gif)
 
+### Document Editing Demo
+![](https://i.imgur.com/mpNylpY.gif)
+
 ### Audio Scope Demo
 [![](https://i.imgur.com/uCdpqJC.gif)](../examples/Jumbee.Console.AudioScopeDemo)
 
