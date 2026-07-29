@@ -41,6 +41,12 @@ public interface IGlyphTheme
     ScrollBarGlyphs ScrollBar => ScrollBarGlyphs.Default;
     #endregion
 
+    #region ProgressBar
+    /// <summary>The glyphs a <c>ProgressBar</c> draws its bar with (colours come from <see cref="IStyleTheme.ProgressBar"/>).
+    /// Defaults to <see cref="ProgressBarGlyphs.Default"/> (the solid sub-cell band).</summary>
+    ProgressBarGlyphs ProgressBar => ProgressBarGlyphs.Default;
+    #endregion
+
     #region Selection
     /// <summary>The glyph prefixed to the selected item when a control's <see cref="SelectionStyle"/> is
     /// <see cref="SelectionStyle.Caret"/> (includes its trailing spacing). Defaults to <c>"▶ "</c>.</summary>

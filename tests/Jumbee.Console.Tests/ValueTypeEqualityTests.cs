@@ -30,8 +30,8 @@ public class ValueTypeEqualityTests
     // (name, two equal values, one different value)
     public static TheoryData<string> Types => new()
     {
-        "ButtonStyle", "GaugeStyle", "ScrollBarStyle", "ScrollBarGlyphs", "TitleStyle", "JColor",
-        "Size", "Position", "Rect", "Offset", "Vector", "CColor", "Character", "PlotPalette",
+        "ButtonStyle", "GaugeStyle", "ProgressBarStyle", "ProgressBarGlyphs", "ScrollBarStyle", "ScrollBarGlyphs",
+        "TitleStyle", "JColor", "Size", "Position", "Rect", "Offset", "Vector", "CColor", "Character", "PlotPalette",
     };
 
     [Theory]
@@ -42,6 +42,8 @@ public class ValueTypeEqualityTests
         {
             case "ButtonStyle": Check(ButtonStyle.Primary, ButtonStyle.Primary, ButtonStyle.Secondary); break;
             case "GaugeStyle": Check(GaugeStyle.Default, GaugeStyle.Default, GaugeStyle.Default with { Text = Style.White }); break;
+            case "ProgressBarStyle": Check(ProgressBarStyle.Default, ProgressBarStyle.Default, ProgressBarStyle.Default with { Time = Style.White }); break;
+            case "ProgressBarGlyphs": Check(ProgressBarGlyphs.Hatched, ProgressBarGlyphs.Hatched, ProgressBarGlyphs.Segmented); break;
             case "ScrollBarStyle": Check(ScrollBarStyle.Default, ScrollBarStyle.Default, ScrollBarStyle.Default with { Thumb = Style.White }); break;
             case "ScrollBarGlyphs": Check(ScrollBarGlyphs.Classic, ScrollBarGlyphs.Classic, ScrollBarGlyphs.Smooth); break;
             case "TitleStyle": Check(new TitleStyle(TitlePos.TopLeft), new TitleStyle(TitlePos.TopLeft), new TitleStyle(TitlePos.TopRight)); break;

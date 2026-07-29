@@ -142,6 +142,12 @@ public interface IStyleTheme
     GaugeStyle Gauge => GaugeStyle.Default;
     #endregion
 
+    #region ProgressBar
+    /// <summary>The part styles a <c>ProgressBar</c> composes (description, bar fill/track, percentage, time,
+    /// spinner). Defaults to <see cref="ProgressBarStyle.Default"/>.</summary>
+    ProgressBarStyle ProgressBar => ProgressBarStyle.Default;
+    #endregion
+
     #region Frame
     /// <summary>The default border shape for a control frame when none is specified. Defaults to <see cref="BorderStyle.None"/>.</summary>
     BorderStyle FrameBorder => BorderStyle.None;
