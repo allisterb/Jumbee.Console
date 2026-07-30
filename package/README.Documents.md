@@ -1,6 +1,6 @@
 # Jumbee.Console Documents
 
-![Imgur](https://imgur.com/mpNylpY.gif)
+![](https://i.imgur.com/mpNylpY.gif)
 ## About
 This is an add-on library for Jumbee.Console that provides TUI viewers and editors for different document formats.
 

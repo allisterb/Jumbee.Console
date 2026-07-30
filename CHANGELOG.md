@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.7
+
+### Added
+
+- **`ProgressBar` control** — a composable, themeable single-row task-progress display: a settable description, a smooth sub-cell fill bar, and optional percentage, elapsed/remaining-time and spinner columns, plus an indeterminate pulse for work whose total isn't known. 
+
+### Fixed
+
+- **Framed controls now render their frame inside a `VerticalStackPanel` / `HorizontalStackPanel`. A margin on a stacked control now reserves space as expected.
+
+### Docs
+
+- Added `/llms.txt` generation (per [llmstxt.org](https://llmstxt.org)) to the API-docs script — a curated, link-listed index of the docs and public API for LLM tooling.
+
+
 ## 0.1.6
 
 ### Added
