@@ -363,7 +363,7 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     /// <see cref="UI.GlyphTheme"/>. The default is a no-op for controls that don't use the theme.
     /// </summary>
     /// <remarks>
-    /// Called by themed controls from their constructor and again on a runtime theme switch (<see cref="UI.SetTheme"/>).
+    /// Called by themed controls from their constructor and again on a runtime theme switch (<see cref="UI.SetTheme(IStyleTheme, IGlyphTheme)"/>).
     /// Must read the themes <em>only here</em> (and in the constructor), never on the render path.
     /// </remarks>
     protected virtual void ApplyTheme() {}
@@ -561,7 +561,7 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     /// first tick fires after one interval.
     /// <para/><paramref name="tick"/> <b>always</b> runs on the UI thread — it may read and mutate control state directly (no
     /// marshaling), but it also means heavy work in it runs at frame start and delays the frame. For a tick that needs
-    /// expensive <em>off-thread</em> work, use the <see cref="Feed{T}(Func{T}, Action{T}, TimeSpan)"/> overload
+    /// expensive <em>off-thread</em> work, use the <see cref="Feed{T}(Func{T}, Action{T}, TimeSpan, Action{Exception})"/> overload
     /// instead, which runs the work on a background thread and only applies the result on the UI thread.
     /// <para/>Implementation note: the tick is delivered via <see cref="UI.Post"/> (not a direct call) so its redraw
     /// request and state change land together in the same dispatcher drain, before that frame's paint — see the note
@@ -646,7 +646,7 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     }
 
     /// <summary>
-    /// A thread-safe snapshot of this control's currently live feed handles (each <see cref="Feed(Action, int)"/> call
+    /// A thread-safe snapshot of this control's currently live feed handles (each <see cref="Feed(Action, int, Action{Exception})"/> call
     /// registers one; it self-unregisters when cancelled or completed).
     /// </summary>
     /// <remarks>

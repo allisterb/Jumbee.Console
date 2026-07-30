@@ -13,7 +13,7 @@ using Spectre.Console.Rendering;
 /// </summary>
 /// <remarks>
 /// Reachable by mouse (click) and by keyboard — the panel's tab-strip arrows step onto it past the last tab, and
-/// Enter/Space activates it. Activating raises <see cref="Clicked"/>, which the panel turns into
+/// Enter/Space activates it. Activating raises <see cref="Activated"/>, which the panel turns into
 /// <see cref="TabPanel.NewTabRequested"/>. It is still excluded from the panel's logical rows, so global (Ctrl+arrow)
 /// region nav treats the strip as one unit.
 /// </remarks>
@@ -29,8 +29,9 @@ internal sealed class TabAddButton : RenderableControl
     #endregion
 
     #region Events
-    /// <summary>Raised when the button is clicked or activated with Enter/Space.</summary>
-    public event EventHandler? Clicked;
+    /// <summary>Raised when the button is clicked or activated with Enter/Space. (Named <c>Activated</c>, like
+    /// <see cref="Button"/>, rather than reusing the mouse-only <see cref="Control.Clicked"/>.)</summary>
+    public event EventHandler? Activated;
     #endregion
 
     #region Properties
@@ -62,7 +63,7 @@ internal sealed class TabAddButton : RenderableControl
     // Fires the click/activation. Keyboard activation (Enter/Space) is driven by the owning TabPanel's tunnel
     // (InterceptInput), because the button is not in the panel's logical rows, so Layout routing never dispatches
     // input to it directly.
-    internal void Activate() => Clicked?.Invoke(this, EventArgs.Empty);
+    internal void Activate() => Activated?.Invoke(this, EventArgs.Empty);
     #endregion
 
     #region Fields

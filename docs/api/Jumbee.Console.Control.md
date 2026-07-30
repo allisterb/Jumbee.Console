@@ -176,7 +176,7 @@ public int ActualWidth { get; }
 
 ### <a id="Jumbee_Console_Control_Feeds"></a> Feeds
 
-A thread-safe snapshot of this control's currently live feed handles (each Feed(Action, int) call
+A thread-safe snapshot of this control's currently live feed handles (each <xref href="Jumbee.Console.Control.Feed(System.Action%2cSystem.Int32%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref> call
 registers one; it self-unregisters when cancelled or completed).
 
 ```csharp
@@ -620,7 +620,7 @@ protected FeedHandle Feed(Action tick, TimeSpan interval, Action<Exception>? onE
 
     <p></p><code class="paramref">tick</code> <b>always</b> runs on the UI thread — it may read and mutate control state directly (no
     marshaling), but it also means heavy work in it runs at frame start and delays the frame. For a tick that needs
-    expensive <em>off-thread</em> work, use the Feed<T>(Func<T>, Action<T>, TimeSpan) overload
+    expensive <em>off-thread</em> work, use the <xref href="Jumbee.Console.Control.Feed%60%601(System.Func%7b%60%600%7d%2cSystem.Action%7b%60%600%7d%2cSystem.TimeSpan%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref> overload
     instead, which runs the work on a background thread and only applies the result on the UI thread.
 
     <p></p>

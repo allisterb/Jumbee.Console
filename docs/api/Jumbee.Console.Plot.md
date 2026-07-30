@@ -543,8 +543,8 @@ as a fraction (0..1) of the spacing.
 
 ### <a id="Jumbee_Console_Plot_AddHBars_System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Double_System_Double_"></a> AddHBars\(double\[\], double\[\], Color?, double, double\)
 
-Adds horizontal bars — each category at a Y <code class="paramref">position</code> with its bar growing along X from
-<code class="paramref">baseline</code> to its value.
+Adds horizontal bars — each category at a Y coordinate from <code class="paramref">positions</code> with its bar growing
+along X from <code class="paramref">baseline</code> to its value.
 
 ```csharp
 public Plot AddHBars(double[] positions, double[] values, Color? color = null, double baseline = 0, double width = 0.8)
@@ -769,7 +769,7 @@ public Plot AddScatter(double[] xs, double[] ys, PlotBrush brush = PlotBrush.Bra
 The <code class="paramref">brush</code> sets the marker (and its sub-cell resolution); <code class="paramref">color</code> defaults
 to the palette.
 
-<p>Scatter is also markedly cheaper to draw than a line series (AddSeries(IReadOnlyCollection&lt;double&gt;, IReadOnlyCollection&lt;double&gt;, PointPen))
+<p>Scatter is also markedly cheaper to draw than a line series (<xref href="Jumbee.Console.Plot.AddSeries(System.Double%5b%5d%2cSystem.Double%5b%5d%2cConsolePlot.Drawing.Tools.PointPen)" data-throw-if-not-resolved="false"></xref>)
 for dense or high-frequency data such as an audio waveform: a line rasterizes a segment between every
 consecutive pair of points, whereas scatter plots each point on its own. When the point count is high and the
 connecting lines add little, prefer scatter for a large drawing-cost win.</p>

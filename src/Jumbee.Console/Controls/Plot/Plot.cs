@@ -14,14 +14,14 @@ using CColor = ConsoleGUI.Data.Color;
 
 /// <summary>
 /// A line/scatter chart backed by the ConsolePlot library, rendered into the control's buffer. Add data with
-/// <see cref="AddSeries"/> and tune the axes/grid/ticks with the <c>Configure*</c> methods.
+/// <see cref="AddSeries(double[], double[], PointPen)"/> and tune the axes/grid/ticks with the <c>Configure*</c> methods.
 /// </summary>
 /// <remarks>
 /// The plot fills its container and re-draws to fit whenever the control is resized; all configuration is replayed
 /// on each rebuild, so settings survive resizing.
 /// <para>For data that changes every frame (a live scope, a streaming chart), add the series ONCE with
 /// <see cref="AddLiveSeries"/> and feed it via the returned <see cref="PlotSeries"/> handle
-/// (<c>SetData</c>/<c>Push</c>) rather than rebuilding with <see cref="Clear"/> + <see cref="AddSeries"/> each frame —
+/// (<c>SetData</c>/<c>Push</c>) rather than rebuilding with <see cref="Clear"/> + <see cref="AddSeries(double[], double[], PointPen)"/> each frame —
 /// the live path mutates the data in place without re-allocating the plot, and it keeps your <c>Configure*</c> styling
 /// (which <see cref="Clear"/> would otherwise drop from the data list).</para>
 /// </remarks>
@@ -187,7 +187,7 @@ public class Plot : Control
     /// <remarks>
     /// The <paramref name="brush"/> sets the marker (and its sub-cell resolution); <paramref name="color"/> defaults
     /// to the palette.
-    /// <para>Scatter is also markedly cheaper to draw than a line series (<see cref="AddSeries(IReadOnlyCollection{double}, IReadOnlyCollection{double}, PointPen)"/>)
+    /// <para>Scatter is also markedly cheaper to draw than a line series (<see cref="AddSeries(double[], double[], PointPen)"/>)
     /// for dense or high-frequency data such as an audio waveform: a line rasterizes a segment between every
     /// consecutive pair of points, whereas scatter plots each point on its own. When the point count is high and the
     /// connecting lines add little, prefer scatter for a large drawing-cost win.</para>
@@ -450,8 +450,8 @@ public class Plot : Control
     }
 
     /// <summary>
-    /// Adds horizontal bars — each category at a Y <paramref name="position"/> with its bar growing along X from
-    /// <paramref name="baseline"/> to its value.
+    /// Adds horizontal bars — each category at a Y coordinate from <paramref name="positions"/> with its bar growing
+    /// along X from <paramref name="baseline"/> to its value.
     /// </summary>
     /// <remarks>
     /// <paramref name="color"/> defaults to the palette; <paramref name="width"/> is the bar thickness as a fraction
@@ -500,7 +500,9 @@ public class Plot : Control
             double lo = min ?? dataMin, hi = max ?? dataMax;
             var map = ColormapFunc(colormap);
             // The grid tiles the unit-per-cell rectangle 0..cols × 0..rows; use Configure* to relabel the axes.
-            AddElement(plot => plot.AddHeatmap(values, 0, cols, 0, rows, lo, hi, v => map(v), cellText is null ? null : v => cellText(v)));
+            // ConsolePlot's cellText param is nullable-oblivious (declared Func<,> with a null default) — passing null
+            // means "no cell labels", which is the intent here; null! states that to the compiler.
+            AddElement(plot => plot.AddHeatmap(values, 0, cols, 0, rows, lo, hi, v => map(v), cellText is null ? null! : v => cellText(v)));
         });
         return this;
     }

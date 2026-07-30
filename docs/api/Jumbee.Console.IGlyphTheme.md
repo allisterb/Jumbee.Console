@@ -43,6 +43,19 @@ string CheckboxUnchecked { get; }
 
  string
 
+### <a id="Jumbee_Console_IGlyphTheme_ProgressBar"></a> ProgressBar
+
+The glyphs a <code>ProgressBar</code> draws its bar with (colours come from <xref href="Jumbee.Console.IStyleTheme.ProgressBar" data-throw-if-not-resolved="false"></xref>).
+    Defaults to <xref href="Jumbee.Console.ProgressBarGlyphs.Default" data-throw-if-not-resolved="false"></xref> (the solid sub-cell band).
+
+```csharp
+ProgressBarGlyphs ProgressBar { get; }
+```
+
+#### Property Value
+
+ [ProgressBarGlyphs](Jumbee.Console.ProgressBarGlyphs.md)
+
 ### <a id="Jumbee_Console_IGlyphTheme_RadioSelected"></a> RadioSelected
 
 Glyph for a selected radio button.

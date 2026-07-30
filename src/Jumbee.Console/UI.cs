@@ -784,7 +784,7 @@ public static class UI
     #endregion
 
     #region Events
-    /// <summary>Raised by <see cref="SetTheme"/> after the active themes change, so live controls re-apply them.</summary>
+    /// <summary>Raised by <see cref="SetTheme(IStyleTheme, IGlyphTheme)"/> after the active themes change, so live controls re-apply them.</summary>
     /// <remarks>Controls subscribe in their constructor and unsubscribe on <see cref="IDisposable.Dispose"/>.</remarks>
     public static event EventHandler? ThemeChanged;
 

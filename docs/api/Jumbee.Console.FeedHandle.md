@@ -3,7 +3,7 @@
 Namespace: [Jumbee.Console](Jumbee.Console.md)  
 Assembly: Jumbee.Console.dll  
 
-A handle to a running background feed started by Control.Feed(Action, int) and its overloads.
+A handle to a running background feed started by <xref href="Jumbee.Console.Control.Feed(System.Action%2cSystem.Int32%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref> and its overloads.
 Cancel it to stop the feed; await <xref href="Jumbee.Console.FeedHandle.Completion" data-throw-if-not-resolved="false"></xref> (or <xref href="Jumbee.Console.FeedHandle.StopAsync" data-throw-if-not-resolved="false"></xref>) to know the in-flight tick
 has finished — for safely disposing a resource the feed's producer reads.
 

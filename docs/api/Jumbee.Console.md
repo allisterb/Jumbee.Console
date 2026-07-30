@@ -145,7 +145,7 @@ Arguments for <xref href="Jumbee.Console.MultiTabCodeEditor.DocumentClosing" dat
 
  [FeedHandle](Jumbee.Console.FeedHandle.md)
 
-A handle to a running background feed started by Control.Feed(Action, int) and its overloads.
+A handle to a running background feed started by <xref href="Jumbee.Console.Control.Feed(System.Action%2cSystem.Int32%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref> and its overloads.
 Cancel it to stop the feed; await <xref href="Jumbee.Console.FeedHandle.Completion" data-throw-if-not-resolved="false"></xref> (or <xref href="Jumbee.Console.FeedHandle.StopAsync" data-throw-if-not-resolved="false"></xref>) to know the in-flight tick
 has finished — for safely disposing a resource the feed's producer reads.
 
@@ -326,6 +326,13 @@ Collects live process/runtime performance metrics for the perf HUD by reading th
 <code>System.Runtime</code> meter wraps (<xref href="System.GC" data-throw-if-not-resolved="false"></xref>, <xref href="System.Environment" data-throw-if-not-resolved="false"></xref>, <xref href="System.Threading.ThreadPool" data-throw-if-not-resolved="false"></xref>,
 <xref href="System.Threading.Monitor" data-throw-if-not-resolved="false"></xref>) directly — no <code>MeterListener</code>, so there is nothing to sample-schedule and no
 observable-instrument staleness.
+
+ [ProgressBar](Jumbee.Console.ProgressBar.md)
+
+A single-row task progress display, modelled on one row of a Spectre.Console <code>Progress</code>: a
+<xref href="Jumbee.Console.ProgressBar.Description" data-throw-if-not-resolved="false"></xref>, a bar filled to <xref href="Jumbee.Console.ProgressBar.Value" data-throw-if-not-resolved="false"></xref> / <xref href="Jumbee.Console.ProgressBar.Max" data-throw-if-not-resolved="false"></xref>, then optional
+<xref href="Jumbee.Console.ProgressBar.ShowPercentage?text=percentage" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.ProgressBar.TimeDisplay?text=time" data-throw-if-not-resolved="false"></xref> and
+<xref href="Jumbee.Console.ProgressBar.ShowSpinner?text=spinner" data-throw-if-not-resolved="false"></xref> columns — e.g. <code>Consulting the oracle ──── 96% 00:00:00 ⣷</code>.
 
  [Prompt](Jumbee.Console.Prompt.md)
 
@@ -539,6 +546,18 @@ window it in <code>Blit</code> (the <xref href="Jumbee.Console.ControlFrame" dat
 
 The ordered colours a plot cycles through for series that don't name one.
 
+ [ProgressBarGlyphs](Jumbee.Console.ProgressBarGlyphs.md)
+
+The glyphs (no colours) a <code>ProgressBar</code> draws its bar with: the <xref href="Jumbee.Console.ProgressBarGlyphs.Fill" data-throw-if-not-resolved="false"></xref> for a filled cell and the
+<xref href="Jumbee.Console.ProgressBarGlyphs.Track" data-throw-if-not-resolved="false"></xref> for an empty one, plus the <xref href="Jumbee.Console.ProgressBarGlyphs.Mode" data-throw-if-not-resolved="false"></xref> that selects solid-band or per-cell-glyph
+rendering.
+
+ [ProgressBarStyle](Jumbee.Console.ProgressBarStyle.md)
+
+The per-part <xref href="Jumbee.Console.Style" data-throw-if-not-resolved="false"></xref> a <code>ProgressBar</code> composes: the task <xref href="Jumbee.Console.ProgressBarStyle.Description" data-throw-if-not-resolved="false"></xref>, the
+filled and empty portions of the bar (<xref href="Jumbee.Console.ProgressBarStyle.Fill" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.ProgressBarStyle.Track" data-throw-if-not-resolved="false"></xref>), and the three optional
+readouts — <xref href="Jumbee.Console.ProgressBarStyle.Percentage" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.ProgressBarStyle.Time" data-throw-if-not-resolved="false"></xref> and <xref href="Jumbee.Console.ProgressBarStyle.Spinner" data-throw-if-not-resolved="false"></xref>.
+
  [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md)
 
 The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track
@@ -661,6 +680,14 @@ Selects the colour map a <xref href="Jumbee.Console.Plot" data-throw-if-not-reso
  [PlotLabelAlign](Jumbee.Console.PlotLabelAlign.md)
 
 Horizontal anchoring of a <xref href="Jumbee.Console.Plot" data-throw-if-not-resolved="false"></xref> annotation label relative to its point.
+
+ [ProgressBarFillMode](Jumbee.Console.ProgressBarFillMode.md)
+
+How a <code>ProgressBar</code> draws its bar.
+
+ [ProgressTimeDisplay](Jumbee.Console.ProgressTimeDisplay.md)
+
+What the optional time column shows.
 
  [ScrollBarMode](Jumbee.Console.ScrollBarMode.md)
 

@@ -28,6 +28,7 @@ Control ←
 [Link](Jumbee.Console.Link.md), 
 [ListBox](Jumbee.Console.ListBox.md), 
 [MenuBar](Jumbee.Console.MenuBar.md), 
+[ProgressBar](Jumbee.Console.ProgressBar.md), 
 [Select](Jumbee.Console.Select.md), 
 [Sparkline](Jumbee.Console.Sparkline.md), 
 [SpectreControl<T\>](Jumbee.Console.SpectreControl\-1.md), 

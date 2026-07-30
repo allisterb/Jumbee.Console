@@ -38,7 +38,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [Dispatcher](Jumbee.Console.Dispatcher.md) — Owns a single UI thread and a serialized work queue. UI state mutation and rendering are intended to run on this thread; other threads marshal work onto it via `Post`, `Invoke`, or `InvokeAsync`.
 - [DockPanel](Jumbee.Console.DockPanel.md) — A two-child layout that pins one control to an edge and fills the remaining space with the other.
 - [DocumentClosingEventArgs](Jumbee.Console.DocumentClosingEventArgs.md) — Arguments for `DocumentClosing`. Set `Cancel` to keep the document open (e.g. after confirming unsaved changes).
-- [FeedHandle](Jumbee.Console.FeedHandle.md) — A handle to a running background feed started by Control.Feed(Action, int) and its overloads. Cancel it to stop the feed; await `Completion` (or `StopAsync`) to know the in-flight tick has finished — for safely disposing a resource the feed's producer reads.
+- [FeedHandle](Jumbee.Console.FeedHandle.md) — A handle to a running background feed started by `Feed` and its overloads. Cancel it to stop the feed; await `Completion` (or `StopAsync`) to know the in-flight tick has finished — for safely disposing a resource the feed's producer reads.
 - [FocusInputEvent](Jumbee.Console.FocusInputEvent.md) — Terminal focus gained/lost (DEC mode 1004).
 - [Footer](Jumbee.Console.Footer.md) — A one-row key-hints bar (e.g. `^j Send ^t Method ^c Quit f1 Help`), filling the available width.
 - [Gauge](Jumbee.Console.Gauge.md) — A single-row horizontal progress bar: the track is filled proportional to `Value` / `Max`, optionally followed by the percentage and the raw value — e.g. `████████░░░░ 34.5% (126)`. For dashboards (year/day progress, a deployment %, a capacity meter).
@@ -70,6 +70,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [Plot](Jumbee.Console.Plot.md) — A line/scatter chart backed by the ConsolePlot library, rendered into the control's buffer. Add data with `AddSeries` and tune the axes/grid/ticks with the `Configure*` methods.
 - [PlotSeries](Jumbee.Console.PlotSeries.md) — A live, updatable series in a `Plot`. Returned by `AddLiveSeries` (line), `AddLiveScatter` (markers) or `AddLiveBars`; hold onto it and feed data as it arrives with `SetData`, `SetValues`, `Push` or `Clear`.
 - [ProcessMetrics](Jumbee.Console.ProcessMetrics.md) — Collects live process/runtime performance metrics for the perf HUD by reading the runtime APIs the `System.Runtime` meter wraps (`GC`, `Environment`, `ThreadPool`, `Monitor`) directly — no `MeterListener`, so there is nothing to sample-schedule and no observable-instrument staleness.
+- [ProgressBar](Jumbee.Console.ProgressBar.md) — A single-row task progress display, modelled on one row of a Spectre.Console `Progress`: a `Description`, a bar filled to `Value` / `Max`, then optional `ShowPercentage?text=percentage`, `TimeDisplay?text=time` and `ShowSpinner?text=spinner` columns — e.g. `Consulting the oracle ──── 96% 00:00:00 ⣷`.
 - [Prompt](Jumbee.Console.Prompt.md) — Base class for controls that prompt the user for input.
 - [Pty](Jumbee.Console.Pty.md) — Factory that opens an `IPty` using the right backend for the current OS: the Windows pseudo console (`ConPty`) or a Unix pseudo terminal (`UnixPty`).
 - [RadioButton](Jumbee.Console.RadioButton.md) — A labelled radio button.
@@ -123,6 +124,8 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [GaugeStyle](Jumbee.Console.GaugeStyle.md) — The per-part `Style` a `Gauge` composes: the filled portion of the bar, the empty track behind it, and the percent/value readout (and any inline label).
 - [HScroll](Jumbee.Console.HScroll.md) — An opt-in horizontal-scroll offset for controls that render a fixed-width buffer wider than their viewport and window it in `Blit` (the `ControlFrame` only scrolls vertically).
 - [PlotPalette](Jumbee.Console.PlotPalette.md) — The ordered colours a plot cycles through for series that don't name one.
+- [ProgressBarGlyphs](Jumbee.Console.ProgressBarGlyphs.md) — The glyphs (no colours) a `ProgressBar` draws its bar with: the `Fill` for a filled cell and the `Track` for an empty one, plus the `Mode` that selects solid-band or per-cell-glyph rendering.
+- [ProgressBarStyle](Jumbee.Console.ProgressBarStyle.md) — The per-part `Style` a `ProgressBar` composes: the task `Description`, the filled and empty portions of the bar (`Fill`/`Track`), and the three optional readouts — `Percentage`, `Time` and `Spinner`.
 - [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md) — The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track behind it, and the two end arrows.
 - [ScrollBarStyle](Jumbee.Console.ScrollBarStyle.md) — The per-part `Style` (foreground/background/decoration, no glyph) a control frame applies to its vertical scrollbar.
 - [Style](Jumbee.Console.Style.md) — A text style — foreground/background colour and text decoration — wrapping a Spectre.Console style. Exposes the named colour palette (`Red1`, `Cyan1`, …) and decoration presets (`Bold`, `Italic`, …) as ready-made tokens; combine them with `|`.
@@ -156,6 +159,8 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [PlotBrush](Jumbee.Console.PlotBrush.md) — Selects the glyph set (and thus the sub-cell resolution) a `Plot` series is drawn with.
 - [PlotColormap](Jumbee.Console.PlotColormap.md) — Selects the colour map a `Plot` heatmap uses to turn cell values into colours.
 - [PlotLabelAlign](Jumbee.Console.PlotLabelAlign.md) — Horizontal anchoring of a `Plot` annotation label relative to its point.
+- [ProgressBarFillMode](Jumbee.Console.ProgressBarFillMode.md) — How a `ProgressBar` draws its bar.
+- [ProgressTimeDisplay](Jumbee.Console.ProgressTimeDisplay.md) — What the optional time column shows.
 - [ScrollBarMode](Jumbee.Console.ScrollBarMode.md) — How a control frame renders its vertical scrollbar.
 - [SelectionStyle](Jumbee.Console.SelectionStyle.md) — How a navigable control (e.g. `IStyleTheme` consumers like ListBox, Tree, TabPanel) renders its selected/active item.
 - [SelectPopupPosition](Jumbee.Console.SelectPopupPosition.md) — Where a `Select`'s dropdown opens relative to the control.

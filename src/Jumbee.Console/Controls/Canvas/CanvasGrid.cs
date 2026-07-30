@@ -104,7 +104,7 @@ internal sealed class PatternGrid : IGrid
 
 /// <summary>
 /// A grid whose cells each hold a single fixed character (dot, block, bar, or a custom glyph), giving 1×1 resolution.
-/// When <paramref name="applyColorToBg"/> is set (used by <see cref="CanvasMarker.Block"/>) the cell's colour is also
+/// When <c>applyColorToBg</c> is set (used by <see cref="CanvasMarker.Block"/>) the cell's colour is also
 /// written as the background, so it overwrites any earlier glyph yet still lets a later layer overlay a foreground.
 /// </summary>
 internal sealed class CharGrid : IGrid

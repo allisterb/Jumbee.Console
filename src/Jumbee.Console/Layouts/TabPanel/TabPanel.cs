@@ -449,7 +449,7 @@ public class TabPanel : Layout<TabPanelDockPanel>
     private TabAddButton CreateAddButton()
     {
         var button = new TabAddButton();
-        button.Clicked += (_, _) => NewTabRequested?.Invoke();
+        button.Activated += (_, _) => NewTabRequested?.Invoke();
         return button;
     }
 

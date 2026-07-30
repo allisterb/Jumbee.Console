@@ -196,6 +196,8 @@
       href: Jumbee.Console.PlotSeries.md
     - name: ProcessMetrics
       href: Jumbee.Console.ProcessMetrics.md
+    - name: ProgressBar
+      href: Jumbee.Console.ProgressBar.md
     - name: Prompt
       href: Jumbee.Console.Prompt.md
     - name: Pty
@@ -297,6 +299,10 @@
       href: Jumbee.Console.HScroll.md
     - name: PlotPalette
       href: Jumbee.Console.PlotPalette.md
+    - name: ProgressBarGlyphs
+      href: Jumbee.Console.ProgressBarGlyphs.md
+    - name: ProgressBarStyle
+      href: Jumbee.Console.ProgressBarStyle.md
     - name: ScrollBarGlyphs
       href: Jumbee.Console.ScrollBarGlyphs.md
     - name: ScrollBarStyle
@@ -353,6 +359,10 @@
       href: Jumbee.Console.PlotColormap.md
     - name: PlotLabelAlign
       href: Jumbee.Console.PlotLabelAlign.md
+    - name: ProgressBarFillMode
+      href: Jumbee.Console.ProgressBarFillMode.md
+    - name: ProgressTimeDisplay
+      href: Jumbee.Console.ProgressTimeDisplay.md
     - name: ScrollBarMode
       href: Jumbee.Console.ScrollBarMode.md
     - name: SelectPopupPosition

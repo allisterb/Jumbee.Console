@@ -344,7 +344,7 @@ public class AnsiConsoleBuffer : IAnsiConsole, IAnsiConsoleInput, IAnsiConsoleOu
 
     #region Fields
     /// <summary>
-    /// When <see langword="true"/>, <see cref="Write"/> and <see cref="Clear"/> are marshaled onto the UI thread
+    /// When <see langword="true"/>, <see cref="Write(IRenderable)"/> and <see cref="Clear"/> are marshaled onto the UI thread
     /// via <see cref="UI.Invoke"/> so their buffer mutations are serialized with rendering and resizing.
     /// </summary>
     /// <remarks>
@@ -353,10 +353,10 @@ public class AnsiConsoleBuffer : IAnsiConsole, IAnsiConsoleInput, IAnsiConsoleOu
     /// preserve the original synchronous IAnsiConsole behavior for existing Spectre.Console controls.
     /// </remarks>
     public bool marshal;
-    /// <summary>When <see langword="true"/>, <see cref="Write"/> wraps glyphs to the next row at the buffer's
+    /// <summary>When <see langword="true"/>, <see cref="Write(IRenderable)"/> wraps glyphs to the next row at the buffer's
     /// right edge instead of clipping them. See the wrap note in <see cref="_Write"/>.</summary>
     public bool wrap;
-    /// <summary>When <see langword="true"/>, <see cref="Write"/> soft-wraps at <b>word</b> boundaries (breaking to
+    /// <summary>When <see langword="true"/>, <see cref="Write(IRenderable)"/> soft-wraps at <b>word</b> boundaries (breaking to
     /// the next row before a word that wouldn't fit), with the character-level wrap as a fallback for an over-long
     /// word. Used by <see cref="MarkdownViewer"/> so paragraph text reflows to the buffer width instead of clipping.</summary>
     public bool wrapWords;

@@ -3301,6 +3301,25 @@ public Color Lighten(double amount)
 
  [Color](Jumbee.Console.Color.md)
 
+### <a id="Jumbee_Console_Color_Mix_Jumbee_Console_Color_System_Double_"></a> Mix\(Color, double\)
+
+This colour blended <code class="paramref">amount</code> (0..1) of the way toward <code class="paramref">to</code> in RGB
+    (0 = this colour, 1 = <code class="paramref">to</code>). Used for gradients.
+
+```csharp
+public Color Mix(Color to, double amount)
+```
+
+#### Parameters
+
+`to` [Color](Jumbee.Console.Color.md)
+
+`amount` double
+
+#### Returns
+
+ [Color](Jumbee.Console.Color.md)
+
 ### <a id="Jumbee_Console_Color_ToConsoleColor"></a> ToConsoleColor\(\)
 
 This colour as the nearest <xref href="System.ConsoleColor" data-throw-if-not-resolved="false"></xref> — a lossy map onto the 16 console

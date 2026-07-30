@@ -338,6 +338,19 @@ Style PrimaryHover { get; }
 
  [Style](Jumbee.Console.Style.md)
 
+### <a id="Jumbee_Console_IStyleTheme_ProgressBar"></a> ProgressBar
+
+The part styles a <code>ProgressBar</code> composes (description, bar fill/track, percentage, time,
+    spinner). Defaults to <xref href="Jumbee.Console.ProgressBarStyle.Default" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+ProgressBarStyle ProgressBar { get; }
+```
+
+#### Property Value
+
+ [ProgressBarStyle](Jumbee.Console.ProgressBarStyle.md)
+
 ### <a id="Jumbee_Console_IStyleTheme_Scrim"></a> Scrim
 
 The tint a modal overlay scrim blends the layer beneath it toward. Defaults to a near-black.
