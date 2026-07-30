@@ -101,6 +101,10 @@ public readonly partial struct Color : System.IEquatable<Color>
     /// <summary>A copy of this colour blended <paramref name="amount"/> (0..1) of the way toward black.</summary>
     public Color Darken(double amount) => Lerp(this, Black, amount);
 
+    /// <summary>This colour blended <paramref name="amount"/> (0..1) of the way toward <paramref name="to"/> in RGB
+    /// (0 = this colour, 1 = <paramref name="to"/>). Used for gradients.</summary>
+    public Color Mix(Color to, double amount) => Lerp(this, to, amount);
+
     private static Color Lerp(Color a, Color b, double t)
     {
         t = System.Math.Clamp(t, 0.0, 1.0);

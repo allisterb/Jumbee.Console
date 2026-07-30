@@ -113,4 +113,66 @@ public class ProgressBarTests
     [Fact]
     public void GlyphMode_Indeterminate_NarrowWidth_DoesNotThrow()
         => Assert.NotNull(ConsoleSnapshot.ToText(new ProgressBar("x") { IsIndeterminate = true }.WithGlyphs(ProgressBarGlyphs.Ascii), 2, 1));
+
+    [Fact]
+    public void Gradient_FillCellsVaryByPosition()
+    {
+        // A gradient makes the first and last filled cells different colours (solid mode → background band).
+        var pb = new ProgressBar(value: 100) { ShowPercentage = false }
+            .WithGlyphs(ProgressBarGlyphs.Solid);
+        pb.Style = pb.Style.WithGradient(new Color(80, 230, 200), new Color(10, 60, 90));
+        var buf = ConsoleSnapshot.Render(pb, 20, 1);
+        Assert.NotNull(buf[0, 0].Background);
+        Assert.NotNull(buf[19, 0].Background);
+        Assert.NotEqual(buf[0, 0].Background, buf[19, 0].Background);   // gradient endpoints differ
+    }
+
+    [Fact]
+    public void Gradient_NotSet_FillIsUniform()
+    {
+        var buf = ConsoleSnapshot.Render(new ProgressBar(value: 100) { ShowPercentage = false }.WithFill(Style.Red), 20, 1);
+        Assert.Equal(buf[0, 0].Background, buf[19, 0].Background);   // flat fill: every cell the same
+    }
+
+    [Fact]
+    public void GlyphMode_FillBackground_IsHonoured()
+    {
+        // A fill Style carrying a background paints a band behind the glyphs (image-1 look).
+        var pb = new ProgressBar(value: 100) { ShowPercentage = false }.WithGlyphs(ProgressBarGlyphs.Hatched);
+        pb.Style = pb.Style with { Fill = (Style)new Color(120, 220, 220) | Style.Bg(new Color(0, 40, 50)) };
+        var buf = ConsoleSnapshot.Render(pb, 12, 1);
+        Assert.NotNull(buf[0, 0].Background);   // glyph now sits on a coloured band, not the terminal bg
+    }
+
+    [Fact]
+    public void NewPresets_Render()
+    {
+        Assert.Contains("▰", ConsoleSnapshot.ToText(new ProgressBar(value: 50) { ShowPercentage = false }.WithGlyphs(ProgressBarGlyphs.Dashed), 20, 1));
+        Assert.Contains("━", ConsoleSnapshot.ToText(new ProgressBar(value: 50) { ShowPercentage = false }.WithGlyphs(ProgressBarGlyphs.Line), 20, 1));
+        Assert.Contains("⣿", ConsoleSnapshot.ToText(new ProgressBar(value: 50) { ShowPercentage = false }.WithGlyphs(ProgressBarGlyphs.Dots), 20, 1));
+    }
+
+    [Fact]
+    public void RightPad_ReservesTrailingCells()
+    {
+        // At 100% with no pad the last bar cell is filled; with a right pad the last N cells are blank instead.
+        var full = ConsoleSnapshot.Render(new ProgressBar(value: 100) { ShowPercentage = false }.WithFill(Style.Red), 20, 1);
+        Assert.NotNull(full[19, 0].Background);
+
+        var padded = ConsoleSnapshot.Render(new ProgressBar(value: 100) { ShowPercentage = false }.WithFill(Style.Red).WithPadding(0, 4), 20, 1);
+        Assert.Null(padded[19, 0].Background);   // last 4 cells reserved (blank)
+        Assert.Null(padded[16, 0].Background);
+        Assert.NotNull(padded[15, 0].Background); // fill ends before the pad
+    }
+
+    [Fact]
+    public void LeftPad_ShiftsRowRight()
+    {
+        var text = ConsoleSnapshot.ToText(new ProgressBar("Task", 50).WithPadding(3, 0), 30, 1);
+        Assert.StartsWith("   Task", text.TrimEnd('\n'));   // three leading blanks before the description
+    }
+
+    [Fact]
+    public void Padding_OverWidth_DoesNotThrow()
+        => Assert.NotNull(ConsoleSnapshot.ToText(new ProgressBar("x", 50).WithPadding(50, 50), 10, 1));
 }

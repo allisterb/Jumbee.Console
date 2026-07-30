@@ -5,7 +5,6 @@ using System.Collections.Generic;
 
 using Spectre.Console.Rendering;
 
-using SColor = Spectre.Console.Color;
 using SStyle = Spectre.Console.Style;
 
 /// <summary>What the optional time column shows.</summary>
@@ -89,6 +88,12 @@ public class ProgressBar : RenderableControl
     /// <summary>The bar glyphs and fill mode (solid band vs per-cell glyphs like a hatch or segments). Defaults to
     /// <see cref="IGlyphTheme.ProgressBar"/>.</summary>
     public ProgressBarGlyphs Glyphs { get => _glyphs; set => SetAtomicProperty(ref _glyphs, value, themeOverride: true); }
+
+    /// <summary>Blank cells reserved at the left edge, before the description. Default 0.</summary>
+    public int LeftPad { get => _leftPad; set => SetAtomicProperty(ref _leftPad, value, validate: v => Math.Max(0, v)); }
+
+    /// <summary>Blank cells reserved at the right edge, after the readouts — breathing room from the frame/edge. Default 0.</summary>
+    public int RightPad { get => _rightPad; set => SetAtomicProperty(ref _rightPad, value, validate: v => Math.Max(0, v)); }
     #endregion
 
     #region Methods
@@ -97,6 +102,14 @@ public class ProgressBar : RenderableControl
 
     /// <summary>Sets the bar glyphs/fill mode fluently (e.g. <c>WithGlyphs(ProgressBarGlyphs.Hatched)</c>); marks it an override.</summary>
     public ProgressBar WithGlyphs(ProgressBarGlyphs glyphs) { Glyphs = glyphs; return this; }
+
+    /// <summary>Makes the fill a gradient from <paramref name="from"/> to <paramref name="to"/> across the bar (a
+    /// fluent shorthand for <c>Style = Style.WithGradient(from, to)</c>); marks the style an override.</summary>
+    public ProgressBar WithGradient(Color from, Color to) { Style = _style.WithGradient(from, to); return this; }
+
+    /// <summary>Reserves <paramref name="left"/>/<paramref name="right"/> blank cells at the row's edges (a fluent
+    /// shorthand for setting <see cref="LeftPad"/>/<see cref="RightPad"/>).</summary>
+    public ProgressBar WithPadding(int left, int right) { LeftPad = left; RightPad = right; return this; }
 
     /// <summary>Starts the internal clock (for the time column) and, when a spinner or indeterminate pulse is shown,
     /// its animation. Idempotent.</summary>
@@ -136,6 +149,11 @@ public class ProgressBar : RenderableControl
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth)
     {
         int width = Math.Max(1, maxWidth);
+        // Reserve the edge padding first; everything else lays out within the inset row. Clamped so a huge pad can't
+        // drive the usable width below one cell (or make the emitted spacers overrun the row).
+        int lpad = Math.Clamp(_leftPad, 0, Math.Max(0, width - 1));
+        int rpad = Math.Clamp(_rightPad, 0, Math.Max(0, width - 1 - lpad));
+        int inner = Math.Max(1, width - lpad - rpad);
         double fraction = Math.Clamp(_max <= 0 ? 0 : _value / _max, 0, 1);
 
         // The three optional right-hand columns, each carrying its own style, so they cannot be one segment. Each
@@ -148,35 +166,52 @@ public class ProgressBar : RenderableControl
         // Fit the description into whatever is left after the bar's minimum and the right columns, ellipsizing it
         // rather than starving the bar. A one-cell gap separates the description from the bar.
         string desc = _description ?? "";
-        int descBudget = width - rightWidth - MinBarWidth - 1;
+        int descBudget = inner - rightWidth - MinBarWidth - 1;
         if (desc.Length > 0 && descBudget < desc.Length) desc = descBudget <= 1 ? "" : desc[..(descBudget - 1)] + "…";
         string left = desc.Length == 0 ? "" : desc + " ";
 
-        int barWidth = Math.Max(1, width - left.Length - rightWidth);
+        int barWidth = Math.Max(1, inner - left.Length - rightWidth);
+
+        if (lpad > 0) yield return new Segment(new string(' ', lpad));
 
         var textStyle = _style.Description.SpectreConsoleStyle;
         if (left.Length > 0) yield return new Segment(left, textStyle);
 
-        var fillColor = _style.Fill.SpectreConsoleStyle?.Foreground ?? SColor.Green;
-        var trackColor = _style.Track.SpectreConsoleStyle?.Foreground ?? SColor.Grey;
         // Solid mode paints background-colour bands (with a sub-cell edge); Glyph mode paints per-cell foreground
-        // glyphs. Each returns the same left-to-right run of the bar's cells.
+        // glyphs (honouring the style's fill/track backgrounds). Each returns the same left-to-right run of cells,
+        // and each reads its colours from _style — including the optional per-cell gradient (see FillColorAt).
         var barSegments = _glyphs.Mode == ProgressBarFillMode.Glyph
-            ? (_indeterminate ? PulseBarGlyph(barWidth, fillColor, trackColor) : FillBarGlyph(barWidth, fraction, fillColor, trackColor))
-            : (_indeterminate ? PulseBar(barWidth, fillColor, trackColor) : FillBar(barWidth, fraction, fillColor, trackColor));
+            ? (_indeterminate ? PulseBarGlyph(barWidth) : FillBarGlyph(barWidth, fraction))
+            : (_indeterminate ? PulseBar(barWidth) : FillBar(barWidth, fraction));
         foreach (var segment in barSegments)
             yield return segment;
 
         if (pct.Length > 0) yield return new Segment(pct, _style.Percentage.SpectreConsoleStyle);
         if (time.Length > 0) yield return new Segment(time, _style.Time.SpectreConsoleStyle);
         if (spin.Length > 0) yield return new Segment(spin, _style.Spinner.SpectreConsoleStyle);
+        if (rpad > 0) yield return new Segment(new string(' ', rpad));
     }
 
-    // A fill proportional to fraction: full fill cells, a fractional eighth-block edge (fill on the left, track on
-    // the right), then the remaining track — the smooth sub-cell bar shared with Gauge.
-    private static IEnumerable<Segment> FillBar(int barWidth, double fraction, SColor fillColor, SColor trackColor)
+    // The fill colour for cell `index` of `barWidth`: the flat Fill colour, or — when Style.GradientTo is set — a
+    // position-based interpolation from Fill's colour to GradientTo across the bar. Position-based (not fraction-
+    // based) so a cell keeps its colour as the bar fills; new cells simply reveal the next step of the gradient.
+    private Color FillColorAt(int index, int barWidth)
     {
-        var fillBand = new SStyle(background: fillColor);
+        Color from = _style.Fill.ForegroundColor ?? DefaultFill;
+        if (_style.GradientTo is not { } to) return from;
+        double t = barWidth <= 1 ? 0.0 : (double)index / (barWidth - 1);
+        return from.Mix(to, t);
+    }
+
+    private static SStyle SegStyle(Color fg, Color? bg) => new SStyle(foreground: fg, background: bg);
+
+    // A fill proportional to fraction: full fill cells, a fractional eighth-block edge (fill on the left, track on
+    // the right), then the remaining track — the smooth sub-cell bar shared with Gauge. Fill is drawn as a
+    // background band. With a gradient active the fill run is emitted per cell (each its own colour); otherwise a
+    // single run.
+    private IEnumerable<Segment> FillBar(int barWidth, double fraction)
+    {
+        Color trackColor = _style.Track.ForegroundColor ?? DefaultTrack;
         var trackBand = new SStyle(background: trackColor);
 
         double exact = fraction * barWidth;
@@ -187,60 +222,93 @@ public class ProgressBar : RenderableControl
         bool hasEdge = eighths > 0 && full < barWidth;
         int trackCells = barWidth - full - (hasEdge ? 1 : 0);
 
-        if (full > 0) yield return new Segment(new string(' ', full), fillBand);
-        if (hasEdge) yield return new Segment(LeftBlocks[eighths].ToString(), new SStyle(foreground: fillColor, background: trackColor));
+        if (_style.GradientTo is null)
+        {
+            if (full > 0) yield return new Segment(new string(' ', full), new SStyle(background: FillColorAt(0, barWidth)));
+        }
+        else
+        {
+            for (int i = 0; i < full; i++)
+                yield return new Segment(" ", new SStyle(background: FillColorAt(i, barWidth)));
+        }
+        if (hasEdge) yield return new Segment(LeftBlocks[eighths].ToString(), SegStyle(FillColorAt(full, barWidth), trackColor));
         if (trackCells > 0) yield return new Segment(new string(' ', trackCells), trackBand);
     }
 
     // Indeterminate: a band of fill ping-pongs across the track, its position driven by the animation frame. A
     // ping-pong (rather than a wrap) keeps each frame three contiguous runs, so nothing has to split across the seam.
-    private IEnumerable<Segment> PulseBar(int barWidth, SColor fillColor, SColor trackColor)
+    private IEnumerable<Segment> PulseBar(int barWidth)
     {
-        var fillBand = new SStyle(background: fillColor);
+        Color trackColor = _style.Track.ForegroundColor ?? DefaultTrack;
         var trackBand = new SStyle(background: trackColor);
 
-        // Band is about a quarter of the track, at least 3 cells — but never wider than the track itself, which is
-        // as narrow as one cell during the first layout pass (a naive Clamp(_, 3, barWidth) throws there, min > max).
-        int bandWidth = Math.Min(Math.Max(3, barWidth / 4), barWidth);
-        int span = barWidth - bandWidth;
-        int pos;
-        if (span <= 0)
+        int pos = PulsePosition(barWidth, out int bandWidth);
+        int after = barWidth - pos - bandWidth;
+        if (pos > 0) yield return new Segment(new string(' ', pos), trackBand);
+        if (_style.GradientTo is null)
         {
-            pos = 0;
+            yield return new Segment(new string(' ', bandWidth), new SStyle(background: FillColorAt(0, barWidth)));
         }
         else
         {
-            int t = _frame % (2 * span);
-            pos = t <= span ? t : 2 * span - t;
+            for (int i = 0; i < bandWidth; i++)
+                yield return new Segment(" ", new SStyle(background: FillColorAt(pos + i, barWidth)));
         }
-
-        int after = barWidth - pos - bandWidth;
-        if (pos > 0) yield return new Segment(new string(' ', pos), trackBand);
-        yield return new Segment(new string(' ', bandWidth), fillBand);
         if (after > 0) yield return new Segment(new string(' ', after), trackBand);
     }
 
     // Glyph mode: whole-cell fill (no sub-cell edge — the glyphs occupy full cells), each cell the fill or track
-    // glyph in the fill/track colour as foreground.
-    private IEnumerable<Segment> FillBarGlyph(int barWidth, double fraction, SColor fillColor, SColor trackColor)
+    // glyph in the fill/track colour as foreground, over the style's fill/track background (null = transparent).
+    private IEnumerable<Segment> FillBarGlyph(int barWidth, double fraction)
     {
+        Color trackColor = _style.Track.ForegroundColor ?? DefaultTrack;
+        Color? fillBg = _style.Fill.BackgroundColor;
+        Color? trackBg = _style.Track.BackgroundColor;
         int filled = Math.Clamp((int)Math.Round(fraction * barWidth), 0, barWidth);
-        if (filled > 0) yield return new Segment(Repeat(_glyphs.Fill, filled), new SStyle(foreground: fillColor));
-        if (filled < barWidth) yield return new Segment(Repeat(_glyphs.Track, barWidth - filled), new SStyle(foreground: trackColor));
+
+        if (_style.GradientTo is null)
+        {
+            if (filled > 0) yield return new Segment(Repeat(_glyphs.Fill, filled), SegStyle(FillColorAt(0, barWidth), fillBg));
+        }
+        else
+        {
+            for (int i = 0; i < filled; i++)
+                yield return new Segment(_glyphs.Fill, SegStyle(FillColorAt(i, barWidth), fillBg));
+        }
+        if (filled < barWidth) yield return new Segment(Repeat(_glyphs.Track, barWidth - filled), SegStyle(trackColor, trackBg));
     }
 
-    // Glyph-mode pulse: the same ping-pong band as PulseBar, but drawn with the fill/track glyphs.
-    private IEnumerable<Segment> PulseBarGlyph(int barWidth, SColor fillColor, SColor trackColor)
+    // Glyph-mode pulse: the same ping-pong band as PulseBar, but drawn with the fill/track glyphs (and backgrounds).
+    private IEnumerable<Segment> PulseBarGlyph(int barWidth)
     {
-        int bandWidth = Math.Min(Math.Max(3, barWidth / 4), barWidth);
-        int span = barWidth - bandWidth;
-        int pos = span <= 0 ? 0 : _frame % (2 * span) is var t && t <= span ? t : 2 * span - t;
+        Color trackColor = _style.Track.ForegroundColor ?? DefaultTrack;
+        Color? fillBg = _style.Fill.BackgroundColor;
+        Color? trackBg = _style.Track.BackgroundColor;
+        int pos = PulsePosition(barWidth, out int bandWidth);
         int after = barWidth - pos - bandWidth;
-        var fillStyle = new SStyle(foreground: fillColor);
-        var trackStyle = new SStyle(foreground: trackColor);
-        if (pos > 0) yield return new Segment(Repeat(_glyphs.Track, pos), trackStyle);
-        yield return new Segment(Repeat(_glyphs.Fill, bandWidth), fillStyle);
-        if (after > 0) yield return new Segment(Repeat(_glyphs.Track, after), trackStyle);
+        if (pos > 0) yield return new Segment(Repeat(_glyphs.Track, pos), SegStyle(trackColor, trackBg));
+        if (_style.GradientTo is null)
+        {
+            yield return new Segment(Repeat(_glyphs.Fill, bandWidth), SegStyle(FillColorAt(0, barWidth), fillBg));
+        }
+        else
+        {
+            for (int i = 0; i < bandWidth; i++)
+                yield return new Segment(_glyphs.Fill, SegStyle(FillColorAt(pos + i, barWidth), fillBg));
+        }
+        if (after > 0) yield return new Segment(Repeat(_glyphs.Track, after), SegStyle(trackColor, trackBg));
+    }
+
+    // The pulse band's left position (ping-pong) and its width. Band is about a quarter of the track, at least 3
+    // cells — but never wider than the track itself, which is as narrow as one cell during the first layout pass
+    // (a naive Clamp(_, 3, barWidth) throws there, min > max).
+    private int PulsePosition(int barWidth, out int bandWidth)
+    {
+        bandWidth = Math.Min(Math.Max(3, barWidth / 4), barWidth);
+        int span = barWidth - bandWidth;
+        if (span <= 0) return 0;
+        int t = _frame % (2 * span);
+        return t <= span ? t : 2 * span - t;
     }
 
     // Repeat a bar glyph across n cells. Fast path for the common single-char glyph; empty glyph degrades to a space
@@ -304,6 +372,8 @@ public class ProgressBar : RenderableControl
     private IReadOnlyList<string> _spinnerFrames;
     private ProgressBarStyle _style;
     private ProgressBarGlyphs _glyphs;
+    private int _leftPad;
+    private int _rightPad;
 
     private bool _running;
     private long _startTicks;
@@ -316,5 +386,9 @@ public class ProgressBar : RenderableControl
 
     // Left-anchored eighth blocks for the fractional fill edge (index = eighths filled, 0 = empty .. 8 = full).
     private static readonly char[] LeftBlocks = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+
+    // Fallbacks when a style leaves the fill/track colour unset (the shipped themes always set them).
+    private static readonly Color DefaultFill = new(90, 200, 120);
+    private static readonly Color DefaultTrack = new(120, 120, 130);
     #endregion
 }

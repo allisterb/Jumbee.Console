@@ -40,11 +40,18 @@ public readonly struct ProgressBarStyle : System.IEquatable<ProgressBarStyle>
 
     /// <summary>The animated spinner glyph.</summary>
     public Style Spinner { get; init; }
+
+    /// <summary>When set, the bar fill is a gradient interpolated from <see cref="Fill"/>'s colour to this one across
+    /// the bar width (per cell). <see langword="null"/> (the default) fills with the single <see cref="Fill"/> colour.</summary>
+    public Color? GradientTo { get; init; }
     #endregion
 
     #region Methods
     /// <summary>A copy with the bar fill recoloured (keeps every other part).</summary>
     public ProgressBarStyle WithFill(Color fill) => this with { Fill = fill };
+
+    /// <summary>A copy whose fill is a gradient from <paramref name="from"/> to <paramref name="to"/> across the bar.</summary>
+    public ProgressBarStyle WithGradient(Color from, Color to) => this with { Fill = from, GradientTo = to };
     #endregion
 
     #region Presets
@@ -65,13 +72,14 @@ public readonly struct ProgressBarStyle : System.IEquatable<ProgressBarStyle>
     /// <summary>Determines whether this <see cref="ProgressBarStyle"/> equals <paramref name="other"/>.</summary>
     public bool Equals(ProgressBarStyle other) =>
         Description == other.Description && Fill == other.Fill && Track == other.Track &&
-        Percentage == other.Percentage && Time == other.Time && Spinner == other.Spinner;
+        Percentage == other.Percentage && Time == other.Time && Spinner == other.Spinner &&
+        System.Nullable.Equals(GradientTo, other.GradientTo);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is ProgressBarStyle other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => System.HashCode.Combine(Description, Fill, Track, Percentage, Time, Spinner);
+    public override int GetHashCode() => System.HashCode.Combine(Description, Fill, Track, Percentage, Time, Spinner, GradientTo);
 
     /// <summary>Equality operator.</summary>
     public static bool operator ==(ProgressBarStyle a, ProgressBarStyle b) => a.Equals(b);

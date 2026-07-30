@@ -68,6 +68,15 @@ public readonly struct ProgressBarGlyphs : System.IEquatable<ProgressBarGlyphs>
     /// coloured.</summary>
     public static ProgressBarGlyphs Segmented { get; } = new("█", "░");
 
+    /// <summary>Discrete segments with visible gaps: a filled parallelogram (<c>▰</c>) fill on an empty one (<c>▱</c>).</summary>
+    public static ProgressBarGlyphs Dashed { get; } = new("▰", "▱");
+
+    /// <summary>A thin line bar: a heavy horizontal (<c>━</c>) fill on a light one (<c>─</c>).</summary>
+    public static ProgressBarGlyphs Line { get; } = new("━", "─");
+
+    /// <summary>A braille-dot fill (<c>⣿</c>) on a low-dot track (<c>⣀</c>).</summary>
+    public static ProgressBarGlyphs Dots { get; } = new("⣿", "⣀");
+
     /// <summary>A portable fallback for terminals without block glyphs: a <c>#</c> fill on a <c>-</c> track.</summary>
     public static ProgressBarGlyphs Ascii { get; } = new("#", "-");
     #endregion
