@@ -14,7 +14,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
         {
             foreach (var control in controls)
             {
-                this.control.Add(control);
+                this.control.Add(control.FocusableControl);
             }
         }        
     }
@@ -33,7 +33,7 @@ public class VerticalStackPanel : Layout<ConsoleGUI.Controls.VerticalStackPanel>
     {
         foreach (var control in controls)
         {
-            this.control.Remove(control);
+            this.control.Remove(control.FocusableControl);
         }
     }
 

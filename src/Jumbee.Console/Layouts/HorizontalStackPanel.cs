@@ -24,7 +24,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
     {
         foreach (var control in controls)
         {
-            this.control.Add(control);
+            this.control.Add(control.FocusableControl);
         }
     }
 
@@ -33,7 +33,7 @@ public class HorizontalStackPanel : Layout<ConsoleGUI.Controls.HorizontalStackPa
     {
         foreach (var control in controls)
         {
-            this.control.Remove(control);
+            this.control.Remove(control.FocusableControl);
         }
     }
 
