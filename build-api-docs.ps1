@@ -228,13 +228,26 @@ foreach ($d in $topDocs) {
 }
 [void]$lb.AppendLine('')
 
+# Curated notes for the control guides, same rationale as $topDocs above: Get-DocNote takes whatever
+# the first prose paragraph happens to be, which for these ends mid-thought (e.g. "...comes in two
+# groups:"). Any guide without an entry here still falls back to Get-DocNote, so adding a new guide
+# needs no script change — the directory is globbed.
+$controlNotes = @{
+    'Layouts'            = 'Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.'
+    'Composite Controls' = 'Building one reusable Control out of several children (CompositeControl), how content height and scrolling work, and a worked example.'
+    'Display Widgets'    = 'Widgets for presenting information: labels, badges, gauges, spinners, sparklines, tables and charts.'
+    'Links'              = 'Link, the focusable clickable control that opens a URL or runs an action.'
+    'Selection Controls' = 'Checkboxes, radio buttons, switches, and the single- and multi-select list controls (RadioSet, SelectionList, ToggleList).'
+}
+
 $controlsDir = Join-Path $repoRoot 'docs/controls'
 if (Test-Path $controlsDir) {
     [void]$lb.AppendLine('## Control guides')
     [void]$lb.AppendLine('')
     foreach ($f in (Get-ChildItem -Path $controlsDir -Filter '*.md' | Sort-Object Name)) {
         $title = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
-        [void]$lb.AppendLine((New-LlmsLink $title "docs/controls/$($f.Name)" (Get-DocNote $f.FullName)))
+        $note = if ($controlNotes.ContainsKey($title)) { $controlNotes[$title] } else { Get-DocNote $f.FullName }
+        [void]$lb.AppendLine((New-LlmsLink $title "docs/controls/$($f.Name)" $note))
     }
     [void]$lb.AppendLine('')
 }

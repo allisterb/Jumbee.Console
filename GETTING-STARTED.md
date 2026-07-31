@@ -209,18 +209,50 @@ See the full list in the [API reference](docs/api/) and the [control guides](doc
 
 ### 3. Layouts
 
-Controls are arranged by an `ILayout`. `UI.Start` takes a layout as the root. The common ones:
+Controls are arranged by an `ILayout`. `UI.Start` takes a layout as the root.
 
-- `Grid(rowHeights, columnWidths, controls)` — rows × columns of controls (used above).
-- `DockPanel` — pin one control to an edge, fill the rest with another.
-- `VerticalStackPanel` / `HorizontalStackPanel` — stack controls in a line.
-- `SplitPanel` — two panes with a draggable divider.
-- `TabPanel` — tabbed pages.
-- `Boundary` — pin a single child's size.
-- `Overlay` — layer pop-ups, menus, and modal dialogs above the main content (`UI.Overlay` is the ambient one).
+**The first thing to decide is whether the layout should fill the terminal.** The app is re-laid-out whenever the
+terminal is resized, but a layout only *uses* that new size if its sizing model is proportional. This is the single
+most consequential choice on this page, so it's worth stating plainly:
+
+| Layout | Sizing | Fills the terminal? |
+|---|---|---|
+| `DockPanel` — pin one control to an edge, fill the rest with another | docked child fixed, other child fills | **Yes**, both axes |
+| `SplitPanel` — two panes with a draggable divider | first pane = `SplitPosition`, second fills | **Yes**, both axes |
+| `VerticalStackPanel` / `HorizontalStackPanel` — stack controls in a line | fills across the stack axis, sums along it | **Width yes**, height = content |
+| `Grid(rowHeights, columnWidths, controls)` — rows × columns | **every extent is an absolute cell count** | **No** — stays the size you gave it |
+| `Boundary` — pin a single child's size | fixed, by design | No |
+| `TabPanel` — tabbed pages | follows its content | — |
+| `Overlay` — layer pop-ups, menus and modals above the main content (`UI.Overlay` is the ambient one) | follows its bottom layer | — |
+
+Measured: a root `Grid([5], [30], …)` renders 30×5 in an 40×10 terminal *and* in a 100×30 one. The same content
+under a `DockPanel` or `SplitPanel` renders 40×10 and 100×30 respectively.
+
+**So: use `Grid` for a fixed-size arrangement inside a region, not as the root of an app you want to fill the
+screen.** It's the right tool for a form, a small panel of labelled fields, or a dashboard tile whose size you're
+deliberately choosing — and it's what the two-pane example above uses because that example is a fixed size. Reach
+for `DockPanel` and `SplitPanel` to build the *shell*: header/footer bars docked top and bottom, a sidebar docked
+left, resizable panes in the middle. A typical full-screen app is a few nested `DockPanel`s with `Grid`s inside the
+regions that genuinely want fixed geometry.
 
 Layouts nest: a `Grid` cell can hold another layout wrapped in a control, and composite controls embed a layout
-internally.
+internally. Nesting doesn't change the rule — a `Grid` inside a `DockPanel`'s fill slot is still fixed, so the
+region it occupies grows while the `Grid` itself doesn't.
+
+A three-region shell — title bar, status bar, sidebar, content — is nested `DockPanel`s:
+
+```csharp
+var body       = new DockPanel(DockedControlPlacement.Left,   new Boundary(sidebar,   width: 24), content);
+var withHeader = new DockPanel(DockedControlPlacement.Top,    new Boundary(titleBar,  height: 1), body);
+var root       = new DockPanel(DockedControlPlacement.Bottom, new Boundary(statusBar, height: 1), withHeader);
+```
+
+Each docked child needs a positive extent **on the docked axis** — that's what `Boundary` supplies for controls
+with no `Width`/`Height` of their own (a `ControlFrame`, a nested layout). Constrain only that axis and leave the
+other one unset, so it stretches: a left-docked sidebar sets `width`, a top-docked bar sets `height`. A docked
+child with no extent takes the whole panel and starves the fill child — silently, with no error.
+
+See the [layouts guide](docs/controls/Layouts.md) for the full set of shells and the sizing rules behind them.
 
 **Runtime layout: a "zen mode" toggle.** A `SplitPanel`'s orientation is about the *panes*, not the divider:
 `Horizontal` puts them side by side (first = left), `Vertical` stacks them (first = top). Because the first pane's
@@ -386,6 +418,8 @@ case. The same pattern works for anything else that renders into the overlay lay
   [`examples/Jumbee.Console.AudioScopeDemo-basic`](examples/Jumbee.Console.AudioScopeDemo/).
 - [Troubleshooting](TROUBLESHOOTING.md) — the Spectre.Console collision, submodules/CS1704, non-TTY rendering, and mouse input.
 - [API reference](docs/api/) — every public type, grouped by namespace, with summaries.
+- [Layouts](docs/controls/Layouts.md) — which layouts fill the terminal and which don't, plus shell,
+  master-detail and dashboard recipes. Read this before building an app shell.
 - [Control guides](docs/controls/) — task-focused walkthroughs (selection controls, display widgets, links,
   composite controls).
 - [Internals](docs/internal/) — architecture notes: the rendering pipeline, input model, multithreading, and

@@ -10,6 +10,8 @@
 - [Internals](./internal)
 
 ## Control Guides (incomplete)
+- [Layouts](controls/Layouts.md) — arranging controls, and **which layouts fill the terminal and which don't**
+  (`DockPanel`, `SplitPanel`, `Grid`, `Boundary`, `Overlay`), with shell/master-detail/dashboard recipes.
 - [Selection Controls](controls/Selection%20Controls.md) — checkboxes, radio buttons, switches, and the
   single-/multi-select list controls (`RadioSet`, `SelectionList`).
 - [Composite Controls](controls/Composite%20Controls.md) — building a single `Control` out of several child

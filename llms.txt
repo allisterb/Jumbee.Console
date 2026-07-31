@@ -19,10 +19,11 @@ Every link below is raw Markdown and can be fetched directly. The API reference 
 
 ## Control guides
 
-- [Composite Controls](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Composite%20Controls.md): A **composite control** is a single `Control` built out of several child controls laid out together — for example a `CodeEditor` (a `TextEditor` with a line-number gutter docked to its left).
-- [Display Widgets](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Display%20Widgets.md): Widgets for presenting information — you place them in a layout and update them from your code.
-- [Links](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Links.md): `Link` is an interactive (focusable, clickable) control that opens a URL or runs an action. It lives in the `Jumbee.Console` namespace.
-- [Selection Controls](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Selection%20Controls.md): The selection family lets users pick and toggle values. It comes in two groups:
+- [Composite Controls](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Composite%20Controls.md): Building one reusable Control out of several children (CompositeControl), how content height and scrolling work, and a worked example.
+- [Display Widgets](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Display%20Widgets.md): Widgets for presenting information: labels, badges, gauges, spinners, sparklines, tables and charts.
+- [Layouts](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Layouts.md): Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.
+- [Links](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Links.md): Link, the focusable clickable control that opens a URL or runs an action.
+- [Selection Controls](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Selection%20Controls.md): Checkboxes, radio buttons, switches, and the single- and multi-select list controls (RadioSet, SelectionList, ToggleList).
 
 ## API reference: Jumbee.Console
 

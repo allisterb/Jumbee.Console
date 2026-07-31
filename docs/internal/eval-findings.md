@@ -159,6 +159,62 @@ Third cold start of the vtop port, fresh agent, new workspace, forbidden from re
 | V-19 | minor | missing-feature | **No `TitleBorderStyle.None`** — only `Inline`/`Double`. `Inline` happened to match vtop, but there's no way to suppress title-border decoration entirely. (Note: the default is `Double`, which draws an extra divider under the title; she had to discover `TitleStyle(TitlePos.TopLeft, TitleBorderStyle.Inline)` to get vtop's look.) | open |
 | V-13 | minor | missing-feature | **Third occurrence** — `ControlFrame`'s single title slot. vtop puts `CPU Usage` top-left and `19%` top-right *in the border row*; she moved the readout into the canvas content, one row lower. Raised by all three runs now. | open |
 
+### V-20 — the layout docs said what each layout *arranges*, not how it *sizes*
+
+**All three cold starts shipped a fixed-size app** that renders at its hardcoded dimensions and leaves the rest of the terminal empty (the maintainer confirmed it from a live run). Every one of them built the shell from `Grid`.
+
+That isn't a library limitation — the app *is* re-laid-out on resize (`ConsoleManager.AdjustBufferSize` runs each frame and pushes the new size into the root). It's that `Grid`'s extents are absolute, and `Grid` is what `GETTING-STARTED` §3 both demonstrates and lists first. The section listed each layout by *what it arranges* ("rows × columns", "pin one control to an edge") and never mentioned sizing, which is the actual decision.
+
+Measured (framed content, so the border reveals each layout's allocation):
+
+| Layout | 40×10 | 100×30 |
+|---|---|---|
+| `Grid([5], [30], …)` | 30×5 | **30×5** |
+| `DockPanel` | 40×10 | **100×30** |
+| `SplitPanel` | 40×10 | **100×30** |
+| `VerticalStackPanel` | 40×6 | **100×6** (fills width, height = content) |
+
+**Fixed 2026-07-31:** `GETTING-STARTED` §3 now leads with a sizing table and a "fills the terminal?" column, states plainly that `Grid` is for fixed regions and `DockPanel`/`SplitPanel` for the shell, notes that nesting doesn't change it, and carries a verified nested-`DockPanel` shell recipe (header/status/sidebar/content — snapshot-checked to fill 40×12 and 100×30 before shipping). `Grid`'s own XML remarks now name the consequence directly: *"A grid does not grow with the terminal."*
+
+**Also fixed 2026-07-31:** `docs/controls/` had guides for Composite Controls, Display Widgets, Links and Selection Controls but **none for layouts**. Added [`docs/controls/Layouts.md`](../controls/Layouts.md) (156 lines) — the sizing rule with the measured table, a "choosing" section, `Boundary` and the constrain-one-axis idiom, three recipes (app shell / master-detail + zen / dashboard tiles), overlays, and a gotchas section covering the `Grid` `0` vs `Width` `0` collision. Linked from `docs/README.md` and GETTING-STARTED's "Where to go next". **Every sample was compiled and snapshot-measured before shipping** — which caught that the shell recipe was passing `0` for the unconstrained `Boundary` axis when the idiom is to omit it (`null` = size freely); that example has been corrected in both the guide and GETTING-STARTED.
+
+## Fourth cold start — 2026-07-31, first run with the layouts guide
+
+**The layouts guide worked, on the first milestone, before any chart code was written.** Her M0 trace, verbatim:
+
+> `docs/controls/Layouts.md`'s table ("which layouts fill the terminal") told me directly to build the root from `DockPanel`+`SplitPanel`, not `Grid` — the doc explicitly warns "a `Grid` at the root is almost always why" an app looks squashed at other sizes.
+
+**First responsive shell in four runs**, with PNGs at 100×40 and 160×50 to show it reflowing. The previous three all built the shell from `Grid` and shipped the fixed-size app the maintainer photographed. This is also the first run where V-1's target came up cleanly *and* the whole M0→M7 ladder was attempted.
+
+### New findings
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-21 | major | missing-feature | **No proportional split, and no layout/resize event to build one from.** `SplitPanel.SplitPosition` is an absolute cell count (verified: `int`, and the class remarks say "resizing the container keeps the first pane put and grows/shrinks the second"). vtop's defining proportion is "the CPU chart is half the screen" — that can be *filled* but not *maintained*: it's half only at the size it was tuned for. There is also **no resize/layout-changed event anywhere on `Control` or `UI`** (verified by grep), so recomputing it is app code with nothing to hang off. This gap was only reachable *because* the shell finally reflowed — the previous three runs couldn't discover it. Fix: a fractional `SplitPosition` (or a proportional layout), and/or a documented layout-changed hook. | open |
+| V-22 | minor | doc-gap | **The braille/PNG font trap isn't cross-referenced from where you'd hit it.** `SnapshotImageOptions.FontFamily`'s remarks explain it exactly ("The default (Consolas) has no Braille glyphs… set this to `Cascadia Mono`"), but nothing on `Canvas` or `CanvasMarker.Braille` points there, so a braille chart's PNGs come out as tofu boxes and you only find the answer after going looking. **Third run in a row to hit this.** Fix: one sentence linking `SnapshotImageOptions.FontFamily` from `Canvas`/`CanvasMarker.Braille`. | open |
+
+**V-21 independently confirmed by the reviewer, with numbers.** It measured the PNGs without knowing the library: the CPU panel is 15 of 40 rows (37%) at 100×40 and still 15 of 50 (**30%**) at 160×50; the memory pane is a fixed 40 columns — 40% of a 100-wide terminal, **25%** of a 160-wide one. Its summary: *"the panels do not re-proportion, they just get a bigger empty frame."* Two independent observers, one of whom has never seen the API, reaching the same conclusion is about as clean as this log gets.
+
+**What the reviewer verified as genuinely fixed this round** (each was a defect in an earlier run): the braille chart's pixel pitch is a real filled column chart — *"two lit dot-columns per character cell, no dropped columns"*, right-anchored with history running left; the `dd` dialog **demonstrably rendered** rather than being claimed (run 1 shipped a PNG identical to the no-dialog frame); and the themes **really are parsed from vtop's JSON** — the nord title samples to the pink in `themes/nord.json` (run 3 claimed transcription and had invented two of three palettes).
+
+**Recurring eval-harness problem: review packages keep containing claims their artifacts don't support.** Run 1: a `dd` PNG that was byte-identical to the no-dialog frame. Run 3: a stale `out.txt` reporting a failure the final code didn't have, plus two fabricated themes. Run 4: `05`/`06-sort-*.png` described as "what `RebuildProcessTable` produces after `c`/`m`" when the test hand-adds two rows and never calls the sort path; a `WALKTHROUGH.md` that cites a "port report" seven times which doesn't exist in the workspace; and a gap in the PNG numbering. The reviewer has caught this every single time, which is the loop working — but it's worth a line in the agent brief: **a review package may only describe what the artifact actually demonstrates; staged data must be labelled as staged.**
+
+**Also fixed 2026-07-31 (a gap in the guide, found by the very next run):** she correctly noted that `Layouts.md`'s sizing table "is only about *which axis fills*, never about *proportional splits*". The guide now separates the two — a new "**Filling is not the same as staying proportional**" note states that both `DockPanel` and `SplitPanel` size their docked pane in absolute cells, that "fixed sidebar" holds at every size while "half the screen" doesn't, and that there's no fractional split or layout-changed event to lean on.
+
+**The recurring shape, now seen five times.** V-1, V-2, V-16, V-20 and V-22 are all the same defect: *the capability exists and is documented on its own page; the page a developer starts from doesn't point at it.* `Plot`→`Canvas`, `DockPanel`/`Grid`→`Boundary`, `DataTable`→`IStyleTheme`, layouts→sizing, `Canvas`→`SnapshotImageOptions.FontFamily`. Every one was fixed by a cross-reference, not by new API. Worth treating as a standing review question for any new control page: **what will someone be holding when they need this, and does that page say so?**
+
+Two self-inflicted bugs she hit are worth keeping as usability signal, since both cost a milestone: building `Canvas` geometry in a setter using `ActualWidth` (0/stale before the first layout pass, so the chart collapsed to one invisible column — fixed by rebuilding in the `Render()` override instead), and a global-hotkey test that passed for the wrong reason because the hotkey was never registered in the test process (`ToTextAfter(…, routeGlobal: true)` returns successfully when nothing matches). The second is a genuine harness footgun: **assert the effect, never just that the call succeeded.**
+
+### Harness bug: the brief was inverting `h`/`l`, not the developers
+
+Both cold starts bound `h`/`l` backwards versus vtop (`h`/Left zooms **in**, `l`/Right zooms **out**), and the second even documented the inversion as intended. Two independent developers making the same specific error points at a shared source, and it was the milestone text in `.claude/agents/jc-curious.md`:
+
+> `h`/`l` (and left/right) zoom the charts in and out — vtop's `graphScale` **halves/doubles** between 0.125 and 8
+
+Read positionally, the first clause pairs `h`→in and the second pairs `h`→halves. In vtop, zooming in **doubles** `graphScale`. The two halves of the sentence contradict each other, and both runs followed the second. **Fixed 2026-07-31** — M5 now states each key's direction explicitly, names `README.md` + `app.js` as the source of truth, and warns that the inversion is invisible in a screenshot.
+
+The reviewer brief was never wrong here: it states no direction at all, just points at `README.md` and the key handler — which is why the reviewer independently caught the inversion in both runs. **Lesson for harness authoring: in a task brief, either state a fact unambiguously or don't state it and cite the source. A half-specified fact is worse than none — it overrides the source material the agent would otherwise have read.** Same class as the earlier harness-vs-app drift lesson: a defect in the eval scaffolding masquerading as a finding about the developer.
+
 **Also worth keeping:** `SnapshotImageOptions.md`'s note that the default PNG font lacks braille coverage saved her a debugging session — she hit empty boxes in the PNG (live rendering and `ToText` were fine) and the doc told her to set `FontFamily = "Cascadia Mono"`. That's a doc note earning its keep; the same class of note is what V-16 is asking for.
 
 ## Mouse-behaviour audit — 2026-07-31 (follow-on from V-5)

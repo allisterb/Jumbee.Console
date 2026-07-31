@@ -23,6 +23,14 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// 0, fills that fixed cell). For proportional/fill layouts, compose <see cref="DockPanel"/>/<see cref="SplitPanel"/>
     /// instead.
     /// <para>
+    /// <b>A grid does not grow with the terminal.</b> The app is re-laid-out on resize, but a grid's extents are
+    /// absolute, so a grid used as the <em>root</em> renders at the size you specified and leaves the rest of the
+    /// screen empty (or clips, if the terminal is smaller). That's the right behaviour for a form or a fixed panel
+    /// nested inside a region; it is the wrong choice for an app shell. Build the shell from
+    /// <see cref="DockPanel"/>/<see cref="SplitPanel"/> and put grids inside the regions that genuinely want fixed
+    /// geometry. Nesting doesn't change this — a grid inside a docked panel's fill slot still won't grow.
+    /// </para>
+    /// <para>
     /// To give a cell's content an explicit size of its own — needed for anything without <c>Width</c>/<c>Height</c>,
     /// such as a <see cref="ControlFrame"/> or a nested layout — wrap it in a <see cref="Boundary"/>:
     /// <c>new Boundary(child, width, height)</c>.
