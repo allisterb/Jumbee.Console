@@ -5,6 +5,7 @@ using System.Text;
 using ConsoleGUI;
 using ConsoleGUI.Common;
 using ConsoleGUI.Data;
+using ConsoleGUI.Input;
 using ConsoleGUI.Space;
 
 using SixLabors.Fonts;
@@ -304,6 +305,120 @@ public static class ConsoleSnapshot
 
         return image;
     }
+
+    #region Mouse (headless pointer simulation)
+    // The runtime path is ConsoleManager: set MousePosition (which hit-tests its composited buffer and fires
+    // enter/leave/move), then flip MouseDown for press/release, or call MouseWheel. ConsoleSnapshot composes into
+    // its own buffer rather than ConsoleManager's, so it can't drive that static — but the cells it produces carry
+    // the same mouse listeners (Control tags them when Focusable || WantsMouse), so the same hit-test is just a
+    // cell lookup. These methods reproduce ConsoleManager's dispatch order exactly.
+    private static MouseContext? _mouseContext;
+
+    // The hit-test ConsoleManager does against its private buffer, against ours.
+    private static MouseContext? HitTest(ConsoleBuffer buffer, int x, int y)
+    {
+        var size = buffer.Size;
+        if (x < 0 || y < 0 || x >= size.Width || y >= size.Height) return null;
+        return buffer[x, y].MouseListener;
+    }
+
+    /// <summary>
+    /// Moves the pointer to (<paramref name="x"/>, <paramref name="y"/>) in <paramref name="buffer"/>, firing
+    /// enter/leave/move on the controls under the old and new positions.
+    /// </summary>
+    /// <remarks>Hover state persists across calls (as it does at runtime), so call <see cref="ResetMouse"/> between
+    /// tests to avoid leaving a control hovered. Returns <see langword="true"/> if a control is under the pointer —
+    /// a <see langword="false"/> here usually means the target doesn't opt into the mouse (see the control's
+    /// <c>WantsMouse</c>) or the coordinates are outside it.</remarks>
+    public static bool MouseMove(ConsoleBuffer buffer, int x, int y)
+    {
+        var next = HitTest(buffer, x, y);
+
+        if (next?.MouseListener != _mouseContext?.MouseListener)
+        {
+            _mouseContext?.MouseListener.OnMouseLeave();
+            next?.MouseListener.OnMouseEnter();
+            next?.MouseListener.OnMouseMove(next.Value.RelativePosition);
+        }
+        else if (next.HasValue && next.Value.RelativePosition != _mouseContext?.RelativePosition)
+        {
+            next.Value.MouseListener.OnMouseMove(next.Value.RelativePosition);
+        }
+
+        _mouseContext = next;
+        return next.HasValue;
+    }
+
+    /// <summary>
+    /// Clicks at (<paramref name="x"/>, <paramref name="y"/>) in <paramref name="buffer"/>: moves the pointer there,
+    /// then presses and releases <paramref name="clicks"/> times.
+    /// </summary>
+    /// <remarks>Pass <c>clicks: 2</c> for a double-click (the presses land within the double-click window, so a
+    /// control that distinguishes them — e.g. <c>DataTable</c>'s row activation — sees a double-click). The pointer
+    /// is left hovering the target afterwards, as it would be after a real click. Returns <see langword="false"/> if
+    /// nothing is under the pointer.</remarks>
+    public static bool Click(ConsoleBuffer buffer, int x, int y, int clicks = 1)
+    {
+        if (!MouseMove(buffer, x, y) || _mouseContext is not { } context) return false;
+
+        for (var i = 0; i < clicks; i++)
+        {
+            context.MouseListener.OnMouseDown(context.RelativePosition);
+            context.MouseListener.OnMouseUp(context.RelativePosition);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Rotates the wheel by <paramref name="delta"/> notches over (<paramref name="x"/>, <paramref name="y"/>) —
+    /// negative scrolls up, positive scrolls down.
+    /// </summary>
+    /// <remarks>Only reaches controls that implement <c>IMouseWheelListener</c>; returns <see langword="false"/>
+    /// otherwise (and when nothing is under the pointer).</remarks>
+    public static bool Wheel(ConsoleBuffer buffer, int x, int y, int delta)
+    {
+        if (!MouseMove(buffer, x, y) || _mouseContext is not { } context) return false;
+        if (context.MouseListener is not IMouseWheelListener wheel) return false;
+
+        wheel.OnMouseWheel(context.RelativePosition, delta);
+        return true;
+    }
+
+    /// <summary>Clears the remembered pointer position, firing a leave on whatever is currently hovered.</summary>
+    /// <remarks>Call between tests: hover state is static (as at runtime), so it would otherwise carry over.</remarks>
+    public static void ResetMouse()
+    {
+        _mouseContext?.MouseListener.OnMouseLeave();
+        _mouseContext = null;
+    }
+
+    /// <summary>Renders <paramref name="layout"/>, clicks at (<paramref name="x"/>, <paramref name="y"/>), then
+    /// re-renders and returns the result.</summary>
+    public static ConsoleBuffer RenderAfterClick(ILayout layout, int width, int height, int x, int y, int clicks = 1)
+    {
+        Click(Render(layout, width, height), x, y, clicks);
+        return Render(layout, width, height);
+    }
+
+    /// <summary>Renders <paramref name="control"/>, clicks at (<paramref name="x"/>, <paramref name="y"/>), then
+    /// re-renders and returns the result.</summary>
+    /// <remarks>Coordinates are relative to the rendered snapshot, so they include the control's own frame when it
+    /// has one — a click on the first row of a bordered control's content is <c>y: 1</c>, not <c>y: 0</c>.</remarks>
+    public static ConsoleBuffer RenderAfterClick(JControl control, int width, int height, int x, int y, int clicks = 1)
+    {
+        Click(Render(control, width, height), x, y, clicks);
+        return Render(control, width, height);
+    }
+
+    /// <summary>Renders a layout, clicks, and returns the resulting screen as text.</summary>
+    public static string ToTextAfterClick(ILayout layout, int width, int height, int x, int y, int clicks = 1)
+        => ToText(RenderAfterClick(layout, width, height, x, y, clicks));
+
+    /// <summary>Renders a control, clicks, and returns the resulting screen as text.</summary>
+    public static string ToTextAfterClick(JControl control, int width, int height, int x, int y, int clicks = 1)
+        => ToText(RenderAfterClick(control, width, height, x, y, clicks));
+    #endregion
 
     /// <summary>Renders a buffer to a PNG file.</summary>
     public static void SavePng(ConsoleBuffer buffer, string path, SnapshotImageOptions? options = null)

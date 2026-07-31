@@ -138,6 +138,22 @@ public class DataTable : Control
         if (dataRow >= 0 && dataRow < _rows.Count) Select(dataRow);
     }
 
+    /// <inheritdoc/>
+    // Double-click activates the row under the pointer, the mouse equivalent of Enter. Selecting first means
+    // RowActivated always reports the row that was double-clicked, even if the first click of the pair was
+    // swallowed (e.g. it landed on the scrollbar).
+    protected override void OnDoubleClick(Position position)
+    {
+        if (_pressedScrollbar) { _pressedScrollbar = false; return; }
+        if (position.X >= ContentWidth) return;
+
+        var dataRow = _scroll + (position.Y - ChromeTop());
+        if (dataRow < 0 || dataRow >= _rows.Count) return;
+
+        Select(dataRow);
+        RowActivated?.Invoke(this, dataRow);
+    }
+
     // True when `position` is on the active scrollbar column, yielding the thumb/track metrics for the current view
     // (mirrors DrawScrollBar). `i` is the row within the bar (0 at the first data row).
     private bool OnScrollbar(Position position, out int i, out int visible, out int thumb, out int thumbPos)
