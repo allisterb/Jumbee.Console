@@ -156,6 +156,11 @@ public class Select : RenderableControl
     }
 
     /// <inheritdoc/>
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on the closed
+    // control would be swallowed instead of toggling the dropdown.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
+    /// <inheritdoc/>
     protected override void OnInput(InputEvent inputEvent)
     {
         // Enter/Space or Down/Up open the dropdown (the standard combobox keys); the open list then navigates.

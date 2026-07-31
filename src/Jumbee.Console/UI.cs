@@ -671,7 +671,7 @@ public static class UI
     /// <summary>The mouse button of the most recent press, latched until the next press.</summary>
     /// <remarks>A control's <c>OnClick</c>/<c>OnDoubleClick</c> reads this to distinguish a right-click (e.g. to open
     /// a context menu) from a left-click — the dispatch itself carries only a position, not a button.</remarks>
-    public static TerminalMouseButton MouseButton { get; private set; }
+    public static TerminalMouseButton MouseButton { get; internal set; }
 
     /// <summary>
     /// The active style theme. Defaults to <see cref="DefaultStyleTheme"/>.

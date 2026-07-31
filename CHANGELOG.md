@@ -4,13 +4,18 @@
 
 ### Added
 
-- **Headless mouse simulation in `Jumbee.Console.Snapshot`** — `ConsoleSnapshot.Click`, `MouseMove`, `Wheel`, `ResetMouse`, plus `RenderAfterClick`/`ToTextAfterClick`. Snapshot tests could send keys but not pointer input, so click-to-select, double-click activation, hover and wheel scrolling — real behaviour on `DataTable`, `ListBox`, `Tree`, `Button` and others — could not be tested without a terminal. The hit-test and the enter/leave/press/release dispatch order mirror the live `ConsoleManager` path, so a simulated click reaches the same handler a real one does.
+- **Headless mouse simulation in `Jumbee.Console.Snapshot`** — `ConsoleSnapshot.Click` (with `clicks:` for double-clicks and `button:` for right-clicks), `MouseMove`, `Wheel`, `ResetMouse`, plus `RenderAfterClick`/`ToTextAfterClick`. Snapshot tests could send keys but not pointer input, so click-to-select, double-click activation, hover and wheel scrolling — real behaviour on `DataTable`, `ListBox`, `Tree`, `Button` and others — could not be tested without a terminal. The hit-test and the enter/leave/press/release dispatch order mirror the live `ConsoleManager` path, so a simulated click reaches the same handler a real one does.
 - **`Style(Color foreground, Color background)`** — a direct two-colour constructor. Previously a style with a background needed the markup-string form (`new Style("black on white")`) or composition (`(Style)fg | Style.Bg(bg)`); the get-only `ForegroundColor`/`BackgroundColor` properties made the two-argument form look like it should already exist.
 - **`ConsoleSnapshot.SavePngAfter` gained `routeGlobal` and `ILayout` overloads**, matching `RenderAfter`/`ToTextAfter`. A PNG capture driven by a global hotkey, or of an `Overlay` (where a modal's frame actually lives), no longer needs a two-step `RenderAfter` → `SavePng(buffer)` workaround.
 
 ### Fixed
 
+- **Rapid clicks are no longer swallowed.** `Control` routes the *second* click of a rapid pair to `OnDoubleClick`, so any control that overrode only `OnClick` silently consumed it — double-clicking a `Button` activated it once, not twice. Fixed on `Button`, `Link`, `Select`, `Menu`, `MenuBar`, `Autocomplete`, `TabHeader`, the tab bar's "+" button, and `Dialog`'s buttons. (`ToggleButton`, `ToggleList`, `ListBox` and `Tree` already handled both.)
 - **`DataTable` now raises `RowActivated` on double-click.** The event's own documentation said it fires on "Enter / double-click", but only the Enter path was implemented — the control overrode `OnClick` and never `OnDoubleClick`, so a double-click only ever re-selected the row. Found by the new mouse simulation above, on its first use.
+
+### Changed
+
+- **`UI.MouseButton`'s setter is now `internal`** (was `private`) so `Jumbee.Console.Snapshot` can latch it when simulating a right-click. The property itself is unchanged for consumers.
 
 ## 0.1.8
 

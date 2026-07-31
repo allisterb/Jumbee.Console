@@ -119,14 +119,60 @@ After shipping V-1/V-2 (the two cross-links) and V-3, a **fresh** jc-curious col
 
 Both cold starts independently wrote the same construct — `p.TotalProcessorTime` / `p.WorkingSet64` inside `try { … } catch { continue; }`, over every process, every tick. **Two competent developers, two clean-slate attempts, identical code.** This is what a .NET dev naturally writes for this task, not a slip.
 
-The reviewer measured it with an independent .NET 10 probe running the same loop shape on this machine:
+Measured with an independent .NET 10 probe running the same loop shape on this machine:
 
-- **612 processes/tick, 190 first-chance `Win32Exception: Access is denied` per tick, forever.**
-- **Only `TotalProcessorTime` throws** — `ProcessName` and `WorkingSet64` never do (`nameFail=0 workingSetFail=0 cpuTimeFail=190`), since those come from the enumeration snapshot.
-- **~23 ms/tick → ~15 ms with a per-PID cached deny-set** (190 throws once at startup, then zero).
-- **It also silently corrupts the data:** `catch { continue; }` discards the whole process, so 190 of 612 processes never reach the UI at all — their memory and their contribution to `Count` are simply missing.
+- **~595 processes/tick, ~190 first-chance `Win32Exception: Access is denied` per tick, forever.** The count is stable across four independent measurements (190/191/192) and two different ports, so it's a property of the machine, not of anyone's code.
+- **Only `TotalProcessorTime` throws** — `ProcessName` and `WorkingSet64` never do, since those come from the enumeration snapshot.
+- **It silently corrupts the data:** `catch { continue; }` discards the whole process, so ~190 of ~595 never reach the UI — their memory and their contribution to `Count` are simply missing, and any total summed over the survivors under-reports by an unknown amount.
+
+**Cost, measured directly (2026-07-31) — and both reviewers were wrong about this, in opposite directions.** A full sampler-shaped pass over 595 processes (enumerate, then read CPU time + working set + name each) is **~17 ms**: ~12 ms of that is `Process.GetProcesses()` itself and only ~5 ms is the per-process reads *including* all 190 throws. Three consecutive passes: 31.7 / 17.5 / 16.5 ms.
+
+- The **first** reviewer's "~23 ms/tick" was roughly right on the total but misattributed it to the exceptions; the enumeration dominates.
+- The **second** reviewer claimed **9.8 s per pass**, with 192 processes on a ~50 ms slow path, and concluded the app "delivers one sample every ten seconds". **Not reproducible — wrong by roughly 600×.** In my probe *zero* processes took over 10 ms. Most likely it measured with a debugger attached, where first-chance exceptions are enormously more expensive than in a normal run.
+
+**Net:** the storm is real and worth fixing (it's ugly in a profiler, it inflates debugger runs, and the swallow corrupts the data), but it is **not** a throughput problem — a 1 Hz sampler has ~17 ms of work per tick, not 10 s. **Lesson: measure agent-reported performance numbers before repeating them.** Two reviewers produced confident, precise, mutually incompatible figures for the same loop.
 
 **Not a library finding**, but it matters to this project: the port exists so an outside dev can benchmark Jumbee.Console against other TUI frameworks ([ConsoleGUI issue #10](https://github.com/TomaszRewak/C-sharp-console-gui-framework/issues/10#issuecomment-5122659775)). A monitor burning ~20 ms and hundreds of exceptions per second in its *metrics* layer will be read as the *UI* being slow. Worth raising with anyone who takes on that comparison — and worth a note in the docs if we ever ship a system-monitor sample.
+
+## Second cold-start re-run — 2026-07-31, against `0.1.9-preview` (post V-5/V-9/V-10/V-14/V-15)
+
+Third cold start of the vtop port, fresh agent, new workspace, forbidden from reading either earlier attempt. **This is the run where the fixes finally got exercised.**
+
+**Three of the four doc/API fixes landed directly on her path, and each removed a wall that had cost a previous run:**
+
+| Fix | Evidence from this run | What it replaced |
+|---|---|---|
+| **V-2** (`Boundary` named on `Grid`/`DockPanel`) | *"`Grid.md`'s remarks (fixed-cell, wrap non-`Width`/`Height` content — frames, nested layouts — in `Boundary`) told me exactly how to nest a header `Grid` and a bottom `Grid` inside an outer `Grid`. **Compiled first try after applying the `Boundary` wrapping rule.**"* | Run 1 lost more debugging time to this than to anything else — a framed chart silently ate the whole screen, no error. |
+| **V-4** (modal-testing example) | *"the modal-testing recipe … **is written out almost verbatim in the docs and worked exactly as documented**."* The `dd` confirmation is **snapshot-proved for the first time**. | Three attempts across two runs concluded it was impossible; one shipped a PNG byte-identical to the no-dialog frame. |
+| **V-5** (headless mouse) | **M7 reached and proved for the first time in three runs** — click-to-select via `Click`, wheel via `Wheel`. | Both prior runs ran out of budget or hit "structurally untestable". |
+| **V-3** (`DataTable` override docs) | *"`DataTable.md` states click-to-select and `WantsMouse` are on unconditionally — **no opt-in code needed**."* | Run 1 read the inherited "default: false" text and **deleted working input handling**. |
+
+**V-1 (`Plot.md` → `Canvas`/`FilledLine`) is still unexercised after two runs.** She reached the primitive in minutes again, but via the *Display Widgets guide → `Drawing` namespace* route, not `Plot.md` — same as the 0.1.8 run. The cross-link is correct and cheap to keep, but two independent cold starts now suggest the namespace/guide path is what people actually walk. Don't count V-1 as validated.
+
+### New findings
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-16 | major | doc-gap | **Control pages don't name the theme token that drives their appearance.** She wanted vtop's accent-coloured selected row, found no selection property on `DataTable.md`, saw `DefaultStyleTheme` is `sealed`, and concluded a custom theme might mean implementing ~35 members — so she gave up and filed it as a capability gap. **She was wrong, and the answer was one page away:** `IStyleTheme`'s members are default-implemented (`IStyleTheme.cs:26+` — `Style Text => Style.Grey93;`), and `IStyleTheme.md` says so in as many words. The *previous* cold start found that note and wrote a 5-member theme; this one never reached the page because `DataTable.md` never points there. Same shape as V-1/V-2: the fix exists, the page you start from doesn't mention it. Fix: on each themeable control, name the token its selection/surface colours come from and link `IStyleTheme`. | open |
+| V-17 | minor | missing-feature | **No hex-string → `Color` parse.** `Color`'s only constructor is `(byte, byte, byte)`, so loading an external palette (vtop ships `themes/*.json` full of `#a537fd`) means hand-transcribing to `0xNN` literals. She did exactly that for three themes. A `Color.Parse`/`TryParse("#RRGGBB")` directly serves the "themes from external config" case the milestone asks about — and this is the **third** run to hand-roll hex parsing. | open |
+| V-18 | minor | doc-gap | **`Control.Feed` is `protected`, and its docs present it as *the* periodic-tick pattern without saying so.** App code composing a stock `Canvas`/`DataTable` can't call it — only a subclass can. She found out by writing the call and hitting a compiler error, then fell back to `Task.Run` + `UI.InvokeAsync`. Fix: one line on `Control.Feed` — it's for controls authoring their own tick; app code uses `Task.Run` + `UI.Invoke`. | open |
+| V-19 | minor | missing-feature | **No `TitleBorderStyle.None`** — only `Inline`/`Double`. `Inline` happened to match vtop, but there's no way to suppress title-border decoration entirely. (Note: the default is `Double`, which draws an extra divider under the title; she had to discover `TitleStyle(TitlePos.TopLeft, TitleBorderStyle.Inline)` to get vtop's look.) | open |
+| V-13 | minor | missing-feature | **Third occurrence** — `ControlFrame`'s single title slot. vtop puts `CPU Usage` top-left and `19%` top-right *in the border row*; she moved the readout into the canvas content, one row lower. Raised by all three runs now. | open |
+
+**Also worth keeping:** `SnapshotImageOptions.md`'s note that the default PNG font lacks braille coverage saved her a debugging session — she hit empty boxes in the PNG (live rendering and `ToText` were fine) and the doc told her to set `FontFamily = "Cascadia Mono"`. That's a doc note earning its keep; the same class of note is what V-16 is asking for.
+
+## Mouse-behaviour audit — 2026-07-31 (follow-on from V-5)
+
+Once V-5 made pointer input testable, the `DataTable` double-click bug it immediately exposed raised the obvious question: what else? Audited every mouse-reachable control (the 11 with an explicit `WantsMouse` override, plus every `Focusable` one — `Control` tags cells for both) by cross-referencing the mouse hooks each overrides against what its own docs promise.
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-14 | major | bug | **A control that overrides `OnClick` but not `OnDoubleClick` silently swallows every second rapid click.** `Control.OnMouseUp` routes the *second* click of a pair to `OnDoubleClick`, which is an empty virtual — so the click is consumed and nothing happens. **Confirmed empirically: two rapid clicks on a `Button` produce one `Activated`, not two.** Every other GUI toolkit fires the click twice. Affects `Button`, `Link`, `Select`, `Menu`, `MenuBar`, `TabHeader`, `TabAddButton`, `Autocomplete`, and `Dialog`'s button bar. Not a doc mismatch (none of them document double-click) but a real UX defect: an impatient double-click on a button, menu item, or dropdown does nothing the second time. **The codebase already knows about this** — `ToggleButton` does `OnDoubleClick => Toggle()` and `ToggleList` does `OnDoubleClick => OnClick(position)` precisely to avoid it; the fix is that one-liner on the nine controls that lack it. | **fixed 2026-07-31 (0.1.9)** — `OnDoubleClick => OnClick(position)` added to all nine. Guarded by a theory in `SnapshotMouseTests` asserting 1/2/3 rapid clicks produce 1/2/3 activations (3 works because `Control` resets its double-click latch after a pair, so the third is a fresh single). |
+| V-15 | major | capability-unknown | **`ListBox`'s documented right-click context menu cannot be exercised by any test.** `ListBox` reads `UI.MouseButton` to tell a right-click from a left-click (`ListBox.cs:351,362`), but `UI.MouseButton` has a **`private set`** assigned only from live input processing. The new snapshot mouse API can't set it, and neither can `Jumbee.Console.Tests` — `InternalsVisibleTo` doesn't reach a private setter. So `ContextMenu`/`ContextMenuOpening` — a documented, user-facing feature — has no test path at all, and V-5's mouse simulation is left-button-only. Fix: an internal setter plus `InternalsVisibleTo` for `Jumbee.Console.Snapshot`, and a `button` parameter on `ConsoleSnapshot.Click`. | **fixed 2026-07-31 (0.1.9)** — did exactly that: `UI.MouseButton`'s setter is now `internal` (public surface unchanged), `Jumbee.Console.Snapshot` was added to `InternalsVisibleTo`, and `Click` takes `button:`, latching and restoring `UI.MouseButton` around the dispatch. Two tests cover it: a right-click opens `ListBox`'s `ContextMenu` and announces the row, a left-click selects without opening it. |
+
+**Audited clean** (implementation matches the documented promise): `Canvas` and `Globe` (drag-pan/rotate + wheel-zoom, both gated on `Interactive`, with proper mouse capture) · `Log` (wheel scroll) · `TerminalEmulator` (forwards press/release/wheel to the child process) · `SplitDivider` (drag to resize, with capture) · `DataTable` (now, after the double-click fix) · `ListBox` and `Tree` (click + double-click both handled; right-click aside, see V-15) · `ToggleButton` and its `Checkbox`/`Switch`/`RadioButton` subclasses, and `ToggleList`/`RadioSet` (both hooks) · `MarkdownViewer` — its doc correctly *conditions* wheel-scrolling on being wrapped in a `ControlFrame`, which is exactly what the inherited `OnMouseWheel => Frame?.Scroll(delta)` does.
+
+**Method note:** V-14 was found by reading the override map, but only *confirmed* by running it through the new mouse API — the code reading alone looked like it might be intentional. A first attempt to check `Link` the same way returned a misleading "2 activations", because `Link.Activate()` opens the URL through the system handler and that took longer than the double-click window. Worth remembering when probing activation counts: use a control whose activation is cheap, and don't point a test at a control with an external side effect.
 
 ## vtop disposition
 

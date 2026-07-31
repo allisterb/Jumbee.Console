@@ -69,6 +69,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Jumbee.Console.Tests" />
+    <!-- So ConsoleSnapshot can latch UI.MouseButton when simulating a right-click: the button isn't carried by the
+         mouse dispatch itself (it's only a position), so a control reads UI.MouseButton to tell them apart. -->
+    <InternalsVisibleTo Include="Jumbee.Console.Snapshot" />
   </ItemGroup>
 
   <ItemGroup>

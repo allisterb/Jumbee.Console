@@ -169,6 +169,10 @@ internal sealed class SuggestionList : RenderableControl
         if (position.Y >= 0 && position.Y < _items.Count) Accepted?.Invoke(this, _items[position.Y]);
     }
 
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on a suggestion
+    // would be swallowed.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth)
     {
         var width = Math.Min(ActualWidth > 0 ? ActualWidth : maxWidth, maxWidth);

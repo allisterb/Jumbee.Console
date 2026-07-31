@@ -60,6 +60,10 @@ internal sealed class TabAddButton : RenderableControl
 
     protected override void OnClick(Position position) => Activate();
 
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click would open only
+    // one new tab.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
     // Fires the click/activation. Keyboard activation (Enter/Space) is driven by the owning TabPanel's tunnel
     // (InterceptInput), because the button is not in the panel's logical rows, so Layout routing never dispatches
     // input to it directly.

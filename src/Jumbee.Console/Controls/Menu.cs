@@ -201,6 +201,11 @@ public class ContextMenu : Control
         else Activate(menuItem);
     }
 
+    /// <inheritdoc/>
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on an item would
+    // be swallowed.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
     private void ResetToRoot()
     {
         _levels.Clear();

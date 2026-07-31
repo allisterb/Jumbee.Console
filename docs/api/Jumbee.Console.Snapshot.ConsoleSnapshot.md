@@ -38,6 +38,40 @@ public static Color? BackgroundAt(ConsoleBuffer buffer, int x, int y)
 
  [Color](Jumbee.Console.Color.md)?
 
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_Click_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_System_Int32_Jumbee_Console_TerminalMouseButton_"></a> Click\(ConsoleBuffer, int, int, int, TerminalMouseButton\)
+
+Clicks at (<code class="paramref">x</code>, <code class="paramref">y</code>) in <code class="paramref">buffer</code>: moves the pointer there,
+then presses and releases <code class="paramref">clicks</code> times.
+
+```csharp
+public static bool Click(ConsoleBuffer buffer, int x, int y, int clicks = 1, TerminalMouseButton button = TerminalMouseButton.Left)
+```
+
+#### Parameters
+
+`buffer` [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+`x` int
+
+`y` int
+
+`clicks` int
+
+`button` [TerminalMouseButton](Jumbee.Console.TerminalMouseButton.md)
+
+#### Returns
+
+ bool
+
+#### Remarks
+
+Pass <code>clicks: 2</code> for a double-click (the presses land within the double-click window, so a control that
+distinguishes them — e.g. <code>DataTable</code>'s row activation — sees a double-click). Pass
+<code class="paramref">button</code> to simulate a right-click: the dispatch itself carries only a position, so this
+latches <code>UI.MouseButton</code> the way the live input path does, which is what a control reads to tell the
+buttons apart (e.g. <code>ListBox</code> opening its <code>ContextMenu</code>). The pointer is left hovering the target
+afterwards, as it would be after a real click. Returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> if nothing is under it.
+
 ### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ForegroundAt_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_"></a> ForegroundAt\(ConsoleBuffer, int, int\)
 
 The foreground colour of the rendered cell at (<code class="paramref">x</code>, <code class="paramref">y</code>) as a
@@ -111,6 +145,34 @@ public static ConsoleKeyInfo Key(ConsoleKey key, bool shift = false, bool alt = 
 #### Returns
 
  ConsoleKeyInfo
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_MouseMove_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_"></a> MouseMove\(ConsoleBuffer, int, int\)
+
+Moves the pointer to (<code class="paramref">x</code>, <code class="paramref">y</code>) in <code class="paramref">buffer</code>, firing
+enter/leave/move on the controls under the old and new positions.
+
+```csharp
+public static bool MouseMove(ConsoleBuffer buffer, int x, int y)
+```
+
+#### Parameters
+
+`buffer` [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+`x` int
+
+`y` int
+
+#### Returns
+
+ bool
+
+#### Remarks
+
+Hover state persists across calls (as it does at runtime), so call <xref href="Jumbee.Console.Snapshot.ConsoleSnapshot.ResetMouse" data-throw-if-not-resolved="false"></xref> between
+    tests to avoid leaving a control hovered. Returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if a control is under the pointer —
+    a <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> here usually means the target doesn't opt into the mouse (see the control's
+    <code>WantsMouse</code>) or the coordinates are outside it.
 
 ### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_Render_ConsoleGUI_IControl_System_Int32_System_Int32_"></a> Render\(IControl, int, int\)
 
@@ -282,6 +344,77 @@ public static ConsoleBuffer RenderAfter(ILayout layout, int width, int height, I
 #### Returns
 
  [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_RenderAfterClick_Jumbee_Console_ILayout_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_"></a> RenderAfterClick\(ILayout, int, int, int, int, int\)
+
+Renders <code class="paramref">layout</code>, clicks at (<code class="paramref">x</code>, <code class="paramref">y</code>), then
+    re-renders and returns the result.
+
+```csharp
+public static ConsoleBuffer RenderAfterClick(ILayout layout, int width, int height, int x, int y, int clicks = 1)
+```
+
+#### Parameters
+
+`layout` [ILayout](Jumbee.Console.ILayout.md)
+
+`width` int
+
+`height` int
+
+`x` int
+
+`y` int
+
+`clicks` int
+
+#### Returns
+
+ [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_RenderAfterClick_Jumbee_Console_Control_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_"></a> RenderAfterClick\(Control, int, int, int, int, int\)
+
+Renders <code class="paramref">control</code>, clicks at (<code class="paramref">x</code>, <code class="paramref">y</code>), then
+    re-renders and returns the result.
+
+```csharp
+public static ConsoleBuffer RenderAfterClick(Control control, int width, int height, int x, int y, int clicks = 1)
+```
+
+#### Parameters
+
+`control` [Control](Jumbee.Console.Control.md)
+
+`width` int
+
+`height` int
+
+`x` int
+
+`y` int
+
+`clicks` int
+
+#### Returns
+
+ [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+#### Remarks
+
+Coordinates are relative to the rendered snapshot, so they include the control's own frame when it
+    has one — a click on the first row of a bordered control's content is <code>y: 1</code>, not <code>y: 0</code>.
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ResetMouse"></a> ResetMouse\(\)
+
+Clears the remembered pointer position, firing a leave on whatever is currently hovered.
+
+```csharp
+public static void ResetMouse()
+```
+
+#### Remarks
+
+Call between tests: hover state is static (as at runtime), so it would otherwise carry over.
 
 ### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_SavePng_Jumbee_Console_ConsoleBuffer_System_String_Jumbee_Console_Snapshot_SnapshotImageOptions_"></a> SavePng\(ConsoleBuffer, string, SnapshotImageOptions?\)
 
@@ -628,4 +761,84 @@ public static string ToTextAfter(ILayout layout, int width, int height, IReadOnl
 #### Returns
 
  string
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ToTextAfterClick_Jumbee_Console_ILayout_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_"></a> ToTextAfterClick\(ILayout, int, int, int, int, int\)
+
+Renders a layout, clicks, and returns the resulting screen as text.
+
+```csharp
+public static string ToTextAfterClick(ILayout layout, int width, int height, int x, int y, int clicks = 1)
+```
+
+#### Parameters
+
+`layout` [ILayout](Jumbee.Console.ILayout.md)
+
+`width` int
+
+`height` int
+
+`x` int
+
+`y` int
+
+`clicks` int
+
+#### Returns
+
+ string
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ToTextAfterClick_Jumbee_Console_Control_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_"></a> ToTextAfterClick\(Control, int, int, int, int, int\)
+
+Renders a control, clicks, and returns the resulting screen as text.
+
+```csharp
+public static string ToTextAfterClick(Control control, int width, int height, int x, int y, int clicks = 1)
+```
+
+#### Parameters
+
+`control` [Control](Jumbee.Console.Control.md)
+
+`width` int
+
+`height` int
+
+`x` int
+
+`y` int
+
+`clicks` int
+
+#### Returns
+
+ string
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_Wheel_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_System_Int32_"></a> Wheel\(ConsoleBuffer, int, int, int\)
+
+Rotates the wheel by <code class="paramref">delta</code> notches over (<code class="paramref">x</code>, <code class="paramref">y</code>) —
+negative scrolls up, positive scrolls down.
+
+```csharp
+public static bool Wheel(ConsoleBuffer buffer, int x, int y, int delta)
+```
+
+#### Parameters
+
+`buffer` [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+`x` int
+
+`y` int
+
+`delta` int
+
+#### Returns
+
+ bool
+
+#### Remarks
+
+Only reaches controls that implement <code>IMouseWheelListener</code>; returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>
+    otherwise (and when nothing is under the pointer).
 

@@ -88,6 +88,11 @@ public class Link : RenderableControl
     protected override void OnClick(Position position) => Activate();
 
     /// <inheritdoc/>
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click would follow the
+    // link only once.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
+    /// <inheritdoc/>
     protected override void OnInput(InputEvent inputEvent)
     {
         if (inputEvent.Key.Key is ConsoleKey.Enter or ConsoleKey.Spacebar)

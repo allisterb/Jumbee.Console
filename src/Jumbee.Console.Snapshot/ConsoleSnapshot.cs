@@ -353,18 +353,31 @@ public static class ConsoleSnapshot
     /// Clicks at (<paramref name="x"/>, <paramref name="y"/>) in <paramref name="buffer"/>: moves the pointer there,
     /// then presses and releases <paramref name="clicks"/> times.
     /// </summary>
-    /// <remarks>Pass <c>clicks: 2</c> for a double-click (the presses land within the double-click window, so a
-    /// control that distinguishes them — e.g. <c>DataTable</c>'s row activation — sees a double-click). The pointer
-    /// is left hovering the target afterwards, as it would be after a real click. Returns <see langword="false"/> if
-    /// nothing is under the pointer.</remarks>
-    public static bool Click(ConsoleBuffer buffer, int x, int y, int clicks = 1)
+    /// <remarks>
+    /// Pass <c>clicks: 2</c> for a double-click (the presses land within the double-click window, so a control that
+    /// distinguishes them — e.g. <c>DataTable</c>'s row activation — sees a double-click). Pass
+    /// <paramref name="button"/> to simulate a right-click: the dispatch itself carries only a position, so this
+    /// latches <c>UI.MouseButton</c> the way the live input path does, which is what a control reads to tell the
+    /// buttons apart (e.g. <c>ListBox</c> opening its <c>ContextMenu</c>). The pointer is left hovering the target
+    /// afterwards, as it would be after a real click. Returns <see langword="false"/> if nothing is under it.
+    /// </remarks>
+    public static bool Click(ConsoleBuffer buffer, int x, int y, int clicks = 1, TerminalMouseButton button = TerminalMouseButton.Left)
     {
         if (!MouseMove(buffer, x, y) || _mouseContext is not { } context) return false;
 
-        for (var i = 0; i < clicks; i++)
+        var previous = UI.MouseButton;
+        UI.MouseButton = button;   // latched on press by the live path; controls read it from OnClick/OnDoubleClick
+        try
         {
-            context.MouseListener.OnMouseDown(context.RelativePosition);
-            context.MouseListener.OnMouseUp(context.RelativePosition);
+            for (var i = 0; i < clicks; i++)
+            {
+                context.MouseListener.OnMouseDown(context.RelativePosition);
+                context.MouseListener.OnMouseUp(context.RelativePosition);
+            }
+        }
+        finally
+        {
+            UI.MouseButton = previous;
         }
 
         return true;

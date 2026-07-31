@@ -110,6 +110,58 @@ public class SnapshotMouseTests : System.IDisposable
         Assert.False(ConsoleSnapshot.Click(buffer, 200, 200));
     }
 
+    // Control.OnMouseUp routes the SECOND click of a rapid pair to OnDoubleClick, so a control that overrides only
+    // OnClick silently swallows it. Every clickable control must handle both.
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    public void RapidClicks_EachActivateTheControl(int clicks, int expected)
+    {
+        var count = 0;
+        var button = new Button("Go");
+        button.Activated += (_, _) => count++;
+
+        ConsoleSnapshot.Click(ConsoleSnapshot.Render(button, 20, 1), 1, 0, clicks);
+
+        Assert.Equal(expected, count);
+    }
+
+    [Fact]
+    public void RightClick_OpensAListBoxContextMenu()
+    {
+        var list = new ListBox("alpha", "beta", "gamma") { ContextMenu = new ContextMenu([new MenuItem("Delete")]) };
+        ListBox.ListBoxItem? opening = null;
+        list.ContextMenuOpening += (_, item) => opening = item;
+
+        // The context menu floats in the ambient overlay, so give it one.
+        var overlay = new Overlay(new Grid([10], [30], [[list]]));
+        UI.Overlay = overlay;
+        var buffer = ConsoleSnapshot.Render(overlay, 30, 10);
+
+        Assert.True(ConsoleSnapshot.Click(buffer, 1, 1, button: TerminalMouseButton.Right));
+
+        Assert.NotNull(opening);              // the right-clicked row was announced
+        Assert.Equal(1, list.SelectedIndex);  // ...and selected first
+    }
+
+    [Fact]
+    public void LeftClick_DoesNotOpenTheContextMenu()
+    {
+        var list = new ListBox("alpha", "beta", "gamma") { ContextMenu = new ContextMenu([new MenuItem("Delete")]) };
+        var opened = false;
+        list.ContextMenuOpening += (_, _) => opened = true;
+
+        var overlay = new Overlay(new Grid([10], [30], [[list]]));
+        UI.Overlay = overlay;
+        var buffer = ConsoleSnapshot.Render(overlay, 30, 10);
+
+        ConsoleSnapshot.Click(buffer, 1, 1);   // left button is the default
+
+        Assert.False(opened);
+        Assert.Equal(1, list.SelectedIndex);   // plain selection still happens
+    }
+
     [Fact]
     public void ToTextAfterClick_RendersTheResultOfTheClick()
     {

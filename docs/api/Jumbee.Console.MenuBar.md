@@ -280,6 +280,18 @@ protected override void OnClick(Position position)
 
 `position` Position
 
+### <a id="Jumbee_Console_MenuBar_OnDoubleClick_ConsoleGUI_Space_Position_"></a> OnDoubleClick\(Position\)
+
+Called on two clicks within <xref href="Jumbee.Console.Control.DoubleClickMs" data-throw-if-not-resolved="false"></xref> at the same position.
+
+```csharp
+protected override void OnDoubleClick(Position position)
+```
+
+#### Parameters
+
+`position` Position
+
 ### <a id="Jumbee_Console_MenuBar_OnInput_ConsoleGUI_Input_InputEvent_"></a> OnInput\(InputEvent\)
 
 Handles a keyboard input event; override on input-handling controls. The default is a no-op.

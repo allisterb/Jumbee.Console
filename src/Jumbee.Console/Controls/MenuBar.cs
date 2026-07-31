@@ -86,6 +86,11 @@ public class MenuBar : RenderableControl
     }
 
     /// <inheritdoc/>
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on a title would
+    // be swallowed.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
+    /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("MenuBar", "Menu bar", "Application menus.")
         .WithKey("Left / Right", "Move between menus")
         .WithKey("Enter / Down", "Open a menu");

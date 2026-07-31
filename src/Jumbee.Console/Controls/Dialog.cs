@@ -438,6 +438,10 @@ internal sealed class DialogButtonBar : RenderableControl
         if (i >= 0) Activated?.Invoke(_spec[i].Result);
     }
 
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on a dialog
+    // button would be swallowed.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
     private void Move(int dir)
     {
         _focused = ((_focused + dir) % _spec.Length + _spec.Length) % _spec.Length;

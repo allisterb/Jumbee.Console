@@ -161,6 +161,10 @@ public class TabHeader : RenderableControl
         Activated?.Invoke(this, EventArgs.Empty);
     }
 
+    // The second click of a rapid pair arrives here, not at OnClick — without this a double-click on a tab (or on
+    // its ✕) would be swallowed.
+    protected override void OnDoubleClick(Position position) => OnClick(position);
+
     // The column span of the close glyph within the header: one leading space + the caret/gutter + the label + the
     // separating space. Mirrors the layout built in Render and the widths in LabelWidth.
     private (int start, int width) CloseGlyphSpan()
