@@ -38,8 +38,13 @@ $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 
 # Unique prerelease version so a re-pack is never shadowed by NuGet's per-version cache, and so this build
-# uniquely resolves against the local feed rather than nuget.org's 0.1.2.
-$version = '0.1.4-preview.' + (Get-Date -Format 'yyyyMMddHHmmss')
+# uniquely resolves against the local feed rather than the published package on nuget.org.
+# The base version is read from src\Directory.Build.props rather than hardcoded here — a hardcoded one silently
+# goes stale after a version bump and the preview then tests the wrong version number.
+$propsPath = Join-Path $repo 'src\Directory.Build.props'
+$baseVersion = ([xml](Get-Content $propsPath)).SelectSingleNode('//ProjectAssemblyVersion').InnerText.Trim()
+if (-not $baseVersion) { throw "Could not read ProjectAssemblyVersion from $propsPath" }
+$version = "$baseVersion-preview." + (Get-Date -Format 'yyyyMMddHHmmss')
 
 if (-not $SkipPack) {
     Write-Host "Packing preview build $version ..." -ForegroundColor Cyan

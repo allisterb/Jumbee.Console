@@ -359,12 +359,12 @@ public static void SavePngAfter(Control control, int width, int height, string p
 
 `keys` ConsoleKey\[\]
 
-### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_SavePngAfter_Jumbee_Console_Control_System_Int32_System_Int32_System_String_System_Collections_Generic_IReadOnlyList_System_ConsoleKeyInfo__"></a> SavePngAfter\(Control, int, int, string, IReadOnlyList<ConsoleKeyInfo\>\)
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_SavePngAfter_Jumbee_Console_Control_System_Int32_System_Int32_System_String_System_Collections_Generic_IReadOnlyList_System_ConsoleKeyInfo__System_Boolean_"></a> SavePngAfter\(Control, int, int, string, IReadOnlyList<ConsoleKeyInfo\>, bool\)
 
 Renders a control after sending the given keys (with modifiers) and saves it to a PNG file.
 
 ```csharp
-public static void SavePngAfter(Control control, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys)
+public static void SavePngAfter(Control control, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys, bool routeGlobal = false)
 ```
 
 #### Parameters
@@ -378,6 +378,60 @@ public static void SavePngAfter(Control control, int width, int height, string p
 `path` string
 
 `keys` IReadOnlyList<ConsoleKeyInfo\>
+
+`routeGlobal` bool
+
+#### Remarks
+
+Pass <code class="paramref">routeGlobal</code> to fire hotkeys registered with <code>UI.RegisterHotKey</code>, the
+    same as <xref href="Jumbee.Console.Snapshot.ConsoleSnapshot.RenderAfter(Jumbee.Console.Control%2cSystem.Int32%2cSystem.Int32%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.ConsoleKeyInfo%7d%2cSystem.Boolean)" data-throw-if-not-resolved="false"></xref>.
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_SavePngAfter_Jumbee_Console_ILayout_System_Int32_System_Int32_System_String_System_ConsoleKey___"></a> SavePngAfter\(ILayout, int, int, string, params ConsoleKey\[\]\)
+
+Renders a layout after sending the given keys and saves it to a PNG file.
+
+```csharp
+public static void SavePngAfter(ILayout layout, int width, int height, string path, params ConsoleKey[] keys)
+```
+
+#### Parameters
+
+`layout` [ILayout](Jumbee.Console.ILayout.md)
+
+`width` int
+
+`height` int
+
+`path` string
+
+`keys` ConsoleKey\[\]
+
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_SavePngAfter_Jumbee_Console_ILayout_System_Int32_System_Int32_System_String_System_Collections_Generic_IReadOnlyList_System_ConsoleKeyInfo__System_Boolean_"></a> SavePngAfter\(ILayout, int, int, string, IReadOnlyList<ConsoleKeyInfo\>, bool\)
+
+Renders a layout after sending the given keys (with modifiers) and saves it to a PNG file.
+
+```csharp
+public static void SavePngAfter(ILayout layout, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys, bool routeGlobal = false)
+```
+
+#### Parameters
+
+`layout` [ILayout](Jumbee.Console.ILayout.md)
+
+`width` int
+
+`height` int
+
+`path` string
+
+`keys` IReadOnlyList<ConsoleKeyInfo\>
+
+`routeGlobal` bool
+
+#### Remarks
+
+Use this to capture an <code>Overlay</code> — a modal's frame is only in the overlay, not in the root
+    layout. Pass <code class="paramref">routeGlobal</code> to fire hotkeys registered with <code>UI.RegisterHotKey</code>.
 
 ### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ToImage_Jumbee_Console_ConsoleBuffer_Jumbee_Console_Snapshot_SnapshotImageOptions_"></a> ToImage\(ConsoleBuffer, SnapshotImageOptions?\)
 

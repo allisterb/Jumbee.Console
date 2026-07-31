@@ -514,4 +514,31 @@ public class ConsoleSnapshotTests
         Assert.True(File.Exists(Path.Combine(dir, "tree.png")));
         Assert.True(File.Exists(Path.Combine(dir, "decorations.png")));
     }
+
+    // SavePngAfter used to lag its RenderAfter/ToTextAfter siblings: no routeGlobal, and no ILayout overload — so a
+    // hotkey-driven PNG, or a PNG of an Overlay (where a modal's frame actually lives), needed a two-step
+    // RenderAfter -> SavePng(buffer) workaround. Both overloads now exist; this covers them together.
+    [Fact]
+    public void SavePngAfter_AcceptsALayoutAndRoutesAGlobalHotKey()
+    {
+        var fired = false;
+        UI.RegisterHotKey(UI.HotKeys.Char('r'), () => fired = true);
+
+        var overlay = new Overlay(new Grid([1], [40], [[new TextInput("hello")]]));
+        UI.Overlay = overlay;
+        ConsoleSnapshot.Render(overlay, 60, 20);
+
+        var path = Path.Combine(Path.GetTempPath(), $"jc_savepngafter_{Guid.NewGuid():N}.png");
+        try
+        {
+            ConsoleSnapshot.SavePngAfter(overlay, 60, 20, path, [UI.HotKeys.Char('r')], routeGlobal: true);
+
+            Assert.True(fired);
+            Assert.True(new FileInfo(path).Length > 0);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
 }

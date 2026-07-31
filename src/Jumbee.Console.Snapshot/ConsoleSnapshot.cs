@@ -328,8 +328,20 @@ public static class ConsoleSnapshot
         => SavePng(RenderAfter(control, width, height, keys), path);
 
     /// <summary>Renders a control after sending the given keys (with modifiers) and saves it to a PNG file.</summary>
-    public static void SavePngAfter(JControl control, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys)
-        => SavePng(RenderAfter(control, width, height, keys), path);
+    /// <remarks>Pass <paramref name="routeGlobal"/> to fire hotkeys registered with <c>UI.RegisterHotKey</c>, the
+    /// same as <see cref="RenderAfter(JControl, int, int, IReadOnlyList{ConsoleKeyInfo}, bool)"/>.</remarks>
+    public static void SavePngAfter(JControl control, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys, bool routeGlobal = false)
+        => SavePng(RenderAfter(control, width, height, keys, routeGlobal), path);
+
+    /// <summary>Renders a layout after sending the given keys and saves it to a PNG file.</summary>
+    public static void SavePngAfter(ILayout layout, int width, int height, string path, params ConsoleKey[] keys)
+        => SavePng(RenderAfter(layout, width, height, keys), path);
+
+    /// <summary>Renders a layout after sending the given keys (with modifiers) and saves it to a PNG file.</summary>
+    /// <remarks>Use this to capture an <c>Overlay</c> — a modal's frame is only in the overlay, not in the root
+    /// layout. Pass <paramref name="routeGlobal"/> to fire hotkeys registered with <c>UI.RegisterHotKey</c>.</remarks>
+    public static void SavePngAfter(ILayout layout, int width, int height, string path, IReadOnlyList<ConsoleKeyInfo> keys, bool routeGlobal = false)
+        => SavePng(RenderAfter(layout, width, height, keys, routeGlobal), path);
     #endregion
 
     #region Helpers

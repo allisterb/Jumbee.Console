@@ -37,6 +37,31 @@ public Style(string style)
 
 `style` string
 
+### <a id="Jumbee_Console_Style__ctor_Jumbee_Console_Color_Jumbee_Console_Color_"></a> Style\(Color, Color\)
+
+A style with both a foreground and a background colour.
+
+```csharp
+public Style(Color foreground, Color background)
+```
+
+#### Parameters
+
+`foreground` [Color](Jumbee.Console.Color.md)
+
+The text colour.
+
+`background` [Color](Jumbee.Console.Color.md)
+
+The colour behind the text.
+
+#### Remarks
+
+The direct form for the common "text on a background" case — an inverse-video key cap is
+<code>new Style(Color.Black, Color.White)</code>. A single colour converts implicitly instead
+(<code>Style s = myColor;</code> sets the foreground and leaves the background at the terminal default).
+Add a decoration by composing with <code>|</code>: <code>new Style(fg, bg) | Style.Bold</code>.
+
 ## Fields
 
 ### <a id="Jumbee_Console_Style_Aqua"></a> Aqua

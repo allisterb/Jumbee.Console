@@ -62,6 +62,17 @@ public readonly partial struct Style : System.IEquatable<Style>
 
     /// <summary>Parses a style from a Spectre markup style string (e.g. <c>"bold red on blue"</c>).</summary>
     public Style(string style) : this(SCStyle.Parse(style)) {}
+
+    /// <summary>A style with both a foreground and a background colour.</summary>
+    /// <remarks>
+    /// The direct form for the common "text on a background" case — an inverse-video key cap is
+    /// <c>new Style(Color.Black, Color.White)</c>. A single colour converts implicitly instead
+    /// (<c>Style s = myColor;</c> sets the foreground and leaves the background at the terminal default).
+    /// Add a decoration by composing with <c>|</c>: <c>new Style(fg, bg) | Style.Bold</c>.
+    /// </remarks>
+    /// <param name="foreground">The text colour.</param>
+    /// <param name="background">The colour behind the text.</param>
+    public Style(Color foreground, Color background) : this(new SCStyle(foreground, background)) {}
     #endregion
 
     #region Indexers

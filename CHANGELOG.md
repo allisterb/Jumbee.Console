@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.8
+
+### Added
+
+- **`Style(Color foreground, Color background)`** — a direct two-colour constructor. Previously a style with a background needed the markup-string form (`new Style("black on white")`) or composition (`(Style)fg | Style.Bg(bg)`); the get-only `ForegroundColor`/`BackgroundColor` properties made the two-argument form look like it should already exist.
+- **`ConsoleSnapshot.SavePngAfter` gained `routeGlobal` and `ILayout` overloads**, matching `RenderAfter`/`ToTextAfter`. A PNG capture driven by a global hotkey, or of an `Overlay` (where a modal's frame actually lives), no longer needs a two-step `RenderAfter` → `SavePng(buffer)` workaround.
+
+### Fixed
+
+- Several controls had the documentation for overridden members replaced by the base class's text, because an override with `<inheritdoc/>` (or no doc comment) inherits the base summary. On `HandlesInput`/`WantsMouse` this stated the opposite of the truth — the pages read "the default (false) ignores it" for controls that override it to `true`, so `DataTable`, `ListBox`, `Tree`, `Menu`, `MenuBar`, `Button`, `Link` and `MarkdownViewer` all appeared to need an opt-in that was already on.
+
+### Docs
+
+- **Testing a modal dialog** — new worked example in GETTING-STARTED's "Testing without a terminal", covering the `Overlay` a modal attaches to. Snapshotting the root layout renders a frame with no dialog in it; you have to snapshot the overlay.
+- **`Plot.AddBars`/`AddLiveBars`** now point at `Canvas` + `Drawing.FilledLine` for a sub-cell filled/area chart, and state that bars take no `PlotBrush` and so can't be drawn in braille.
+- **`DockPanel.DockedControl` and `Grid`** now name `Boundary` as the way to give a child a fixed extent. The "0 means fill the parent" trap was documented; the fix for a child with no `Width`/`Height` of its own (a `ControlFrame`, a nested layout) was not.
+
 ## 0.1.7
 
 ### Added

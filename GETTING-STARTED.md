@@ -338,6 +338,41 @@ var afterSearch = ConsoleSnapshot.ToTextAfter(list, 80, 24, [UI.HotKeys.Char('/'
 
 Two things to know when asserting: text snapshots are **glyphs only** — colour and decoration aren't captured, so check colour with `SavePng`/`ToImage` (or render a visible marker and assert on that); and `ToTextAfter` sends the keys to the single control you pass, so to prove an effect that spans panes, target the control that actually changes.
 
+### Testing a modal dialog
+
+A modal doesn't live in your layout — it attaches to an [`Overlay`](docs/api/Jumbee.Console.Overlay.md). At runtime
+`UI.Start` creates one for you, but a snapshot test has no UI loop, so build the overlay yourself and **snapshot the
+overlay rather than the root**. That last part is the whole trick: the dialog is a layer *on top of* your root
+layout, so a snapshot of the root alone renders a frame with no dialog in it.
+
+```csharp
+using Jumbee.Console;
+using Jumbee.Console.Snapshot;
+
+var root    = new Grid([1], [40], [[new TextInput("behind the dialog")]]);
+var overlay = new Overlay(root);
+UI.Overlay  = overlay;                       // so Dialog.Show() can find it
+ConsoleSnapshot.Render(overlay, 60, 20);     // lay the root out once
+
+var confirmed = false;
+var dialog = Dialog.Confirm("Kill process", "Kill 'node'?", yes => confirmed = yes);
+dialog.Show();                               // or dialog.Show(overlay), and skip setting UI.Overlay
+
+// Snapshot the OVERLAY — snapshotting `root` here would show no dialog at all.
+var text = ConsoleSnapshot.ToText(overlay, 60, 20);
+Assert.Contains("Kill 'node'?", text);
+
+// Drive it with keys the same way, still through the overlay.
+var after = ConsoleSnapshot.ToText(
+    ConsoleSnapshot.RenderAfter(overlay, 60, 20, [ConsoleSnapshot.Key(ConsoleKey.Enter)]));
+Assert.True(confirmed);
+Assert.DoesNotContain("Kill 'node'?", after);   // dismissed
+```
+
+`Dialog.Show()` throws `InvalidOperationException: "No ambient UI.Overlay is available"` if you skip the
+`UI.Overlay` assignment *and* don't use the `Show(overlay)` overload — that exception is the signal you've hit this
+case. The same pattern works for anything else that renders into the overlay layer, such as a `ContextMenu`.
+
 ## Where to go next
 
 - Case study 1 : [building a real TUI](examples/Jumbee.Console.NewsReaderDemo/README.md) — a longer worked
