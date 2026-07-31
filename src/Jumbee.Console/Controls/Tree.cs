@@ -174,11 +174,13 @@ public partial class Tree : RenderableControl
     /// right-clicked node.</remarks>
     public ContextMenu? ContextMenu { get; set; }
 
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the tree handles its own navigation and expand/collapse keys. No
+    /// opt-in needed — unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
 
-    /// <inheritdoc/>
-    protected override bool WantsMouse => true;   // click to select/toggle, hover to highlight
+    /// <summary>Always <see langword="true"/>: nodes receive hover and click (click to select or toggle, hover to
+    /// highlight). No opt-in needed — unlike the base default, this is on.</summary>
+    protected override bool WantsMouse => true;
 
     #endregion
 

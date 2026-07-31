@@ -97,7 +97,8 @@ public partial class ListBox : RenderableControl
     /// right-clicked row.</remarks>
     public ContextMenu? ContextMenu { get; set; }
 
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the list handles its own selection keys. No opt-in needed — unlike
+    /// the base default, this is on.</summary>
     public override bool HandlesInput => true;
     #endregion
 

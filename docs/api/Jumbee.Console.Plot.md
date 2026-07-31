@@ -320,6 +320,19 @@ public Plot AddBars(double[] xs, double[] ys, Color? color = null, double baseli
 <code class="paramref">color</code> defaults to the palette; <code class="paramref">width</code> is the bar width as a fraction
 (0..1) of the spacing between bars.
 
+<p>
+Bars render as solid blocks — there is no <xref href="Jumbee.Console.PlotBrush" data-throw-if-not-resolved="false"></xref> parameter, so they cannot be drawn in
+braille. For a sub-cell <b>filled</b> or area look (the <code>drawille</code> style used by terminal system
+monitors), use <xref href="Jumbee.Console.Canvas" data-throw-if-not-resolved="false"></xref> with <xref href="Jumbee.Console.Drawing.CanvasMarker.Braille" data-throw-if-not-resolved="false"></xref> and one
+<xref href="Jumbee.Console.Drawing.FilledLine" data-throw-if-not-resolved="false"></xref> per column — with <code>using Jumbee.Console.Drawing;</code>,
+<code>canvas.Add(new FilledLine(x, 0, x, value, 0, color))</code>. That fills each column from the baseline at
+exact sub-cell resolution, one shape per column.
+</p>
+
+#### See Also
+
+[FilledLine](Jumbee.Console.Drawing.FilledLine.md)
+
 ### <a id="Jumbee_Console_Plot_AddBox_System_Double___System_Double___System_Double___System_Double___System_Double___System_Double___System_Nullable_Jumbee_Console_Color__System_Nullable_Jumbee_Console_Color__System_Double_"></a> AddBox\(double\[\], double\[\], double\[\], double\[\], double\[\], double\[\], Color?, Color?, double\)
 
 Adds a box-and-whisker series from the five-number summary of each box — <code class="paramref">mins</code>,
@@ -689,6 +702,16 @@ public PlotSeries AddLiveBars(Color? color = null, double baseline = 0, double w
 
 Feed it with <xref href="Jumbee.Console.PlotSeries.SetValues(System.Double%5b%5d)" data-throw-if-not-resolved="false"></xref> (bars at x = 1, 2, 3, …) or <xref href="Jumbee.Console.PlotSeries.SetData(System.Double%5b%5d%2cSystem.Double%5b%5d)" data-throw-if-not-resolved="false"></xref>.
 <code class="paramref">color</code> defaults to the palette. Starts empty.
+
+<p>
+Like <xref href="Jumbee.Console.Plot.AddBars(System.Double%5b%5d%2cSystem.Double%5b%5d%2cSystem.Nullable%7bJumbee.Console.Color%7d%2cSystem.Double%2cSystem.Double)" data-throw-if-not-resolved="false"></xref>, these render as solid blocks and take
+no <xref href="Jumbee.Console.PlotBrush" data-throw-if-not-resolved="false"></xref>. For a live braille-filled column chart (a system-monitor style CPU/memory graph),
+drive a <xref href="Jumbee.Console.Canvas" data-throw-if-not-resolved="false"></xref> with one <xref href="Jumbee.Console.Drawing.FilledLine" data-throw-if-not-resolved="false"></xref> per sample instead.
+</p>
+
+#### See Also
+
+[FilledLine](Jumbee.Console.Drawing.FilledLine.md)
 
 ### <a id="Jumbee_Console_Plot_AddLiveScatter_System_Nullable_Jumbee_Console_Color__Jumbee_Console_PlotBrush_"></a> AddLiveScatter\(Color?, PlotBrush\)
 

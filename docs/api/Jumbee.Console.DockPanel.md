@@ -93,8 +93,19 @@ public IFocusable DockedControl { get; set; }
 #### Remarks
 
 Give the docked control a positive width (for a Left/Right dock) or height (Top/Bottom). A width or
-    height of 0 is the "fill the parent" sentinel, so a 0-sized docked control takes the whole panel and starves
-    the fill control — use a positive extent, or swap this to a narrow control, to collapse the pane instead.
+height of 0 is the "fill the parent" sentinel, so a 0-sized docked control takes the whole panel and starves
+the fill control — use a positive extent, or swap this to a narrow control, to collapse the pane instead.
+
+<p>
+Controls that expose <code>Width</code>/<code>Height</code> can be sized directly (or via <code>WithWidth</code>/<code>WithHeight</code>).
+Anything that doesn't — a <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref>, a nested layout — has no extent of its own, so wrap
+it in a <xref href="Jumbee.Console.Boundary" data-throw-if-not-resolved="false"></xref> to give it one: <code>new Boundary(framedChart, width, height)</code>. Forgetting this
+is the common failure: the dock silently fills the whole panel and the fill control never appears, with no error.
+</p>
+
+#### See Also
+
+[Boundary](Jumbee.Console.Boundary.md)
 
 ### <a id="Jumbee_Console_DockPanel_FillControl"></a> FillControl
 

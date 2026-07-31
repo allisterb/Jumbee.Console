@@ -170,7 +170,8 @@ protected const int MaxRows = 1024
 
 ### <a id="Jumbee_Console_MarkdownViewer_HandlesInput"></a> HandlesInput
 
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, this control processes keyboard input dispatched to it; the default (<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) ignores it.
+Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: the viewer handles its own scroll keys. No opt-in needed — unlike
+    the base default, this is on.
 
 ```csharp
 public override bool HandlesInput { get; }

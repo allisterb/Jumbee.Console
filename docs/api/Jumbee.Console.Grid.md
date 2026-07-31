@@ -77,12 +77,22 @@ Each cell's control is given its cell's fixed size (so a control that fills, i.e
 0, fills that fixed cell). For proportional/fill layouts, compose <xref href="Jumbee.Console.DockPanel" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.SplitPanel" data-throw-if-not-resolved="false"></xref>
 instead.
 
+<p>
+To give a cell's content an explicit size of its own — needed for anything without <code>Width</code>/<code>Height</code>,
+such as a <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> or a nested layout — wrap it in a <xref href="Jumbee.Console.Boundary" data-throw-if-not-resolved="false"></xref>:
+<code>new Boundary(child, width, height)</code>.
+</p>
+
 #### Exceptions
 
  ArgumentException
 
 The control grid's row/column counts don't match
     <code class="paramref">rowHeights</code>/<code class="paramref">columnWidths</code>.
+
+#### See Also
+
+[Boundary](Jumbee.Console.Boundary.md)
 
 ## Properties
 

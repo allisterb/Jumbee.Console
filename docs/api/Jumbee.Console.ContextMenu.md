@@ -159,7 +159,8 @@ public ContextMenu(IEnumerable<MenuItem> items)
 
 ### <a id="Jumbee_Console_ContextMenu_HandlesInput"></a> HandlesInput
 
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, this control processes keyboard input dispatched to it; the default (<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) ignores it.
+Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: the menu handles its own navigation and activation keys. No opt-in
+    needed — unlike the base default, this is on.
 
 ```csharp
 public override bool HandlesInput { get; }
@@ -183,8 +184,8 @@ public IReadOnlyList<MenuItem> Items { get; }
 
 ### <a id="Jumbee_Console_ContextMenu_WantsMouse"></a> WantsMouse
 
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, the control's cells are tagged with a mouse listener even if it is not
-<xref href="Jumbee.Console.Control.Focusable" data-throw-if-not-resolved="false"></xref>, so it still receives hover/click (e.g. a non-focusable clickable Link).
+Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: items receive hover and click, so hovering highlights an item and
+    opens its submenu. No opt-in needed — unlike the base default, this is on.
 
 ```csharp
 protected override bool WantsMouse { get; }

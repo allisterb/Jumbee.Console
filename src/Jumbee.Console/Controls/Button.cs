@@ -41,7 +41,8 @@ public class Button : RenderableControl
     #endregion
 
     #region Properties
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the button handles Enter/Space to activate. No opt-in needed —
+    /// unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
     /// <inheritdoc/>
     protected override bool RendersOwnFocus => true;   // focus lightens the tile / bolds the label

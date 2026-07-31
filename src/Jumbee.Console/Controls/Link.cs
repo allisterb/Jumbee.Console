@@ -37,7 +37,8 @@ public class Link : RenderableControl
     #endregion
 
     #region Properties
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the link handles Enter/Space to follow it. No opt-in needed —
+    /// unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
     /// <inheritdoc/>
     protected override bool RendersOwnFocus => true;   // underlines/highlights on focus

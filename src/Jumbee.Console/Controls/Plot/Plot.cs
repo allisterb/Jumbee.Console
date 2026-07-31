@@ -224,7 +224,16 @@ public class Plot : Control
     /// <remarks>
     /// <paramref name="color"/> defaults to the palette; <paramref name="width"/> is the bar width as a fraction
     /// (0..1) of the spacing between bars.
+    /// <para>
+    /// Bars render as solid blocks — there is no <see cref="PlotBrush"/> parameter, so they cannot be drawn in
+    /// braille. For a sub-cell <b>filled</b> or area look (the <c>drawille</c> style used by terminal system
+    /// monitors), use <see cref="Canvas"/> with <see cref="Drawing.CanvasMarker.Braille"/> and one
+    /// <see cref="Drawing.FilledLine"/> per column — with <c>using Jumbee.Console.Drawing;</c>,
+    /// <c>canvas.Add(new FilledLine(x, 0, x, value, 0, color))</c>. That fills each column from the baseline at
+    /// exact sub-cell resolution, one shape per column.
+    /// </para>
     /// </remarks>
+    /// <seealso cref="Drawing.FilledLine"/>
     public Plot AddBars(double[] xs, double[] ys, Color? color = null, double baseline = 0, double width = 0.8)
     {
         UI.Invoke(() =>
@@ -694,7 +703,13 @@ public class Plot : Control
     /// <remarks>
     /// Feed it with <see cref="PlotSeries.SetValues"/> (bars at x = 1, 2, 3, …) or <see cref="PlotSeries.SetData"/>.
     /// <paramref name="color"/> defaults to the palette. Starts empty.
+    /// <para>
+    /// Like <see cref="AddBars(double[], double[], Color?, double, double)"/>, these render as solid blocks and take
+    /// no <see cref="PlotBrush"/>. For a live braille-filled column chart (a system-monitor style CPU/memory graph),
+    /// drive a <see cref="Canvas"/> with one <see cref="Drawing.FilledLine"/> per sample instead.
+    /// </para>
     /// </remarks>
+    /// <seealso cref="Drawing.FilledLine"/>
     public PlotSeries AddLiveBars(Color? color = null, double baseline = 0, double width = 0.8)
     {
         var c = (CColor?)color ?? SeriesColor(_seriesCount);

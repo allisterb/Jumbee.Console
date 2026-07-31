@@ -42,9 +42,11 @@ public class DataTable : Control
     #endregion
 
     #region Properties
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the table handles its own selection keys (arrows, Home/End, Page
+    /// Up/Down, Enter). No opt-in needed — unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: rows receive hover and click, so a click selects a row and a
+    /// double-click activates it. No opt-in needed — unlike the base default, this is on.</summary>
     protected override bool WantsMouse => true;
 
     /// <summary>The column headers.</summary>

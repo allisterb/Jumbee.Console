@@ -136,7 +136,9 @@ internal sealed class SuggestionList : RenderableControl
 
     public event EventHandler<string>? Accepted;
 
-    protected override bool WantsMouse => true;   // hover/click while unfocused
+    /// <summary>Always <see langword="true"/>: suggestion rows receive hover and click even while the control is
+    /// unfocused. No opt-in needed — unlike the base default, this is on.</summary>
+    protected override bool WantsMouse => true;
 
     public string? Selected => _highlighted >= 0 && _highlighted < _items.Count ? _items[_highlighted] : null;
 

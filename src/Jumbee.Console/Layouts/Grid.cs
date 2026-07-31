@@ -22,7 +22,13 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// Each cell's control is given its cell's fixed size (so a control that fills, i.e. <c>Width</c>/<c>Height</c>
     /// 0, fills that fixed cell). For proportional/fill layouts, compose <see cref="DockPanel"/>/<see cref="SplitPanel"/>
     /// instead.
+    /// <para>
+    /// To give a cell's content an explicit size of its own — needed for anything without <c>Width</c>/<c>Height</c>,
+    /// such as a <see cref="ControlFrame"/> or a nested layout — wrap it in a <see cref="Boundary"/>:
+    /// <c>new Boundary(child, width, height)</c>.
+    /// </para>
     /// </remarks>
+    /// <seealso cref="Boundary"/>
     /// <param name="rowHeights">The fixed height in cells of each row, top to bottom.</param>
     /// <param name="columnWidths">The fixed width in cells of each column, left to right.</param>
     /// <param name="controls">Row-major controls: one inner array per row, each with one control per column.</param>

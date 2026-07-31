@@ -311,7 +311,8 @@ public TreeGuide Guide { get; set; }
 
 ### <a id="Jumbee_Console_Tree_HandlesInput"></a> HandlesInput
 
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, this control processes keyboard input dispatched to it; the default (<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) ignores it.
+Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: the tree handles its own navigation and expand/collapse keys. No
+    opt-in needed — unlike the base default, this is on.
 
 ```csharp
 public override bool HandlesInput { get; }
@@ -461,8 +462,8 @@ public Style Style { get; set; }
 
 ### <a id="Jumbee_Console_Tree_WantsMouse"></a> WantsMouse
 
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, the control's cells are tagged with a mouse listener even if it is not
-<xref href="Jumbee.Console.Control.Focusable" data-throw-if-not-resolved="false"></xref>, so it still receives hover/click (e.g. a non-focusable clickable Link).
+Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: nodes receive hover and click (click to select or toggle, hover to
+    highlight). No opt-in needed — unlike the base default, this is on.
 
 ```csharp
 protected override bool WantsMouse { get; }

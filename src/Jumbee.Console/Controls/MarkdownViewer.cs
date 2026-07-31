@@ -49,7 +49,8 @@ public class MarkdownViewer : Control
         set => UI.Invoke(() => { _styles = value; _version++; Initialize(); });
     }
 
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the viewer handles its own scroll keys. No opt-in needed — unlike
+    /// the base default, this is on.</summary>
     public override bool HandlesInput => true;
     #endregion
 

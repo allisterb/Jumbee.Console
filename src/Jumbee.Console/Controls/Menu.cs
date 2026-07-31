@@ -86,10 +86,12 @@ public class ContextMenu : Control
     #endregion
 
     #region Properties
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the menu handles its own navigation and activation keys. No opt-in
+    /// needed — unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
-    /// <inheritdoc/>
-    protected override bool WantsMouse => true;   // hover highlights an item / opens its submenu
+    /// <summary>Always <see langword="true"/>: items receive hover and click, so hovering highlights an item and
+    /// opens its submenu. No opt-in needed — unlike the base default, this is on.</summary>
+    protected override bool WantsMouse => true;
     /// <summary>The menu's top-level items.</summary>
     public IReadOnlyList<MenuItem> Items => _root;
     #endregion

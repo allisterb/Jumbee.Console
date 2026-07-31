@@ -31,9 +31,11 @@ public class MenuBar : RenderableControl
     #endregion
 
     #region Properties
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: the bar handles its own navigation and activation keys. No opt-in
+    /// needed — unlike the base default, this is on.</summary>
     public override bool HandlesInput => true;
-    /// <inheritdoc/>
+    /// <summary>Always <see langword="true"/>: menu titles receive hover and click. No opt-in needed — unlike the
+    /// base default, this is on.</summary>
     protected override bool WantsMouse => true;
     /// <inheritdoc/>
     protected override bool RendersOwnFocus => true;   // highlights the active menu item
