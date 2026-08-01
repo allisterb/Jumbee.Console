@@ -117,7 +117,7 @@ var tabs = new TabPanel(TabBarDock.Top,
     ("Logs",     logsPage),
     ("Settings", settingsPage));
 
-tabs.SelectionChanged += i => Refresh(i);      // Action<int>, not EventHandler
+tabs.SelectionChanged += (_, i) => Refresh(i);
 ```
 
 Click a label or use the arrow keys while the bar is focused. `SelectedIndex`, `ActiveTab` and `ActiveTabName` read

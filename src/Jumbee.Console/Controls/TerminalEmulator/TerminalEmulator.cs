@@ -80,10 +80,10 @@ public class TerminalEmulator : Control
 
     #region Events
     /// <summary>Raised on the UI thread after the child process exits (never for a manually-driven terminal).</summary>
-    public event Action? Exited;
+    public event EventHandler? Exited;
 
     /// <summary>Raised on the UI thread when the running program changes the window title (OSC 0/2).</summary>
-    public event Action<string>? TitleChanged;
+    public event EventHandler<string>? TitleChanged;
     #endregion
 
     #region Methods
@@ -157,7 +157,7 @@ public class TerminalEmulator : Control
             if (!ReferenceEquals(_pty, pty)) return;
             _pty = null;
             Invalidate();
-            Exited?.Invoke();
+            Exited?.Invoke(this, EventArgs.Empty);
         });
         _pty = pty;
         _ = ReadLoopAsync(pty, _cts.Token);
@@ -262,7 +262,7 @@ public class TerminalEmulator : Control
     private void OnWindowTitleChanged(object? sender, TextEventArgs e)
     {
         WindowTitle = e.Text;
-        TitleChanged?.Invoke(e.Text ?? string.Empty);
+        TitleChanged?.Invoke(this, e.Text ?? string.Empty);
     }
 
     private void WriteToProcess(byte[] data)

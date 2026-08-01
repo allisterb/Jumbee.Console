@@ -51,7 +51,7 @@ public class TabPanelTests
     {
         var panel = TwoTabs(out _, out _);
         int? changed = null;
-        panel.SelectionChanged += i => changed = i;
+        panel.SelectionChanged += (_, i) => changed = i;
 
         panel.SelectedIndex = 1;
 
@@ -68,7 +68,7 @@ public class TabPanelTests
     {
         var panel = TwoTabs(out _, out _);
         var raised = 0;
-        panel.SelectionChanged += _ => raised++;
+        panel.SelectionChanged += (_, _) => raised++;
 
         panel.SelectedIndex = 0;     // already selected -> no event
         panel.SelectedIndex = 99;    // clamps to the last tab
@@ -173,7 +173,7 @@ public class TabPanelTests
         var panel = TwoTabs(out _, out _);
         panel.ShowAddButton = true;   // builds the button
         var raised = 0;
-        panel.NewTabRequested += () => raised++;
+        panel.NewTabRequested += (_, _) => raised++;
 
         var button = panel.AddButton;   // internal, visible via InternalsVisibleTo
         Assert.NotNull(button);
@@ -200,7 +200,7 @@ public class TabPanelTests
 
         // Enter activates it (the tunnel drives it — it isn't in the panel's logical rows).
         var raised = 0;
-        panel.NewTabRequested += () => raised++;
+        panel.NewTabRequested += (_, _) => raised++;
         UI.SendInput(panel, new ConsoleKeyInfo('\r', ConsoleKey.Enter, false, false, false));
         Assert.Equal(1, raised);
 
@@ -469,7 +469,7 @@ public class TabPanelTests
     {
         var panel = new TabPanel(TabBarDock.Top, ("Only", Label("ZZZZ")));
         var raised = new List<int>();
-        panel.SelectionChanged += raised.Add;
+        panel.SelectionChanged += (_, i) => raised.Add(i);
 
         panel.RemoveTab(0);
 

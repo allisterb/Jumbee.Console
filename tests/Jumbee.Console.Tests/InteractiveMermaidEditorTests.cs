@@ -31,7 +31,7 @@ public class InteractiveMermaidEditorTests
         ConsoleSnapshot.Render(ed, 90, 20);
 
         string? fired = null;
-        ed.TextChanged += t => fired = t;
+        ed.TextChanged += (_, t) => fired = t;
 
         ed.Editor.Editor.OnPaste("    A --> B");
 
@@ -61,7 +61,7 @@ public class InteractiveMermaidEditorTests
         UI.SetFocus(ed.Editor.Editor);
 
         var count = 0;
-        ed.TextChanged += _ => count++;
+        ed.TextChanged += (_, _) => count++;
 
         UI.SendInput(ed.Editor.Editor, K(ConsoleKey.RightArrow));
         UI.SendInput(ed.Editor.Editor, K(ConsoleKey.DownArrow));

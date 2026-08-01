@@ -359,7 +359,7 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
                     }
                 }
                 // Let adornments outside the frame (e.g. a line-number gutter docked beside it) follow the scroll.
-                if (_top != old) Scrolled?.Invoke();
+                if (_top != old) Scrolled?.Invoke(this, EventArgs.Empty);
             });
         }
     }
@@ -1040,7 +1040,7 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     /// <summary>Raised when the frame loses focus.</summary>
     public event FocusableEventHandler? OnLostFocus;
     /// <summary>Raised after the vertical scroll position (<see cref="Top"/>) changes.</summary>
-    public event Action? Scrolled;
+    public event EventHandler? Scrolled;
     #endregion
 
     #region Fields

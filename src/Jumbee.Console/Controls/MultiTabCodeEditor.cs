@@ -20,27 +20,27 @@ public class MultiTabCodeEditor : CompositeControl
     {
         _defaultLanguage = defaultLanguage;
         _panel = new TabPanel(TabBarDock.Top) { ClosableTabs = true, ShowAddButton = true };
-        _panel.NewTabRequested += () => NewDocument();
+        _panel.NewTabRequested += (_, _) => NewDocument();
         _panel.TabCloseRequested += OnTabCloseRequested;   // route the ✕ through the cancelable DocumentClosing
         _panel.TabRemoved += OnTabRemoved;
-        _panel.SelectionChanged += _ => ActiveDocumentChanged?.Invoke(ActiveEditor);
+        _panel.SelectionChanged += (_, _) => ActiveDocumentChanged?.Invoke(this, ActiveEditor);
         SetContent(_panel);
     }
     #endregion
 
     #region Events
     /// <summary>Raised after a document is opened (its editor + tab exist and it is selected).</summary>
-    public event Action<CodeEditor>? DocumentOpened;
+    public event EventHandler<CodeEditor>? DocumentOpened;
 
     /// <summary>Raised before a document closes (via ✕ or <see cref="CloseDocument"/>). Set
     /// <see cref="DocumentClosingEventArgs.Cancel"/> to keep it open — e.g. after prompting about unsaved changes.</summary>
     public event EventHandler<DocumentClosingEventArgs>? DocumentClosing;
 
     /// <summary>Raised after a document's tab has been removed.</summary>
-    public event Action<CodeEditor>? DocumentClosed;
+    public event EventHandler<CodeEditor>? DocumentClosed;
 
     /// <summary>Raised after the active document changes (its editor, or <see langword="null"/> when none remain).</summary>
-    public event Action<CodeEditor?>? ActiveDocumentChanged;
+    public event EventHandler<CodeEditor?>? ActiveDocumentChanged;
     #endregion
 
     #region Properties
@@ -87,7 +87,7 @@ public class MultiTabCodeEditor : CompositeControl
             editor.Editor.Changed += (_, _) => OnDocEdited(editor);   // auto-dirty once the text diverges
             _panel.SelectTab(tab);
         });
-        DocumentOpened?.Invoke(editor);
+        DocumentOpened?.Invoke(this, editor);
         return editor;
     }
 
@@ -164,12 +164,12 @@ public class MultiTabCodeEditor : CompositeControl
         if (e.Tab.Content is CodeEditor editor) BeginClose(e.Tab, editor);
     }
 
-    private void OnTabRemoved(TabItem tab)
+    private void OnTabRemoved(object? sender, TabItem tab)
     {
         if (tab.Content is not CodeEditor editor) return;
         _dirty.Remove(editor);
         _baseline.Remove(editor);
-        DocumentClosed?.Invoke(editor);
+        DocumentClosed?.Invoke(this, editor);
     }
 
     private static string NameWithoutMarker(TabItem tab) =>

@@ -52,7 +52,7 @@ public abstract class InteractiveSourceEditor : CompositeControl
         // growing pane's old border cell just behind it. The result is a smear of stale border glyphs trailing the
         // divider until the drag ends. Force a full recomposite on each split change so the whole pane area repaints
         // from the panes' live buffers. SplitChanged fires only on a drag/nudge, so typing keeps the fast partial path.
-        _split.SplitChanged += _ => Invalidate();
+        _split.SplitChanged += (_, _) => Invalidate();
 
         SetContent(_split);
     }
@@ -61,7 +61,7 @@ public abstract class InteractiveSourceEditor : CompositeControl
     #region Events
     /// <summary>Raised (on the UI thread, coalesced per frame) after the document text actually changes — not for
     /// caret-only movement. Carries the new text.</summary>
-    public event Action<string>? TextChanged;
+    public event EventHandler<string>? TextChanged;
     #endregion
 
     #region Properties
@@ -104,7 +104,7 @@ public abstract class InteractiveSourceEditor : CompositeControl
         if (text == _lastSynced) return;   // caret-only Changed (navigation) — no text change, no re-render
         _lastSynced = text;
         ApplyPreviewText(text);            // subclass pushes text to the preview (de-dupes / renders off-thread)
-        TextChanged?.Invoke(text);
+        TextChanged?.Invoke(this, text);
     }
 
     // Keyboard focus lands in the editor pane by default (SetContent skips nested composites, so it can't be picked

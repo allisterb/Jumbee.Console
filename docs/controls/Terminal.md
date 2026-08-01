@@ -19,8 +19,8 @@ Both platforms are supported, including WSL from a Windows host.
 var term = new TerminalEmulator("pwsh", workingDirectory);
 term.WithFrame(title: "Terminal");
 
-term.TitleChanged += title => term.Frame!.Title = title;   // Action<string> — follows the child's OSC title
-term.Exited       += () => status.Text = "shell exited";   // Action
+term.TitleChanged += (_, title) => term.Frame!.Title = title;   // follow the child's OSC title
+term.Exited       += (_, _) => status.Text = "shell exited";
 ```
 
 The constructor is `TerminalEmulator(string? command = null, string? workingDirectory = null)`. The process starts

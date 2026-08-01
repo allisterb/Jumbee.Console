@@ -159,7 +159,7 @@ public class TerminalEmulatorTests
     {
         var t = Manual();
         string? seen = null;
-        t.TitleChanged += s => seen = s;
+        t.TitleChanged += (_, s) => seen = s;
 
         t.Feed(Encoding.ASCII.GetBytes("\x1b]0;Hello Title\x07"));   // OSC 0 set window title (BEL-terminated)
 

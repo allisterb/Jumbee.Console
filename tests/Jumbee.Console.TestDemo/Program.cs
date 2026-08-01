@@ -321,7 +321,7 @@ public class Program
         static string Tag(TabItem t) => t.IsHidden ? $"({t.Name})" : t.IsDisabled ? $"[{t.Name}]" : t.Name;
         void Status() => hint.Text = $"active: {tabs.ActiveTabName ?? "—"}   |   {string.Join("  ", tabs.Tabs.Select(Tag))}".PadRight(72);
         Status();
-        tabs.SelectionChanged += _ => Status();
+        tabs.SelectionChanged += (_, _) => Status();
 
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.T), () =>
         {
@@ -532,7 +532,7 @@ public class Program
         // hard-coding it to Cyan1 (the focus colour) would make the frame look focused at all times.
         term.WithRoundedBorder().WithTitle(baseTitle);
         // The running program's window title (OSC 0/2) flows into the frame title.
-        term.TitleChanged += t => term.Frame!.Title = string.IsNullOrWhiteSpace(t) ? baseTitle : t;
+        term.TitleChanged += (_, t) => term.Frame!.Title = string.IsNullOrWhiteSpace(t) ? baseTitle : t;
 
         var focusLabel = new TextLabel(TextLabelOrientation.Horizontal, "", Cyan1);
         void ShowFocus(string n) => focusLabel.Text = $"Focused: {n}".PadRight(28);
@@ -588,7 +588,7 @@ public class Program
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.O), OpenAbout);
 
         // Quit the UI loop when the child process exits (e.g. the user typed 'exit').
-        term.Exited += UI.Stop;
+        term.Exited += (_, _) => UI.Stop();
 
         var run = UI.Start(overlay, width: 100, height: 28, isAnsiTerminal: true, input: new Jumbee.Console.VtInputSource(anyMotion: true));
         UI.SetFocus(term);

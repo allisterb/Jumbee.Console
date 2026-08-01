@@ -41,7 +41,7 @@ public class SplitPanel : Layout<SplitPanelDockPanel>
 
     #region Events
     /// <summary>Raised after <see cref="SplitPosition"/> changes, with the new first-pane extent.</summary>
-    public event Action<int>? SplitChanged;
+    public event EventHandler<int>? SplitChanged;
     #endregion
 
     #region Properties
@@ -74,7 +74,7 @@ public class SplitPanel : Layout<SplitPanelDockPanel>
             if (clamped == _splitPosition) return;
             _splitPosition = clamped;
             ApplyExtent();
-            SplitChanged?.Invoke(clamped);
+            SplitChanged?.Invoke(this, clamped);
         }
     }
 

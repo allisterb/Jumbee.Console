@@ -20,13 +20,13 @@ internal sealed class IdeApp
         _tree.NodeActivated += (_, node) => OpenFromNode(node);
 
         _editor = new MultiTabCodeEditor(Language.CSharp) { ConfirmOnClose = true };
-        _editor.DocumentClosed += ed =>
+        _editor.DocumentClosed += (_, ed) =>
         {
             if (_pathByEditor.Remove(ed, out var path)) _openByPath.Remove(path);
             UpdateStatus();
         };
         // Keep the status bar's caret readout hooked to whichever editor is active.
-        _editor.ActiveDocumentChanged += _ => { RehookActiveEditor(); UpdateStatus(); };
+        _editor.ActiveDocumentChanged += (_, _) => { RehookActiveEditor(); UpdateStatus(); };
 
         // A real shell rooted in the project directory (the workingDirectory support added for this demo), so the
         // user can type `dotnet build`, `dotnet run`, etc. and have them resolve against the open project.

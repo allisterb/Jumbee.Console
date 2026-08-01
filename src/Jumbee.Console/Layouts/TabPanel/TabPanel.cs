@@ -51,7 +51,7 @@ public class TabPanel : Layout<TabPanelDockPanel>
 
     #region Events
     /// <summary>Raised after the selected tab changes, with the new index (-1 when no tab is selectable).</summary>
-    public event Action<int>? SelectionChanged;
+    public event EventHandler<int>? SelectionChanged;
 
     /// <summary>Raised when a closable tab's ✕ is clicked (see <see cref="ClosableTabs"/>).</summary>
     /// <remarks>Set <see cref="TabCloseEventArgs.Cancel"/> to keep the tab (e.g. after prompting about unsaved
@@ -60,10 +60,10 @@ public class TabPanel : Layout<TabPanelDockPanel>
 
     /// <summary>Raised when the "+" new-tab button is clicked (see <see cref="ShowAddButton"/>). The handler
     /// typically opens a new tab.</summary>
-    public event Action? NewTabRequested;
+    public event EventHandler? NewTabRequested;
 
     /// <summary>Raised after a tab has been removed (via ✕, <see cref="RemoveTab(TabItem)"/>, etc.), with its handle.</summary>
-    public event Action<TabItem>? TabRemoved;
+    public event EventHandler<TabItem>? TabRemoved;
     #endregion
 
     #region Properties
@@ -340,7 +340,7 @@ public class TabPanel : Layout<TabPanelDockPanel>
             var next = _tabs.Count == 0 ? null : NearestSelectable(Math.Clamp(idx, 0, _tabs.Count - 1));
             SelectItemCore(next, followFocus: false);
         }
-        TabRemoved?.Invoke(item);
+        TabRemoved?.Invoke(this, item);
     }
 
     // Per-tab closable override (from TabItem.Closable): flip the header's close slot and reflow the bar for the
@@ -418,7 +418,7 @@ public class TabPanel : Layout<TabPanelDockPanel>
             control.SetFill(null);
         }
 
-        SelectionChanged?.Invoke(SelectedIndex);
+        SelectionChanged?.Invoke(this, SelectedIndex);
     }
 
     // Rebuild the tab bar from the current model: only non-hidden headers, in order; keep each header's Index in
@@ -449,7 +449,7 @@ public class TabPanel : Layout<TabPanelDockPanel>
     private TabAddButton CreateAddButton()
     {
         var button = new TabAddButton();
-        button.Activated += (_, _) => NewTabRequested?.Invoke();
+        button.Activated += (_, _) => NewTabRequested?.Invoke(this, EventArgs.Empty);
         return button;
     }
 

@@ -63,7 +63,7 @@ public class SplitPanelTests
         var p = Make(out _, out _, pos: 10);
         ConsoleSnapshot.Render(p, 30, 6);
         var raised = 0;
-        p.SplitChanged += _ => raised++;
+        p.SplitChanged += (_, _) => raised++;
 
         p.SplitPosition = 10;   // no-op
         p.SplitPosition = 14;   // real change

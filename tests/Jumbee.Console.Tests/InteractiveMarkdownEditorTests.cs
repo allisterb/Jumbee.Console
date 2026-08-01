@@ -30,7 +30,7 @@ public class InteractiveMarkdownEditorTests
         ConsoleSnapshot.Render(ed, 80, 20);
 
         string? fired = null;
-        ed.TextChanged += t => fired = t;
+        ed.TextChanged += (_, t) => fired = t;
 
         // Paste is the simplest deterministic edit; it raises the editor's Changed just like typing.
         ed.Editor.Editor.OnPaste("more");
@@ -134,7 +134,7 @@ public class InteractiveMarkdownEditorTests
         UI.SetFocus(ed.Editor.Editor);
 
         var count = 0;
-        ed.TextChanged += _ => count++;
+        ed.TextChanged += (_, _) => count++;
 
         UI.SendInput(ed.Editor.Editor, K('\0', ConsoleKey.RightArrow));
         UI.SendInput(ed.Editor.Editor, K('\0', ConsoleKey.DownArrow));

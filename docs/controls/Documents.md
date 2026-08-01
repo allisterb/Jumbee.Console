@@ -121,7 +121,7 @@ Each viewer has an editor pairing a `CodeEditor` with a live preview in a split:
 
 ```csharp
 var editor = new InteractiveMarkdownEditor(markdown, SplitOrientation.Vertical, splitPosition: 50);
-editor.TextChanged += text => MarkDirty(text);      // Action<string>, not EventHandler
+editor.TextChanged += (_, text) => MarkDirty(text);
 ```
 
 They share a base, `InteractiveSourceEditor`: `Editor` reaches the source `CodeEditor`, `PreviewControl` the

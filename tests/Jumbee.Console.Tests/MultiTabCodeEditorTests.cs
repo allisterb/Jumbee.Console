@@ -97,7 +97,7 @@ public class MultiTabCodeEditorTests
         var a = group.OpenDocument("a", "1");
         var b = group.OpenDocument("b", "2");
         CodeEditor? closed = null;
-        group.DocumentClosed += e => closed = e;
+        group.DocumentClosed += (_, e) => closed = e;
 
         group.CloseDocument(b);
 
@@ -151,7 +151,7 @@ public class MultiTabCodeEditorTests
         var a = group.OpenDocument("a", "1");
         var b = group.OpenDocument("b", "2");
         var closed = new System.Collections.Generic.List<CodeEditor>();
-        group.DocumentClosed += closed.Add;
+        group.DocumentClosed += (_, e) => closed.Add(e);
 
         group.Clear();
 
