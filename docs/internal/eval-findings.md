@@ -240,3 +240,31 @@ Once V-5 made pointer input testable, the `DataTable` double-click bug it immedi
 
 **Release split:** `0.1.8` shipped the doc-only fixes (V-1, V-2, V-3, V-4). `0.1.9` carries the API work (V-5, V-9, V-10) plus the `DataTable` double-click fix.
 4. **The braille control question is settled: don't build one.** `Canvas` + `FilledLine` already does the drawille-style filled column, more cheaply and more faithfully than the `Plot` workaround. Holding the control back until after the run was the right call — building it first would have produced a redundant API *and* hidden V-1.
+
+---
+
+## V-23 — no guidance on the one thing all three ports had to do
+
+Every jc-curious target has been a live-data app — eilmeldung (HTTP feed fetch), scope-tui (realtime audio), vtop
+(system metrics) — and every one of them had to answer the same question with no doc to answer it from: *how do I
+sample continuously without stuttering, tearing or freezing the UI?* Each solved it differently and each got
+something wrong. The vtop run's reviewer found the sharpest version: a background sampler calling `PushSample`
+straight into a chart's `List<double>` while the render path enumerated it — a plain data race on the frame path.
+
+The maintainer confirmed it from a live run: `PerfHud` showed **203 exc/s** (matching the ~190 access-denied
+throws per sampling pass measured earlier) alongside a climbing lock count.
+
+**Fixed 2026-07-31:** new [`docs/controls/Live Data.md`](../controls/Live%20Data.md) — the single-UI-thread rule and
+why there's no lock, the snapshot-per-tick pattern, an `Invoke`/`Post`/`InvokeAsync` table, what marshals itself
+(scalar properties) versus what doesn't (collections — i.e. everything a live app does), split sampling cadences,
+cancellation and fault observation, frame-path costs, and how to read each `PerfHud` counter. Linked from
+`docs/README.md`, GETTING-STARTED's "Where to go next", and given a curated `llms.txt` note. All samples compiled
+and run before shipping.
+
+Two things the guide states that the API docs alone would leave a .NET developer to guess wrong:
+
+- **`UI.Invoke` does not block and does not surface the action's exception.** A WPF developer will read it as
+  `Dispatcher.Invoke`; it behaves like `BeginInvoke`. `UI.InvokeAsync` is the one that waits.
+- **`PerfHud`'s `locks` counter measures contention, not correctness**, and is *cumulative* (`Monitor.LockContentionCount`),
+  not a rate. The dangerous bug — unsynchronized writes from a background thread — produces **zero** contention and
+  still corrupts. Read it to confirm you haven't introduced locking, never to prove your threading is right.

@@ -234,6 +234,7 @@ foreach ($d in $topDocs) {
 # needs no script change — the directory is globbed.
 $controlNotes = @{
     'Layouts'            = 'Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.'
+    'Live Data'          = 'Wiring a continuously-updating data source into the UI: sample off the UI thread, apply one immutable snapshot per tick via UI.Invoke, split fast and slow cadences, keep the frame path cheap, and measure it with PerfHud.'
     'Composite Controls' = 'Building one reusable Control out of several children (CompositeControl), how content height and scrolling work, and a worked example.'
     'Display Widgets'    = 'Widgets for presenting information: labels, badges, gauges, spinners, sparklines, tables and charts.'
     'Links'              = 'Link, the focusable clickable control that opens a URL or runs an action.'

@@ -420,6 +420,8 @@ case. The same pattern works for anything else that renders into the overlay lay
 - [API reference](docs/api/) — every public type, grouped by namespace, with summaries.
 - [Layouts](docs/controls/Layouts.md) — which layouts fill the terminal and which don't, plus shell,
   master-detail and dashboard recipes. Read this before building an app shell.
+- [Live Data](docs/controls/Live%20Data.md) — sampling off the UI thread and updating controls on it. Read this
+  before wiring up anything that updates on a timer, a feed or a device.
 - [Control guides](docs/controls/) — task-focused walkthroughs (selection controls, display widgets, links,
   composite controls).
 - [Internals](docs/internal/) — architecture notes: the rendering pipeline, input model, multithreading, and

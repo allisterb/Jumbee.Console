@@ -23,6 +23,7 @@ Every link below is raw Markdown and can be fetched directly. The API reference 
 - [Display Widgets](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Display%20Widgets.md): Widgets for presenting information: labels, badges, gauges, spinners, sparklines, tables and charts.
 - [Layouts](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Layouts.md): Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.
 - [Links](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Links.md): Link, the focusable clickable control that opens a URL or runs an action.
+- [Live Data](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Live%20Data.md): Wiring a continuously-updating data source into the UI: sample off the UI thread, apply one immutable snapshot per tick via UI.Invoke, split fast and slow cadences, keep the frame path cheap, and measure it with PerfHud.
 - [Selection Controls](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/controls/Selection%20Controls.md): Checkboxes, radio buttons, switches, and the single- and multi-select list controls (RadioSet, SelectionList, ToggleList).
 
 ## API reference: Jumbee.Console
