@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **`DataTable`'s selection bar and click hit-testing land on the right row when a header wraps.** Chrome height was estimated from a probe table filled with placeholder cells, but column widths are allocated from cell content, so the probe's header wrapped to a different number of lines than the real table's. The selection bar drifted up one row per extra header line as the control narrowed — highlighting the wrong row, and mapping clicks to it — while `SelectedIndex` stayed correct, so the app looked right in state and wrong on screen. Chrome is now measured from the table actually being drawn. (Cells themselves still wrap below roughly 40 columns for a four-column table, where the same drift returns; that needs a drop-columns-when-narrow policy.)
 - **Rapid clicks are no longer swallowed.** `Control` routes the *second* click of a rapid pair to `OnDoubleClick`, so any control that overrode only `OnClick` silently consumed it — double-clicking a `Button` activated it once, not twice. Fixed on `Button`, `Link`, `Select`, `Menu`, `MenuBar`, `Autocomplete`, `TabHeader`, the tab bar's "+" button, and `Dialog`'s buttons. (`ToggleButton`, `ToggleList`, `ListBox` and `Tree` already handled both.)
 - **`DataTable` now raises `RowActivated` on double-click.** The event's own documentation said it fires on "Enter / double-click", but only the Enter path was implemented — the control overrode `OnClick` and never `OnDoubleClick`, so a double-click only ever re-selected the row. Found by the new mouse simulation above, on its first use.
 

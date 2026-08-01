@@ -134,7 +134,7 @@ public class DataTable : Control
         if (position.X >= ContentWidth) return;
 
         // Map the clicked screen row back to a data row (the rows start below the header chrome).
-        var dataRow = _scroll + (position.Y - ChromeTop());
+        var dataRow = _scroll + (position.Y - RowTop());
         if (dataRow >= 0 && dataRow < _rows.Count) Select(dataRow);
     }
 
@@ -147,7 +147,7 @@ public class DataTable : Control
         if (_pressedScrollbar) { _pressedScrollbar = false; return; }
         if (position.X >= ContentWidth) return;
 
-        var dataRow = _scroll + (position.Y - ChromeTop());
+        var dataRow = _scroll + (position.Y - RowTop());
         if (dataRow < 0 || dataRow >= _rows.Count) return;
 
         Select(dataRow);
@@ -161,7 +161,7 @@ public class DataTable : Control
         visible = VisibleRows();
         i = thumb = thumbPos = 0;
         if (position.X != ActualWidth - 1 || visible <= 0 || _rows.Count <= visible) return false;
-        i = position.Y - ChromeTop();
+        i = position.Y - RowTop();
         if (i < 0 || i >= visible) return false;
         thumb = Math.Clamp((int)((long)visible * visible / _rows.Count), 1, visible);
         var maxScroll = _rows.Count - visible;
@@ -196,7 +196,7 @@ public class DataTable : Control
         var thumb = Math.Clamp((int)((long)visible * visible / _rows.Count), 1, visible);
         var available = visible - thumb;
         if (available <= 0) return;
-        var desiredThumbPos = (position.Y - ChromeTop()) - _scrollGrabOffset;
+        var desiredThumbPos = (position.Y - RowTop()) - _scrollGrabOffset;
         SetScroll((int)Math.Round((double)desiredThumbPos / available * (_rows.Count - visible)));
     }
 
@@ -235,7 +235,27 @@ public class DataTable : Control
 
         // Lay out the visible window via a Spectre Table sized to leave the last column for the scrollbar.
         var shown = Math.Min(visible, Math.Max(0, _rows.Count - _scroll));
-        ansiConsole.Write(BuildTable(_scroll, shown));
+
+        // Render to segments once, then measure THIS table's chrome from them before writing. Measure()'s probe
+        // can't be trusted for the highlight/scrollbar offsets: Spectre allocates column widths from cell content,
+        // so a probe filled with placeholder cells lays its columns out differently from the real table and its
+        // header wraps to a different number of lines. The difference grows as the control narrows, and it used to
+        // put the selection bar one row too high per extra header line — highlighting the wrong process, and
+        // mapping clicks to the wrong row. Counting the real segments costs nothing extra: Write would enumerate
+        // them anyway.
+        //
+        // KNOWN LIMIT: this derives the header height by subtracting the data lines, assuming one line per row.
+        // That holds while cells fit their column, which is the normal case and covers header wrap (the bug this
+        // fixes). Squeezed hard enough, Spectre wraps the *cells* too despite NoWrap — roughly below ~40 columns
+        // for a four-column table — and then rows are taller than one line and these offsets drift again. The real
+        // answer there is a narrow-width column policy (drop columns rather than wrap, as `top` does); a table
+        // whose values have wrapped is already unreadable, so geometry is the lesser problem.
+        var table = BuildTable(_scroll, shown);
+        var segments = table.GetSegments(ansiConsole).ToList();
+        var lines = 0;
+        foreach (var s in segments) lines += s.TextSpan.Count('\n');
+        _renderedChromeTop = shown > 0 ? Math.Max(0, lines - shown - 1) : ChromeTop();
+        ansiConsole.Write(segments);
 
         HighlightSelectedRow(visible);
         DrawScrollBar(visible);
@@ -248,7 +268,7 @@ public class DataTable : Control
         if (_rows.Count == 0) return;
         var offset = _selected - _scroll;
         if (offset < 0 || offset >= visible) return;
-        var line = ChromeTop() + offset;
+        var line = RowTop() + offset;
         if (line < 0 || line >= ActualHeight) return;
 
         var sel = UI.StyleTheme.Selection;
@@ -266,7 +286,7 @@ public class DataTable : Control
         var col = ActualWidth - 1;
         if (col < 0 || _rows.Count <= visible || visible <= 0) return;   // nothing scrolled off
 
-        var top = ChromeTop();
+        var top = RowTop();
         var thumb = Math.Clamp((int)((long)visible * visible / _rows.Count), 1, visible);
         var maxScroll = _rows.Count - visible;
         var thumbPos = maxScroll <= 0 ? 0 : (int)((long)(visible - thumb) * _scroll / maxScroll);
@@ -329,7 +349,16 @@ public class DataTable : Control
     private int ChromeTotal() { Measure(); return _chromeTotal; }
 
     // Rows drawn above the first data row (everything except the bottom border).
+    //
+    // Two sources, deliberately: RowTop() is the exact count measured from the table actually rendered and is what
+    // anything positioning against drawn rows must use (the highlight, the scrollbar, click hit-testing). ChromeTop()
+    // is the pre-render estimate from Measure()'s probe, used only to decide how many rows to ask for before there
+    // is a real table to measure.
     private int ChromeTop() { Measure(); return _chromeTop; }
+
+    // Chrome rows above the first data row in the most recently rendered table. Falls back to the probe estimate
+    // until the first render has happened.
+    private int RowTop() => _renderedChromeTop >= 0 ? _renderedChromeTop : ChromeTop();
 
     private void Measure()
     {
@@ -373,6 +402,9 @@ public class DataTable : Control
     private int _scrollGrabOffset;
     private int _chromeTotal = -1;   // -1 = not yet measured (re-measured when columns or width change)
     private int _chromeTop = -1;
+    // Chrome rows above the first data row in the table last actually rendered; -1 until the first render. Exact,
+    // unlike _chromeTop's probe-based estimate, so everything that positions against drawn rows uses it.
+    private int _renderedChromeTop = -1;
     private int _measuredWidth = -1;
     #endregion
 }
