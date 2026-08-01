@@ -1,14 +1,11 @@
 # Controls
 
-Around sixty controls and eight layouts, which is more than anyone wants to read through. This page exists to get
-you to the right one quickly: skim the decision table, then read the guide for that category.
-
-New here? [**Writing applications**](Writing%20Applications.md) explains the retained-mode model, what the framework
+Jumbee.Comsole contains many controls and layouts to help you achieve the TUI look and feel you want. This page is a quick reference to help you find you to the right one quickly: skim the decision table, then read the guide for that category.
+You can also look [**Writing applications**](Writing%20Applications.md) explains the retained-mode model, what the framework
 owns versus what you own, and how to choose a base class when you write your own control.
 
-> Already running, and something behaves oddly? [**What happens when…**](What%20Happens%20When.md) answers the
-> questions that cost people an afternoon — why the app doesn't fill the terminal, why an update never appears, why
-> a control silently stopped drawing.
+If your app is already running and behaving oddly you can look at [**What happens when…**](What%20Happens%20When.md) to answer questions like why the app doesn't fill the terminal, why an update never appears, why
+a control silently stopped drawing.
 
 ## Quick decision guide
 

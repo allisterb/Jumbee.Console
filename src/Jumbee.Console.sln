@@ -126,6 +126,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "gallery", "gallery", "{9D0D
 		..\gallery\README.md = ..\gallery\README.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "controls", "controls", "{2F3C1694-19F8-498B-A726-42C06DAFF91D}"
+ProjectSection(SolutionItems) = preProject
+		..\docs\controls\README.md = ..\docs\controls\README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -500,6 +505,7 @@ Global
 		{46D57208-AB87-1161-1E91-6765217F4424} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
 		{DE981FA1-44B9-40DE-964A-97E4ECCF9D54} = {C9B2828B-DAC4-4D99-B75E-890596A0B988}
 		{9D0D1105-E523-4E7C-9A22-D1AEA6BD3BAF} = {C9B2828B-DAC4-4D99-B75E-890596A0B988}
+		{2F3C1694-19F8-498B-A726-42C06DAFF91D} = {C9B2828B-DAC4-4D99-B75E-890596A0B988}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}
