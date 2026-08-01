@@ -268,3 +268,58 @@ Two things the guide states that the API docs alone would leave a .NET developer
 - **`PerfHud`'s `locks` counter measures contention, not correctness**, and is *cumulative* (`Monitor.LockContentionCount`),
   not a rate. The dangerous bug — unsynchronized writes from a background thread — produces **zero** contention and
   still corrupts. Read it to confirm you haven't introduced locking, never to prove your threading is right.
+
+---
+
+## Fifth cold start — 2026-07-31, first run with the Live Data guide
+
+**The Live Data guide worked.** `Program.cs` came out as *"three independent `PeriodicTimer` sampling loops marshaled via `UI.Invoke`"* — the snapshot-per-tick pattern and split cadences, adopted straight from the guide. **No data race this round** (the previous run's sampler wrote into a chart's list from a background thread while the render path enumerated it). She also explicitly followed the frame-path section: *"'Keeping the frame path cheap' … is exactly the right content and I followed it (capped history list, rebuild-on-push not per-frame)."*
+
+**The layouts guide worked again**, second run running: *"Layouts.md's table + shell recipe told me exactly what to do: nested `DockPanel`s for header/footer, `SplitPanel` for the 50/50 body split. Compiled first try."*
+
+**V-16 resolved in practice.** She found `IStyleTheme`'s default-interface-implementation note unaided and wrote a 6-line theme, calling it *"the single nicest thing I found in the whole exercise"* — and unlike run 3, actually themed the selection colour. Two of three runs now reach it; leaving V-16 open only for the missing `DataTable`→`IStyleTheme` pointer.
+
+### V-1 was never actually fixed — my cross-link was on the wrong page
+
+Three consecutive cold starts have now reached `Canvas`+`FilledLine`, and **none of them opened `Plot.md`**, which is where I put the cross-link. This run she grepped the entire API-reference folder for "braille". Her "one thing to fix first" is exactly right, and the measurement backs it: `docs/controls/Display Widgets.md` — the page that owns `Sparkline`, where anyone looking for a chart lands — had **zero** mentions of `Canvas` or `FilledLine`. So did `Live Data.md`, which I had just written *about streaming into charts*.
+
+**Fixed 2026-07-31:** a "Looking for a bigger chart?" decision table at the top of `Display Widgets.md` (Sparkline / `Plot` / `Canvas`+`FilledLine`), with a verified runnable snippet, plus a "Choosing what to stream into" table at the top of `Live Data.md`. Both say plainly that `Canvas` reads as a general drawing surface and that `Plot`'s bars take no braille brush, because that's the inference every run has had to make unaided.
+
+**Lesson, and it generalises past this finding:** a cross-reference is only worth what the traffic to its host page is worth. I fixed V-1 on the page that *owns* the API rather than the page a developer *starts* from, then counted it as fixed for two runs. When adding a pointer, put it where the reader already is — and verify with a run that they actually get there.
+
+### New findings
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-24 | major | capability-unknown | **No documented way to turn off a control's built-in mouse handling.** `DataTable.WantsMouse`/`HandlesInput` are documented as "always true, no opt-in needed" (the V-3 fix) with no counterpart opt-out, so her `--no-mouse` flag is a no-op and M7 was abandoned. The V-3 wording solved "is it on?" and created "can I turn it off?". Fix: state the override point (`WantsMouse` is `protected virtual`, so a subclass can suppress it) on the same paragraph. | open |
+| V-25 | minor | missing-feature | **`DataTable` has no narrow-width column policy.** At 80 columns the headers wrap mid-word ("Memory %" → "Memor"/"y %"); vtop's own `drawTable` progressively drops columns as width shrinks. Fix: a min-width/auto-hide knob, or document that the caller should hide columns above a width threshold. | open |
+| V-26 | minor | doc-gap | **`ConsoleSnapshot`'s mouse API is not reliably discoverable.** She concluded no click/hover/wheel simulation exists and reported M7 as possibly untestable *in principle* — but `Click`/`MouseMove`/`Wheel`/`RenderAfterClick` shipped in 0.1.9 (V-5), and the *previous* run found them on the `ConsoleSnapshot` page. Found by one run, missed by the next. Fix: mention mouse simulation in GETTING-STARTED's "Testing without a terminal", which is where both runs started. | open |
+
+**Also fixed (a fair criticism of the guide I'd just written):** `Live Data.md`'s cadence table listed "cheap counters (CPU, memory)" at 200–300 ms, implying system metrics are cheap to obtain. They aren't on .NET — she measured her own app at **~20% of one core at idle**, traced to enumerating every process every 300 ms to sum `TotalProcessorTime` because there's no cheap portable BCL call for system CPU. The table now says *a* counter rather than naming CPU/memory, and carries a "don't assume the fast signal is cheap — measure it" note using exactly this trap as the example.
+
+**Runtime reporting worked, partially.** Asked to report on behaviour rather than appearance, she ran the real exe for ~47 s and sampled it externally: working set flat (+1.4 MB, warmup not a leak), handles stable at ~377, no crash — and she flagged the ~20% CPU as her own sampler's cost. But she used `Get-Process`, not `PerfHud`, and was honest that this is the weaker measurement: *"I did not wire `PerfHud` … which is itself a gap in my own validation."* `PerfHud` is documented in `Live Data.md`; reaching for it still didn't happen under budget pressure.
+
+### V-27 — CONFIRMED BUG: `DataTable`'s selection highlight lands on the wrong row at narrow widths
+
+The reviewer's top blocker for the fifth run was that the selection bar highlighted the wrong process. It read that off the PNGs and blamed the app. **It's a library bug**, reproduced directly against `DataTable` with no app code involved:
+
+```csharp
+var t = new DataTable("Command", "CPU %", "Count", "Memory %");
+t.AddRow("node", "11.4", "1", "2.2");      t.AddRow("firefox", "9.3", "1", "6.6");
+t.AddRow("Xorg", "2.2", "1", "3.6");       t.AddRow("gnome-shell", "2.1", "1", "8.6");
+t.SelectedIndex = 3;                        // gnome-shell
+```
+
+Rendering at three widths and locating the full-width highlight bar (counting backgrounded cells per row):
+
+| Width | Highlight lands on | Correct? |
+|---|---|---|
+| 60 | `gnome-shell` | ✅ |
+| 40 | `Xorg` (index 2) | ❌ off by one |
+| 30 | `firefox` (index 1) | ❌ off by two |
+
+The drift grows as the table narrows, which points at `Measure()`'s chrome estimate diverging from the real render: it probes with a synthetic single-space data row and derives `_chromeTop` (rows above the first data row) from the probe's line count. `_chromeTop` also feeds `OnClick`/`OnDoubleClick` row mapping, so **mouse row-hit-testing is wrong at the same widths**, not just the highlight.
+
+Severity is higher than it looks: the highlight *is* the navigation feedback, so `j`/`k`/`g`/`G` silently point at the wrong row, and every visible symptom is invisible to a test that asserts `SelectedIndex` — which is exactly what her checks did, and why they passed while the UI was wrong. Related to V-25 (no narrow-width column policy) but distinct and worse: V-25 is ugly, V-27 is incorrect.
+
+**Not fixed yet** — needs a real look at `Measure()` versus the render path rather than a quick patch.

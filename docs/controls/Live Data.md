@@ -50,6 +50,22 @@ async Task SampleLoop(CancellationToken ct)
 real period *work + interval*, so a slow pass silently stretches your sampling cadence and the chart's time axis
 stops meaning what it says.
 
+## Choosing what to stream into
+
+Before the plumbing, pick the right control — the wrong one is hard to notice until the shape is finished:
+
+| You want | Use |
+|---|---|
+| A one-row inline trend | [`Sparkline`](Display%20Widgets.md#sparkline) — block bars, one cell per value |
+| Axes, ticks, a legend, several series | [`Plot`](../api/Jumbee.Console.Plot.md), and `AddLiveSeries`/`PlotSeries` to push into it |
+| A **filled/area chart at sub-cell resolution** — the dense braille look of a system monitor | [`Canvas`](../api/Jumbee.Console.Canvas.md) with `CanvasMarker.Braille` (the default) and one [`Drawing.FilledLine`](../api/Jumbee.Console.Drawing.FilledLine.md) per column |
+| An append-only tail | [`Log`](Display%20Widgets.md) — it owns its own scrolling and virtualisation |
+| Rows that change every tick | `DataTable`, updating rows rather than clearing and refilling (see below) |
+
+The braille one is the least discoverable: `Canvas` reads as a general drawing surface, and `Plot`'s bar methods
+take no braille brush, so a filled sub-cell chart is a few lines on `Canvas` rather than a chart control you can
+switch on.
+
 ## Choosing the marshal
 
 | Call | Behaviour | Use it for |
@@ -80,12 +96,20 @@ Split sampling by cost, not by convenience. A system monitor typically wants thr
 
 | Work | Typical rate | Why |
 |---|---|---|
-| Cheap counters feeding a chart (CPU, memory, a level meter) | 200–300 ms | The chart's time resolution; spikes are lost if this is slow. |
+| A counter feeding a chart (a level meter, a queue depth, one performance counter) | 200–300 ms | The chart's time resolution; spikes are lost if this is slow. |
 | Expensive enumeration (process list, directory scan, HTTP poll) | 1–5 s | Costs milliseconds and rarely changes that fast. |
 | Redraw | driven by the UI loop | Not something you schedule per sample. |
 
 One global tick makes your fastest signal hostage to your slowest work: a chart on the same timer as a full process
 enumeration advances at the enumeration's pace, and short spikes are averaged away before they are ever drawn.
+
+> **Don't assume the "fast" signal is cheap — measure it.** The rate a value *should* update at says nothing about
+> what it costs to obtain. System-wide CPU on .NET is the classic trap: there is no cheap portable BCL call for it,
+> and reconstructing it by enumerating every process and summing `TotalProcessorTime` costs milliseconds *and*
+> throws on every process you aren't allowed to read. Do that at 300 ms and a monitor idles at a fifth of a core.
+> If a "cheap" counter turns out to be expensive, either move it to the slow tick and accept coarser resolution, or
+> find a cheaper source (a platform performance counter, a single `/proc` read) — but decide it with a measurement,
+> not by which column of this table it looks like it belongs in.
 
 ## Lifecycle: cancel it, and observe its faults
 

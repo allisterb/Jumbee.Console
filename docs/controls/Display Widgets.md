@@ -13,6 +13,28 @@ keys when focused). All live in the `Jumbee.Console` namespace.
 They are appearance-themed where it makes sense (bar/text styles come from the active
 [theme](../internal/Theming.md) and can be overridden per instance).
 
+> **Looking for a bigger chart?** `Sparkline` is one row of block bars — deliberately small. For anything taller
+> or denser:
+>
+> | You want | Use |
+> |---|---|
+> | A one-row inline trend next to a label | `Sparkline` (below) |
+> | Axes, ticks, a legend, multiple series | [`Plot`](../api/Jumbee.Console.Plot.md) |
+> | A **filled/area chart at sub-cell resolution** — the dense braille look of `htop`/`vtop`-style monitors | [`Canvas`](../api/Jumbee.Console.Canvas.md) with `CanvasMarker.Braille` (the default) and one [`Drawing.FilledLine`](../api/Jumbee.Console.Drawing.FilledLine.md) per column |
+>
+> The last one isn't obvious from the type names: `Canvas` reads as a general drawing surface, but a filled
+> braille column chart is a few lines on top of it, and `Plot`'s bar methods can't produce that look (they take no
+> braille brush). See [Live Data](Live%20Data.md) for wiring any of them to a running data source.
+
+```csharp
+// A filled braille column chart — one FilledLine per sample, baseline to value.
+using Jumbee.Console.Drawing;
+
+var chart = new Canvas().WithYBounds(0, 100).WithXBounds(0, samples.Length - 1);
+for (var x = 0; x < samples.Length; x++)
+    chart.Add(new FilledLine(x, 0, x, samples[x], fillToY: 0, color));
+```
+
 ## `Sparkline`
 
 Draws a list of values as block bars (`▁▂▃▄▅▆▇█`), one cell per value, scaled against the series maximum.
