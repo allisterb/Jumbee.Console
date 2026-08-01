@@ -60,7 +60,7 @@ Before the plumbing, pick the right control — the wrong one is hard to notice 
 | Axes, ticks, a legend, several series | [`Plot`](../api/Jumbee.Console.Plot.md), and `AddLiveSeries`/`PlotSeries` to push into it |
 | A **filled/area chart at sub-cell resolution** — the dense braille look of a system monitor | [`Canvas`](../api/Jumbee.Console.Canvas.md) with `CanvasMarker.Braille` (the default) and one [`Drawing.FilledLine`](../api/Jumbee.Console.Drawing.FilledLine.md) per column |
 | An append-only tail | [`Log`](Display%20Widgets.md) — it owns its own scrolling and virtualisation |
-| Rows that change every tick | `DataTable`, updating rows rather than clearing and refilling (see below) |
+| Rows that change every tick | `DataTable` — but it has no in-place row update, so expect to rebuild and restore the selection (see below) |
 
 The braille one is the least discoverable: `Canvas` reads as a general drawing surface, and `Plot`'s bar methods
 take no braille brush, so a filled sub-cell chart is a few lines on `Canvas` rather than a chart control you can
@@ -142,8 +142,33 @@ actually bite:
   data changed once a second. Rebuild on data or size change, gated by a dirty flag.
 - **Growing buffers.** A history `List<T>` with `RemoveAt(0)` at its cap memmoves the whole buffer on every sample.
   Use a fixed-size ring.
-- **Tearing down views.** Clearing and refilling a table each tick loses selection and scroll, and forces you to
-  restore them by string-matching. Diff against a stable key and update in place.
+- **Tearing down views.** Rebuilding a whole view each tick when a fraction of it changed. Where a control lets you
+  update in place, diff against a stable key and do that instead of clearing and refilling.
+
+  **`DataTable` is the exception, and it's the one you'll hit.** Its row API is `AddRow` / `RemoveRow(int)` /
+  `Clear()` — there is no `UpdateRow` and no row indexer, so a changing table *must* be rebuilt, and the rebuild
+  drops the selection. Restore it by key rather than by index, since rows reorder:
+
+  ```csharp
+  // Before the rebuild: remember what the user had selected, by identity — not by row number.
+  var selectedKey = table.SelectedRow?[0];
+
+  table.Clear();
+  foreach (var p in snapshot)
+      table.AddRow(p.Name, p.Cpu.ToString("F1"), p.Memory.ToString("F1"));
+
+  // After: find that key again. Rows move between ticks, so the old index means nothing.
+  if (selectedKey is not null)
+  {
+      for (var i = 0; i < table.RowCount; i++)
+      {
+          table.SelectedIndex = i;
+          if (table.SelectedRow?[0] == selectedKey) break;
+      }
+  }
+  ```
+
+  Keep the whole sequence inside one `UI.Invoke` so the table is never half-rebuilt on a painted frame.
 
 Also see `Canvas.DamageTracking` and `Control.TracksDamage` for opting into partial redraw — worthwhile when a small
 region of a large surface changes, and measurably *not* worthwhile when the whole picture changes every frame.

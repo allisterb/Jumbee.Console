@@ -12,7 +12,8 @@ using Mermaider;
 using Jumbee.Console.Documents.Mermaid;
 
 /// <summary>
-/// A read-only, scrollable viewer for Mermaid <c>flowchart</c>/<c>graph</c> and <c>stateDiagram</c> diagrams.
+/// A read-only, scrollable viewer for Mermaid <c>flowchart</c>/<c>graph</c>, <c>stateDiagram</c>,
+/// <c>classDiagram</c>, <c>erDiagram</c> and <c>sequenceDiagram</c> diagrams.
 /// </summary>
 /// <remarks>
 /// Parses
@@ -21,7 +22,7 @@ using Jumbee.Console.Documents.Mermaid;
 /// border, title and scrollbar; ↑/↓, PgUp/PgDn, Home/End and the wheel scroll it.
 /// <para>
 /// Parsing/layout runs on a background thread so setting <see cref="Mermaid"/> never blocks the UI thread; the view
-/// fills in when the render completes. Other diagram types (sequence, class, ER, …) are not supported yet and show a
+/// fills in when the render completes. Diagram types beyond those listed above are not supported yet and show a
 /// short message. The diagram is drawn at its intrinsic size and clips horizontally if wider than the control.
 /// </para>
 /// </remarks>

@@ -1,20 +1,34 @@
 # Display Widgets
 
-Widgets for presenting information — you place them in a layout and update them from your code. `Sparkline` and
-`Digits` take no focus or input; `Log` is the exception — it scrolls (mouse wheel, or the arrow/Page/Home/End
-keys when focused). All live in the `Jumbee.Console` namespace.
+Small, self-contained readouts and status indicators — you place them in a layout and update them from your code.
+Most take no focus or input; `Log` is the exception, since it scrolls. All live in the `Jumbee.Console` namespace.
 
 | Control | Shows | Size |
 |---------|-------|------|
 | `Sparkline` | a series of numbers as inline block bars | one cell per value, 1 row |
 | `Digits` | text in large seven-segment glyphs (clocks, counters) | 3 cells wide per char, 3 rows |
+| `Gauge` | one proportion as a filled meter | 1 row |
+| `ProgressBar` | one task's progress, with optional spinner and timing | 1 row |
+| `Spinner` | indeterminate activity, animated | 1 row |
+| `Badge` | a short status pill on a filled background | text + padding, 1 row |
+| `Footer` | a key-hints bar | full width, 1 row |
 | `Log` | an append-only tail of styled/renderable entries | fills its cell |
+| `PerfHud` | frame timings and allocation, while developing | floats over the app |
 
 They are appearance-themed where it makes sense (bar/text styles come from the active
 [theme](../../GETTING-STARTED.md#7-styling-and-theming) and can be overridden per instance).
 
+**Picking between the progress-ish ones**, since there are four and they overlap:
+
+| You want | Use |
+|---|---|
+| A proportion — capacity, disk used, percent of a budget | `Gauge` |
+| One task advancing toward completion | `ProgressBar` |
+| Activity with no known duration | `Spinner`, or `ProgressBar.IsIndeterminate` |
+| Several concurrent tasks in Spectre's column layout | [`SpectreTaskProgress`](Spectre%20Interop.md) |
+
 > **Looking for a bigger chart?** `Sparkline` is one row of block bars — deliberately small. For anything taller
-> or denser:
+> or denser ([Charts](Charts.md) covers all of these in full):
 >
 > | You want | Use |
 > |---|---|
@@ -101,6 +115,122 @@ newest lines stay pinned to the bottom. The log is viewport-virtualized and owns
 wheel scrolls it, and when focused so do Up/Down/PageUp/PageDown/Home/End; it draws its own scrollbar. Writing
 while scrolled up leaves the view put (new lines accumulate below); scrolling back to the bottom (or `End`)
 re-engages tailing.
+
+`Log` is covered in more depth, alongside the other row-oriented controls, in
+[Lists and Data](Lists%20and%20Data.md#log).
+
+## `Gauge`
+
+A single-row meter: the track fills in proportion to `Value` / `Max`, optionally followed by the percentage and
+the raw value — `████████░░░░  34.5% (126)`.
+
+```csharp
+var disk = new Gauge(126, max: 512) { Label = "disk", ShowPercent = true, ShowValue = true };
+disk.WithFill(Color.Green);
+
+disk.Value = used;    // setting it redraws
+```
+
+The bar is a solid colour band with an eighth-block sub-cell edge, so it animates smoothly and stays seam-free in
+any font. Use it for capacity and progress-through-a-budget readouts — year/day progress, a deployment percentage,
+disk used.
+
+For a task advancing to completion, `ProgressBar` is the better fit: it carries a description, timing and a
+spinner.
+
+## `ProgressBar`
+
+One row of task progress, modelled on a row of Spectre's `Progress` — but a plain composable control you place,
+theme and drive yourself.
+
+```csharp
+var bar = new ProgressBar("downloading", value: 0, max: 100)
+{
+    ShowPercentage = true,
+    ShowSpinner = true,
+    TimeDisplay = ProgressTimeDisplay.Elapsed,   // or .Remaining, or .None
+};
+bar.WithGradient(Color.Blue, Color.Cyan1);
+bar.Start();
+
+// as work advances:
+bar.Value = percentComplete;
+```
+
+`Start()` begins the spinner and any animation; `Stop()` freezes both. `IsIndeterminate` switches to a pulse when
+you don't know the total. `Description` labels it, and `TimeDisplay` takes a `ProgressTimeDisplay` —
+`None`, `Elapsed` or `Remaining` — rather than a bool.
+
+The bar is a smooth sub-cell band by default; `WithGlyphs` switches it to a per-cell glyph fill (hatch, segments,
+ASCII) for fonts or terminals where that reads better. `WithFill`, `WithGradient` and `WithPadding` cover the rest
+of the appearance.
+
+## `Spinner`
+
+Indeterminate activity, animated on its own timer.
+
+```csharp
+var spinner = new Spinner { SpinnerType = Spectre.Console.Spinner.Known.Dots, Text = "thinking" };
+spinner.Start();
+// …
+spinner.Stop();
+```
+
+`SpinnerType` selects the animation and `Text` puts a label beside it. It's an `AnimatedControl`, so it drives its
+own frames — you don't tick it.
+
+`ChatPrompt` has one built into its gutter, driven by `Busy`; see [Text and Input](Text%20and%20Input.md).
+
+## `Badge`
+
+A small inline status pill — short text on a filled background with a little horizontal padding.
+
+```csharp
+var status = new Badge("LIVE", BadgeVariant.Success);
+status.Text = "STALE";
+status.Variant = BadgeVariant.Warning;
+```
+
+`BadgeVariant` picks a themed colour scheme; pass an explicit `Style` instead when you want an exact colour.
+`Padding` adjusts the breathing room. Non-interactive, and fixed-width — it sizes to its text.
+
+## `Footer`
+
+A one-row key-hints bar, filling the available width — `^j Send  ^t Method  ^c Quit  f1 Help`.
+
+```csharp
+var footer = new Footer(
+    new FooterHint("^s", "Save"),
+    new FooterHint("^q", "Quit"),
+    new FooterHint("f1", "Help"));
+
+footer.SetHints(ContextualHints());   // swap the whole set as context changes
+```
+
+The key chord is drawn in an accent style and the label in normal text (`KeyStyle` / `LabelStyle`, `Gap` for the
+spacing). Non-interactive: the hints are yours to keep in step with your actual hotkeys — nothing verifies that
+they match.
+
+Dock it to the bottom of the shell. For the fuller, on-demand version, use the F1 help system described in
+[Navigation](Navigation.md).
+
+## `PerfHud`
+
+A development overlay showing frame timings, allocation rate and lock contention, floating over the app.
+
+```csharp
+var hud = new PerfHud();
+hud.ShowTopRight();
+hud.RegisterToggle(UI.HotKeys.CtrlF12);    // toggle it with a key
+```
+
+Counters are read directly from `Process`/`GC`/`Monitor` and differenced across refreshes, so nothing has to be
+sampling for it to work, and it refreshes itself a few times a second while shown.
+
+> **The `locks` counter measures contention, not correctness.** It's cumulative, not a rate. The dangerous
+> threading bug — unsynchronized writes from a background thread — produces **zero** contention and still corrupts
+> your state. Read it to confirm you haven't introduced locking, never to prove your threading is right. See
+> [Live Data](Live%20Data.md).
 
 ## Putting it together
 
