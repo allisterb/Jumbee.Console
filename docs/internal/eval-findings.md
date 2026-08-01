@@ -292,7 +292,7 @@ Three consecutive cold starts have now reached `Canvas`+`FilledLine`, and **none
 | ID | Sev | Type | Finding | Status |
 |----|-----|------|---------|--------|
 | V-24 | major | capability-unknown | **No documented way to turn off a control's built-in mouse handling.** `DataTable.WantsMouse`/`HandlesInput` are documented as "always true, no opt-in needed" (the V-3 fix) with no counterpart opt-out, so her `--no-mouse` flag is a no-op and M7 was abandoned. The V-3 wording solved "is it on?" and created "can I turn it off?". Fix: state the override point (`WantsMouse` is `protected virtual`, so a subclass can suppress it) on the same paragraph. | open |
-| V-25 | minor | missing-feature | **`DataTable` has no narrow-width column policy.** At 80 columns the headers wrap mid-word ("Memory %" → "Memor"/"y %"); vtop's own `drawTable` progressively drops columns as width shrinks. Fix: a min-width/auto-hide knob, or document that the caller should hide columns above a width threshold. | open |
+| V-25 | major | missing-feature | **`DataTable` has no narrow-width column policy.** At 80 columns the headers wrap mid-word ("Memory %" → "Memor"/"y %"); vtop's own `drawTable` progressively drops columns as width shrinks. Fix: a min-width/auto-hide knob, or document that the caller should hide columns above a width threshold. | open |
 | V-26 | minor | doc-gap | **`ConsoleSnapshot`'s mouse API is not reliably discoverable.** She concluded no click/hover/wheel simulation exists and reported M7 as possibly untestable *in principle* — but `Click`/`MouseMove`/`Wheel`/`RenderAfterClick` shipped in 0.1.9 (V-5), and the *previous* run found them on the `ConsoleSnapshot` page. Found by one run, missed by the next. Fix: mention mouse simulation in GETTING-STARTED's "Testing without a terminal", which is where both runs started. | open |
 
 **Also fixed (a fair criticism of the guide I'd just written):** `Live Data.md`'s cadence table listed "cheap counters (CPU, memory)" at 200–300 ms, implying system metrics are cheap to obtain. They aren't on .NET — she measured her own app at **~20% of one core at idle**, traced to enumerating every process every 300 ms to sum `TotalProcessorTime` because there's no cheap portable BCL call for system CPU. The table now says *a* counter rather than naming CPU/memory, and carries a "don't assume the fast signal is cheap — measure it" note using exactly this trap as the example.
@@ -337,3 +337,76 @@ Filed twice as "the braille/PNG font trap isn't cross-referenced", and twice lef
 **Lesson: when a measurement contradicts itself between runs, stop measuring the isolated case and reproduce in the configuration the bug was reported from.** The agents hit it while batch-rendering; a one-shot render was never going to show it.
 
 Also cross-linked, since a font without coverage is still possible: `CanvasMarker.Braille` and `Canvas`'s remarks now name the PNG symptom and the `FontFamily` fix, and `Display Widgets.md` carries the same note under its braille-chart snippet. Guarded by `SnapshotBrailleFontTests` — which documents that it must run in-suite to be meaningful.
+
+### V-25 — FIXED, and it closed V-27's known limit as a side effect
+
+`DataTable` now drops columns from the right rather than letting content wrap, via `DropNarrowColumns` (default **on**; set it `false` to keep every column and accept the wrapping).
+
+Measured, four columns of process-monitor data:
+
+| Width | Columns shown |
+|---|---|
+| 60, 44 | `Command`, `CPU %`, `Count`, `Memory %` |
+| 38 | `Command`, `CPU %`, `Count` |
+| 30 | `Command`, `CPU %` |
+| 22 | `Command` |
+
+Nothing wraps at any width — headers stay on one line and values stay whole, versus the previous `Memory` / `y %` and `11` / `.4`. Widths are measured from the header and the **rows currently on screen**, so one enormous value scrolled far away can't collapse the layout, and the leftmost column — the identifier you navigate by — is always kept.
+
+**It also removed V-27's documented limit.** That fix assumed one line per row, which held only while cells fit; below ~40 columns the cells wrapped and the row offsets drifted again. With wrapping eliminated the assumption holds everywhere, so `DataTableGeometryTests` now runs down to 28 and 22 columns instead of stopping at 40. The two findings turned out to be one problem seen from different ends: the geometry was never really fixable while the renderer was still allowed to wrap.
+
+Worth noting for triage: V-25 was filed **minor** ("ugly") and V-27 **blocker** ("incorrect"), and fixing the minor one is what made the blocker's fix complete. Reclassified major.
+
+---
+
+## Sixth cold start — 2026-08-01, first run with the chart cross-link on the right page
+
+**V-1 is validated at last.** Her own words:
+
+> `Live Data.md` and `Display Widgets.md` both contain the identical sentence, verbatim, unprompted… I did not have to guess or grep; I found it on the second doc I opened (after `Live Data.md` linked me there from its "Choosing what to stream into" table), and both docs proactively flag the exact discoverability problem they're solving. **That is the single best piece of documentation-for-a-hard-problem I found in this whole exercise.**
+
+Four consecutive runs reached `Canvas`+`FilledLine` by grepping the entire API-reference folder. This one found it on the second page it opened. The content never changed — only which page it lived on. That closes the loop opened five rounds ago: **a cross-reference is worth what the traffic to its host page is worth**, and `Plot.md` had none.
+
+**Also validated this round:** `DropNarrowColumns` (V-25) — she reports the 80-column capture dropping `Count`/`Memory %` rather than wrapping, unprompted. Braille PNGs (V-22) — she read her own images against the reference and called the texture *"essentially indistinguishable… same dense dotted mass under load, same sparse single-dot spikes at idle"*, which was impossible last round when every cell was a box. The Layouts shell recipe was *"copied close to verbatim… compiled first try"*, and `Live Data.md`'s frame-path section drove her ring-buffer design.
+
+### New findings
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-28 | major | missing-feature | **`DataTable` has no per-row update, and `Live Data.md` tells you to use one.** The guide's frame-path section says to "diff against a stable key and update in place" — advice aimed squarely at a live table — but `DataTable` exposes only `AddRow`/`RemoveRow(int)`/`Clear()`, so every tick is a full teardown plus an O(rows) re-find to restore the selection. This is a contradiction **I introduced**: the guide asserts a practice the one interactive grid can't perform. Her "one thing to fix first", and she's right. Fix: add `DataTable.UpdateRow(int, params string[])` (with the geometry/selection preserved), or have the guide state plainly that `DataTable` can't diff and show the re-find-by-key pattern as the sanctioned workaround. | open |
+| V-29 | major | capability-unknown | **No documented multi-key sequence hotkey** (`dd`, `gg`, vim chords). `UI.HotKeys`/GETTING-STARTED §6 cover single keystrokes plus modifiers only; nothing says whether the input pipeline supports sequences, so she couldn't tell if hand-rolling a timestamp compare in the handler was the intended approach or a workaround for a missing feature. Fix: one sentence either way. | open |
+| V-30 | minor | doc-gap | **Consumer-facing guides linked into `docs/internal/`.** `Display Widgets.md` pointed at internal `Theming.md` and `Snapshot Testing.md` — the second for *font glyph coverage*, i.e. exactly the V-22 braille topic. Both resolve on GitHub, so this isn't broken there, but internal docs are contributor architecture notes and are (correctly) excluded from the preview mirror, so they read as dead links to anyone on a distribution without them. **Fixed 2026-08-01:** repointed to GETTING-STARTED §7 and the `SnapshotImageOptions` API page respectively — both consumer-facing, both better targets anyway. Note her report named GETTING-STARTED §7 and `Live Data.md` as the offenders; neither links it. Only `Display Widgets.md` did, twice. | **fixed** |
+
+**Recurring, unchanged:** V-13 `ControlFrame`'s single title slot — **fourth** run to hit it, and the reason vtop's `─ CPU Usage ──── 19% ─` border readout still can't be expressed. V-21 no resize hook — though she credits `Layouts.md` for stating the limitation outright rather than leaving it silent, which is the intended outcome for a gap we've chosen not to close. V-16-adjacent: she skipped `IStyleTheme` entirely and styled per-control, citing no worked example of building a theme from an external file.
+
+### Reviewer, sixth round — and a library finding six rounds in the making
+
+It confirmed the threading shape was *nearly* right and found where it isn't: only the **redraw** is marshaled, not the **mutation** (`BrailleChart.Push` writes the history buffer on the calling thread, then posts a closure that reads it), and `RebuildTable` reads `Table.SelectedRow` from the sampler thread before marshaling. Latent rather than crashing today, because the one caller happens to wrap it — but the public signature invites any thread in, and the test harness already calls it directly. Its rule is a good one to carry into the guide: *a control has a single thread-affine mutation point, and the whole state change plus invalidation crosses the boundary as one unit.*
+
+It also caught her flagging a non-issue: she filed the `%` readout's row placement as a fidelity gap, but vtop splices the percentage into line 0 of the braille frame — the first content row, exactly where hers already is. The real defect is horizontal anchoring, not the row. Worth noting because it's the second time a run has spent findings budget on something the reference does the same way.
+
+| ID | Sev | Type | Finding | Status |
+|----|-----|------|---------|--------|
+| V-31 | major | missing-feature | **`DataTable`'s grid style is hardcoded — you cannot get plain, rule-less columns.** `TableBorder.Rounded` is baked into both `BuildTable` and `Measure`'s probe (`DataTable.cs:325,425`), with no property to change it, so every table renders with vertical rules between columns, a rule under the header and its own outer box — nested inside whatever frame the app already drew. **Every one of the six review rounds has complained about this**, in the same words each time: the process list "reads as a spreadsheet, not as `top`". A terminal process monitor is space-padded columns with a bold header and nothing between them, and that is not currently expressible. Fix: a `Border`/`GridLines` property threaded to *both* call sites — they must stay in step, or the chrome measurement breaks the way V-27 did. | open |
+
+**Recurring, and now attributable:** the "solid colour slab instead of a thin line box" the reviewer opens with is her own mistake — she passed the border colour as both foreground *and* background — but the panel-title look behind it isn't: the default `TitleBorderStyle` draws a divider under the title, and getting vtop's inset `┌─ CPU Usage ───┐` requires discovering `TitleBorderStyle.Inline`. Run 3 found that by trial and error; this run didn't find it at all. That's V-19 (no `TitleBorderStyle.None`, non-obvious default) earning a second data point.
+
+**V-31 attempted 2026-08-01 and reverted — recording what was learned, because the next attempt shouldn't rediscover it.**
+
+The API shape is easy and was working: a `TableGridStyle` enum (`Rounded`/`Square`/`Heavy`/`Double`/`Ascii`/`HeaderRule`) plus a `GridStyle` property threaded to `BuildTable` and `Measure`'s probe. `HeaderRule` (Spectre's `TableBorder.Simple`) produces exactly the wanted look:
+
+```
+  Command     CPU %    Count    Memory %
+───────────────────────────────────────────
+  node        11.4     1        2.2
+```
+
+What defeated it is that **three separate pieces of `DataTable` geometry are hardcoded to a boxed border**, and each one has to be made style-aware or the control silently misplaces things:
+
+1. `_renderedChromeTop = lines - shown - 1` — that `- 1` is the *bottom border*. Borderless styles have none, so the selection bar lands a row low.
+2. `FittingColumnCount`'s `3n + 1` — that's `(n+1)` vertical rules plus `2n` padding. A rule-less style has different overhead, so columns get dropped that would have fitted, or kept ones that then wrap.
+3. Spectre's per-style padding is **not** derivable from those two facts. `Simple` indents its content; `None` behaves differently again under `Expand = true` than when content-sized. Measuring the chrome with a probe table (render n single-cell columns, subtract n) fixed `HeaderRule`'s column fitting but not its row geometry, and never fixed `None`.
+
+Reverted rather than shipped: the default path was unaffected, but the new style was still placing the selection bar on a blank row after three corrections, and this session had already produced two cases (V-22, V-27) of confident conclusions drawn from partial measurements. A `GridStyle` that renders beautifully and highlights the wrong row is worse than none.
+
+**For whoever picks this up:** don't model Spectre's table geometry — measure it. The reliable primitive is already in `Render`: it renders to segments and counts them before writing. Extend that to derive *both* the top chrome and the per-style horizontal overhead from the real table, drop the `- 1` and the `3n + 1` constants entirely, and only then add the enum. The tests to write first are the ones that failed here: selection lands on the selected row, and no wrapping, **for every style**.

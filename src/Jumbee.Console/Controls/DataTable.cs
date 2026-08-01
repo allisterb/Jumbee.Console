@@ -51,6 +51,28 @@ public class DataTable : Control
 
     /// <summary>The column headers.</summary>
     public IReadOnlyList<string> Columns => _columns;
+
+    /// <summary>
+    /// When <see langword="true"/> (the default), columns are dropped from the right rather than letting text wrap
+    /// once the table is too narrow to show them all.
+    /// </summary>
+    /// <remarks>
+    /// A table squeezed below the width its content needs otherwise wraps: headers break mid-word and values split
+    /// across lines, which is unreadable and makes rows taller than one line. Dropping whole columns — keeping the
+    /// leftmost, which is normally the identifier — is what terminal process monitors do. Set this to
+    /// <see langword="false"/> to keep every column and accept the wrapping.
+    /// </remarks>
+    public bool DropNarrowColumns
+    {
+        get => _dropNarrowColumns;
+        set
+        {
+            if (_dropNarrowColumns == value) return;
+            _dropNarrowColumns = value;
+            _chromeTotal = -1;   // chrome depends on the column set
+            Invalidate();
+        }
+    }
     /// <summary>The number of data rows.</summary>
     public int RowCount => _rows.Count;
 
@@ -244,12 +266,10 @@ public class DataTable : Control
         // mapping clicks to the wrong row. Counting the real segments costs nothing extra: Write would enumerate
         // them anyway.
         //
-        // KNOWN LIMIT: this derives the header height by subtracting the data lines, assuming one line per row.
-        // That holds while cells fit their column, which is the normal case and covers header wrap (the bug this
-        // fixes). Squeezed hard enough, Spectre wraps the *cells* too despite NoWrap — roughly below ~40 columns
-        // for a four-column table — and then rows are taller than one line and these offsets drift again. The real
-        // answer there is a narrow-width column policy (drop columns rather than wrap, as `top` does); a table
-        // whose values have wrapped is already unreadable, so geometry is the lesser problem.
+        // This derives the header height by subtracting the data lines, so it assumes one line per row. That holds
+        // because BuildTable drops columns rather than letting content wrap (see FittingColumnCount) — with
+        // DropNarrowColumns turned off, a hard-squeezed table wraps its cells, rows become taller than one line,
+        // and these offsets drift again.
         var table = BuildTable(_scroll, shown);
         var segments = table.GetSegments(ansiConsole).ToList();
         var lines = 0;
@@ -301,13 +321,50 @@ public class DataTable : Control
 
     private Table BuildTable(int from, int count)
     {
+        var columns = FittingColumnCount(from, count);
         var table = new Table { Border = TableBorder.Rounded, Width = Math.Max(1, ContentWidth), Expand = true };
-        foreach (var column in _columns)
-            table.AddColumn(new TableColumn(new Markup(Markup.Escape(column))) { NoWrap = true });   // 1 line per row
+        for (var c = 0; c < columns; c++)
+            table.AddColumn(new TableColumn(new Markup(Markup.Escape(_columns[c]))) { NoWrap = true });   // 1 line per row
         for (var i = from; i < from + count && i < _rows.Count; i++)
-            table.AddRow(_rows[i].Select(c => (IRenderable)new Markup(Markup.Escape(c ?? string.Empty))).ToArray());
+        {
+            var row = _rows[i];
+            table.AddRow(Enumerable.Range(0, columns)
+                .Select(c => (IRenderable)new Markup(Markup.Escape(c < row.Length ? row[c] ?? string.Empty : string.Empty)))
+                .ToArray());
+        }
         return table;
     }
+
+    // How many columns fit at the current width without anything having to wrap, counted from the left.
+    //
+    // Squeezed below the width its content wants, Spectre shrinks columns and the text wraps — headers break
+    // mid-word ("Memory %" over two lines) and values split ("11.4" -> "11" / ".4"), which also makes rows taller
+    // than one line and throws off every row offset. Dropping whole columns from the right instead is what `top`
+    // and vtop do, and it keeps the leftmost column — the identifier you actually navigate by — readable.
+    //
+    // A rounded-border table costs `3n + 1` cells of chrome for n columns (n+1 border glyphs plus two padding
+    // cells per column), so the natural widths must fit in what's left. Measured against the rows on screen, not
+    // the whole set, so one enormous value scrolled far away can't collapse the layout.
+    private int FittingColumnCount(int from, int count)
+    {
+        var n = _columns.Count;
+        if (!_dropNarrowColumns || n <= 1) return n;
+
+        var widths = new int[n];
+        for (var c = 0; c < n; c++) widths[c] = _columns[c].GetCellWidth();
+        for (var i = from; i < from + count && i < _rows.Count; i++)
+        {
+            var row = _rows[i];
+            for (var c = 0; c < n && c < row.Length; c++)
+                widths[c] = Math.Max(widths[c], (row[c] ?? string.Empty).GetCellWidth());
+        }
+
+        var total = 0;
+        for (var c = 0; c < n; c++) total += widths[c];
+        while (n > 1 && 3 * n + 1 + total > ContentWidth) total -= widths[--n];
+        return n;
+    }
+
 
     // Keeps the scroll offset in range for the current row count / viewport (run every render). Does NOT force the
     // selected row into view — manual scrolling (wheel / scrollbar drag) is free to move the view off the selection.
@@ -400,6 +457,7 @@ public class DataTable : Control
     private bool _scrollDragging;
     private bool _pressedScrollbar;
     private int _scrollGrabOffset;
+    private bool _dropNarrowColumns = true;
     private int _chromeTotal = -1;   // -1 = not yet measured (re-measured when columns or width change)
     private int _chromeTop = -1;
     // Chrome rows above the first data row in the table last actually rendered; -1 until the first render. Exact,

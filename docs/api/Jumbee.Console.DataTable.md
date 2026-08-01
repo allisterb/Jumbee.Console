@@ -161,6 +161,26 @@ public IReadOnlyList<string> Columns { get; }
 
  IReadOnlyList<string\>
 
+### <a id="Jumbee_Console_DataTable_DropNarrowColumns"></a> DropNarrowColumns
+
+When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), columns are dropped from the right rather than letting text wrap
+once the table is too narrow to show them all.
+
+```csharp
+public bool DropNarrowColumns { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+A table squeezed below the width its content needs otherwise wraps: headers break mid-word and values split
+across lines, which is unreadable and makes rows taller than one line. Dropping whole columns — keeping the
+leftmost, which is normally the identifier — is what terminal process monitors do. Set this to
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> to keep every column and accept the wrapping.
+
 ### <a id="Jumbee_Console_DataTable_HandlesInput"></a> HandlesInput
 
 Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>: the table handles its own selection keys (arrows, Home/End, Page

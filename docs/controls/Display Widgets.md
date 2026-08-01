@@ -11,7 +11,7 @@ keys when focused). All live in the `Jumbee.Console` namespace.
 | `Log` | an append-only tail of styled/renderable entries | fills its cell |
 
 They are appearance-themed where it makes sense (bar/text styles come from the active
-[theme](../internal/Theming.md) and can be overridden per instance).
+[theme](../../GETTING-STARTED.md#7-styling-and-theming) and can be overridden per instance).
 
 > **Looking for a bigger chart?** `Sparkline` is one row of block bars — deliberately small. For anything taller
 > or denser:
@@ -65,7 +65,9 @@ var spark = new Sparkline(samples) { Bars = Sparkline.AsciiBars };   // ".:-=+*#
 spark.Bars = " ▄█";
 ```
 
-See [Snapshot Testing](../internal/Snapshot%20Testing.md) for the per-font glyph-coverage details.
+The same applies to PNG snapshots, which rasterise with their own font — see
+[`SnapshotImageOptions.FontFamily`](../api/Jumbee.Console.Snapshot.SnapshotImageOptions.md) for choosing one with
+the coverage your glyphs need.
 
 ## `Digits`
 

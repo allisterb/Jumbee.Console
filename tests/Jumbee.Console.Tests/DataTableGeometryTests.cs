@@ -17,10 +17,9 @@ using Xunit;
 /// of lines than the real table's. The highlight drifted up one row per extra header line as the control narrowed —
 /// invisibly to any test that only asserted <c>SelectedIndex</c>.
 /// <para>
-/// Widths here stay at or above 40 for this four-column table, which is where cells still fit their columns. Below
-/// roughly that, Spectre wraps the cell content too (despite <c>NoWrap</c>), rows stop being one line tall and the
-/// offsets drift again — a known limit noted in <c>DataTable.Render</c>, whose real fix is a drop-columns-when-narrow
-/// policy rather than more geometry arithmetic.
+/// The narrow widths matter: they used to be unfixable by geometry alone, because a squeezed table wrapped its cell
+/// content too and rows stopped being one line tall. <see cref="DataTable.DropNarrowColumns"/> removed that by
+/// dropping columns instead of wrapping, so the offsets now hold all the way down to a single column.
 /// </para>
 /// </remarks>
 public class DataTableGeometryTests
@@ -53,6 +52,8 @@ public class DataTableGeometryTests
     [InlineData(60)]
     [InlineData(50)]
     [InlineData(40)]
+    [InlineData(34)]
+    [InlineData(28)]
     public void SelectionBarLandsOnTheSelectedRow(int width)
     {
         var table = Table();
@@ -71,6 +72,8 @@ public class DataTableGeometryTests
     [InlineData(60)]
     [InlineData(50)]
     [InlineData(40)]
+    [InlineData(34)]
+    [InlineData(28)]
     public void ClickingTheHighlightedRowKeepsTheSameSelection(int width)
     {
         var table = Table();
@@ -83,6 +86,54 @@ public class DataTableGeometryTests
         Assert.True(ConsoleSnapshot.Click(buffer, 2, row));
         Assert.Equal(3, table.SelectedIndex);
         ConsoleSnapshot.ResetMouse();
+    }
+
+    [Theory]
+    [InlineData(60, "Command", "CPU %", "Count", "Memory %")]   // everything fits
+    [InlineData(38, "Command", "CPU %", "Count")]               // Memory % dropped
+    [InlineData(30, "Command", "CPU %")]                        // Count dropped too
+    [InlineData(22, "Command")]                                 // only the identifier survives
+    public void ColumnsAreDroppedFromTheRightRatherThanWrapped(int width, params string[] expected)
+    {
+        var text = ConsoleSnapshot.ToText(Table(), width, 12);
+        var header = text.Split('\n').First(l => l.Contains("Command"));
+
+        foreach (var column in expected) Assert.Contains(column, header);
+
+        // Anything not expected must be gone entirely, not wrapped onto another line.
+        foreach (var dropped in new[] { "Command", "CPU %", "Count", "Memory %" }.Except(expected))
+            Assert.DoesNotContain(dropped, text);
+    }
+
+    [Fact]
+    public void NothingWrapsAtAnyWidth()
+    {
+        // Wrapping shows up as extra lines: a table of N rows is always top border + header + separator + N + bottom.
+        // Any header or value split across lines makes it taller, which is also what breaks the row offsets.
+        for (var width = 22; width <= 60; width += 2)
+        {
+            var lines = ConsoleSnapshot.ToText(Table(), width, 12)
+                .Split('\n').Count(l => l.TrimEnd().Length > 0);
+
+            Assert.True(lines == 4 + 4, $"width {width} rendered {lines} lines for 4 rows — something wrapped");
+        }
+    }
+
+    [Fact]
+    public void DroppingCanBeTurnedOff()
+    {
+        // Column count is visible in the top border's separators (┬), which survives wrapping.
+        static int ColumnsIn(string text) => text.Split('\n')[0].Count(c => c == '┬') + 1;
+
+        var dropping = ConsoleSnapshot.ToText(Table(), 30, 12);
+
+        var kept = Table();
+        kept.DropNarrowColumns = false;
+        var wrapping = ConsoleSnapshot.ToText(kept, 30, 12);
+
+        Assert.Equal(4, ColumnsIn(wrapping));                          // all columns kept...
+        Assert.True(ColumnsIn(dropping) < ColumnsIn(wrapping),         // ...versus dropped by default
+            $"expected fewer columns with dropping on: {ColumnsIn(dropping)} vs {ColumnsIn(wrapping)}");
     }
 
     [Fact]
