@@ -234,6 +234,13 @@ public static class ConsoleSnapshot
         options ??= new SnapshotImageOptions();
         var family = ResolveFontFamily(options);
         var fontCache = new Dictionary<FontStyle, Font>();
+        // Per-glyph fallback. ResolveFontFamily picks ONE family for the whole image, and the fallback list applied
+        // only when the named family wasn't installed — so on Windows the default (Consolas: installed, and verified
+        // to have no Braille coverage) always won, and every Braille cell rasterised as the same missing-glyph box.
+        // Text snapshots were unaffected, so it failed silently: three separate ports hit it, one shipping a whole
+        // review package whose charts could not be seen. Handing the fallbacks to the text renderer lets it
+        // substitute per glyph, so Braille comes from Cascadia Mono while ordinary text stays in the chosen font.
+        var glyphFallbacks = ResolveFallbackFamilies(options, family);
 
         var cols = buffer.Size.Width;
         var rows = buffer.Size.Height;
@@ -289,6 +296,7 @@ public static class ConsoleSnapshot
                             Origin = new PointF(px, py + (options.CellHeight - options.FontSize) / 2f),
                             HorizontalAlignment = HorizontalAlignment.Left,
                             VerticalAlignment = VerticalAlignment.Top,
+                            FallbackFontFamilies = glyphFallbacks,
                         };
 
                         var textDecorations = MapTextDecorations(decoration);
@@ -542,6 +550,19 @@ public static class ConsoleSnapshot
     }
 
     private static bool TryGetFamily(string name, out FontFamily family) => SystemFonts.TryGet(name, out family);
+
+    // The installed families from FallbackFontFamilies, minus the one already chosen as primary. Handed to the text
+    // renderer so a glyph the primary font lacks (Braille, box-drawing, an emoji) is drawn from one that has it
+    // rather than as a missing-glyph box.
+    private static FontFamily[] ResolveFallbackFamilies(SnapshotImageOptions options, FontFamily primary)
+    {
+        var resolved = new List<FontFamily>();
+        foreach (var name in options.FallbackFontFamilies)
+        {
+            if (TryGetFamily(name, out var f) && f != primary && !resolved.Contains(f)) resolved.Add(f);
+        }
+        return [.. resolved];
+    }
 
     private static readonly Cell EmptyCell = new Cell(' ');
 

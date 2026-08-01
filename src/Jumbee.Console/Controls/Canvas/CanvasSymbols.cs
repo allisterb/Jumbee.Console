@@ -24,6 +24,10 @@ public enum CanvasMarker
     /// <summary>A half-height bar <c>▄</c> per point (1×1).</summary>
     Bar,
     /// <summary>Braille dots — 2×4 sub-cells per character (8 points/cell), the smoothest. The default.</summary>
+    /// <remarks>Needs a font with Braille coverage (U+2800–U+28FF). Terminals generally have it; a <b>PNG snapshot</b>
+    /// may not — the snapshot renderer's default font is Consolas, which has no Braille glyphs, so a chart can come out
+    /// as empty boxes in the image while looking perfect in the terminal and in a text snapshot. If that happens, set
+    /// <c>SnapshotImageOptions.FontFamily</c> to <c>"Cascadia Mono"</c> or <c>"DejaVu Sans Mono"</c>.</remarks>
     Braille,
     /// <summary>Vertical half blocks — 1×2 sub-cells per character, with independent colour for the upper and lower
     /// half of each cell (the only marker that colours sub-cells individually).</summary>

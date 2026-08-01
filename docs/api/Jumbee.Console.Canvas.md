@@ -138,6 +138,13 @@ markers via <xref href="Jumbee.Console.Canvas.Layer(Jumbee.Console.Drawing.Canva
 <xref href="Jumbee.Console.Drawing.CanvasMarker.Braille" data-throw-if-not-resolved="false"></xref> overlay; <xref href="Jumbee.Console.Canvas.Marker" data-throw-if-not-resolved="false"></xref> sets the starting marker. Set the visible window
 with <xref href="Jumbee.Console.Canvas.XBounds" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.Canvas.YBounds" data-throw-if-not-resolved="false"></xref> — the canvas origin is the bottom-left corner. Display-only; it
 fills its container and re-fits on resize.</p>
+<p>A filled/area chart — the dense look of a terminal system monitor — is one
+<xref href="Jumbee.Console.Drawing.FilledLine" data-throw-if-not-resolved="false"></xref> per column with <code>fillToY</code> at the baseline; <code>Plot</code>'s bar methods take no Braille
+brush, so this is the way to get it. See the Live Data guide for driving one from a running data source.</p>
+<p><b>Snapshotting Braille to PNG:</b> the image renderer's default font (Consolas) has no Braille glyphs, so a
+Braille canvas can rasterise as empty boxes in a PNG while rendering perfectly in the terminal and in a text
+snapshot. If you see that, set <code>SnapshotImageOptions.FontFamily</code> to <code>"Cascadia Mono"</code> or
+<code>"DejaVu Sans Mono"</code>.</p>
 
 ## Constructors
 

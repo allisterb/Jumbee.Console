@@ -35,6 +35,11 @@ for (var x = 0; x < samples.Length; x++)
     chart.Add(new FilledLine(x, 0, x, samples[x], fillToY: 0, color));
 ```
 
+> **If a braille chart comes out as empty boxes in a PNG**, it's the snapshot font, not your chart — the image
+> renderer defaults to Consolas, which has no braille glyphs. The terminal and `ConsoleSnapshot.ToText` are
+> unaffected, which is why this only shows up in saved images. Pass
+> `new SnapshotImageOptions { FontFamily = "Cascadia Mono" }` (or `"DejaVu Sans Mono"`) to `SavePng`/`ToImage`.
+
 ## `Sparkline`
 
 Draws a list of values as block bars (`▁▂▃▄▅▆▇█`), one cell per value, scaled against the series maximum.

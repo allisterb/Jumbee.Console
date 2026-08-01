@@ -29,6 +29,13 @@ using CColor = ConsoleGUI.Data.Color;
 /// <see cref="CanvasMarker.Braille"/> overlay; <see cref="Marker"/> sets the starting marker. Set the visible window
 /// with <see cref="XBounds"/>/<see cref="YBounds"/> — the canvas origin is the bottom-left corner. Display-only; it
 /// fills its container and re-fits on resize.</para>
+/// <para>A filled/area chart — the dense look of a terminal system monitor — is one
+/// <see cref="FilledLine"/> per column with <c>fillToY</c> at the baseline; <c>Plot</c>'s bar methods take no Braille
+/// brush, so this is the way to get it. See the Live Data guide for driving one from a running data source.</para>
+/// <para><b>Snapshotting Braille to PNG:</b> the image renderer's default font (Consolas) has no Braille glyphs, so a
+/// Braille canvas can rasterise as empty boxes in a PNG while rendering perfectly in the terminal and in a text
+/// snapshot. If you see that, set <c>SnapshotImageOptions.FontFamily</c> to <c>"Cascadia Mono"</c> or
+/// <c>"DejaVu Sans Mono"</c>.</para>
 /// </remarks>
 public class Canvas : Control
 {
