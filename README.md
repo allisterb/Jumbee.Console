@@ -11,7 +11,7 @@ Jumbee.Console is a .NET library for advanced TUIs that focuses on performance a
 * 100% managed AOT-compatible code.
 * Retained-mode GUI framework with a modern API designed to be easy to use and extend.
 * Sub-ms frame rendering times and minimal CPU consumption even with complex displays like multi-tab document editing and syntax highlighting.
-* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse (mode 1006) with motion tracking, bracketed paste (mode 2004), focus reporting (mode 1004), and alternate-screen buffer (mode 1049).
+* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, focus reporting, bracketed paste, and the alternate screen buffer.
 * Also supports the classic Windows non-ANSI console.
 * Uses Spectre.Console-compatible markup, styles, text rendering, and widgets in a retained-mode rendering pipeline.
 * Supports both fixed-width layouts like `Grid` and flexible, resizable layouts like `DockPanel`, `HorizontalStack`, `VerticalStack`, resizable `SplitPanel`.

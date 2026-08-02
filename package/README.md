@@ -10,7 +10,7 @@
 * 100% managed AOT-compatible code.
 * Retained-mode GUI framework with an API designed to be easy to use and extend.
 * Sub-ms frame rendering times and minimal CPU consumption even with complex displays like multi-tab document editing and syntax highlighting.
-* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, bracketed paste, focus reporting, and the alternate screen buffer.
+* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, focus reporting, bracketed paste, and the alternate screen buffer.
 * Also support legacy non-ANSI terminal emulators like the classic Windows console.
 * Uses Spectre.Console-compatible markup, styles, text rendering, and widgets in a retained-mode rendering pipeline.
 * Supports both fixed-width layouts like `Grid` and flexible, resizable layouts like `DockPanel`, `HorizontalStack`, `VerticalStack`, resizable `SplitPanel`.
