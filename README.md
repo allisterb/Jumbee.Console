@@ -82,11 +82,10 @@ var button = new Button("Increment");
 // Change the label text when the button is clicked or pressed
 button.Activated += (_, _) =>
 {
-    count++;
-    label.Text = $"Count: {count}";
+    label.Text = $"Count: {++count}";
 };
 
-// One column, two rows: the label above the (rounded-bordered) button.
+// One column, two rows: the label above the button.
 var root = new Grid(
     columnWidths: [30],
     rowHeights: [1, 3],

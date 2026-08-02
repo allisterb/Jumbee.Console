@@ -91,6 +91,11 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.Tests.NuGet", "..\tests\Jumbee.Console.Tests.NuGet\Jumbee.Console.Tests.NuGet.csproj", "{CCFDC7B0-9990-8B8C-778B-9D3AD1666F29}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "getting-started", "getting-started", "{627ECFD0-E9A1-425A-B3AE-3803C7AC92EC}"
+	ProjectSection(SolutionItems) = preProject
+		..\docs\getting-started\1.basics.cs = ..\docs\getting-started\1.basics.cs
+		..\docs\getting-started\2.clock.cs = ..\docs\getting-started\2.clock.cs
+		..\docs\getting-started\3.newsreader.cs = ..\docs\getting-started\3.newsreader.cs
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "package", "package", "{F66CB214-77BC-4202-95DC-AF4DD1703C43}"
 	ProjectSection(SolutionItems) = preProject

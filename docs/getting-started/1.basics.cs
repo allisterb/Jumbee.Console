@@ -2,7 +2,7 @@
 
 using Jumbee.Console;
 
-using static Jumbee.Console.Color;   // import the static colour names
+using static Jumbee.Console.Color;   // import the static color names
 
 var count = 0;
 
@@ -10,13 +10,9 @@ var label = new TextLabel(TextLabelOrientation.Horizontal, "Count: 0", Cyan1);
 var button = new Button("Increment");
 
 // Change the label text when the button is clicked or pressed
-button.Activated += (_, _) =>
-{
-    count++;
-    label.Text = $"Count: {count}";
-};
+button.Activated += (_, _) => label.Text = $"Count: {++count}"; 
 
-// One column, two rows: the label above the (rounded-bordered) button.
+// One column, two rows: the label above the button.
 var root = new Grid(
     columnWidths: [30],
     rowHeights: [1, 3],

@@ -10,7 +10,7 @@
 * 100% managed AOT-compatible code.
 * Retained-mode GUI framework with an API designed to be easy to use and extend.
 * Sub-ms frame rendering times and minimal CPU consumption even with complex displays like multi-tab document editing and syntax highlighting.
-* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse (mode 1006) with motion tracking, bracketed paste (mode 2004), focus reporting (mode 1004), and the alternate-screen buffer (mode 1049).
+* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, bracketed paste, focus reporting, and the alternate screen buffer.
 * Also support legacy non-ANSI terminal emulators like the classic Windows console.
 * Uses Spectre.Console-compatible markup, styles, text rendering, and widgets in a retained-mode rendering pipeline.
 * Supports both fixed-width layouts like `Grid` and flexible, resizable layouts like `DockPanel`, `HorizontalStack`, `VerticalStack`, resizable `SplitPanel`.
@@ -32,18 +32,15 @@ A first app — a label and a button that increments a counter:
 ```csharp
 using Jumbee.Console;
 
-using static Jumbee.Console.Color;   // import the static colour names
+using static Jumbee.Console.Color;   // import the static color names
 
 var count = 0;
 
 var label = new TextLabel(TextLabelOrientation.Horizontal, "Count: 0", Cyan1);
 var button = new Button("Increment");
 
-button.Activated += (_, _) =>
-{
-    count++;
-    label.Text = $"Count: {count}";
-};
+// Change the label text when the button is clicked or pressed
+button.Activated += (_, _) => label.Text = $"Count: {++count}";
 
 // One column, two rows: the label above the button.
 var root = new Grid(
