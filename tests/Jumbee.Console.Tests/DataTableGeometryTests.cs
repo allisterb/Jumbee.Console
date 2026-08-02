@@ -88,6 +88,24 @@ public class DataTableGeometryTests
         ConsoleSnapshot.ResetMouse();
     }
 
+    [Fact]
+    public void SelectingBeforeTheFirstLayoutStillScrollsTheRowIntoView()
+    {
+        // Setting the selection at construction time is the normal way to restore a saved cursor, and it happens
+        // before the control has any size. There is no geometry to scroll against yet, so the scroll is deferred to
+        // the first render — it used to be resolved immediately against a table clamped to one cell wide, which asked
+        // Spectre to divide that cell between four columns whose minimums were all 0 (Debug.Assert "Sum or ratios
+        // must be > 0"; Release compiled the assert out and carried on with the degenerate measurement).
+        var table = new DataTable("Command", "CPU %");
+        for (var i = 0; i < 40; i++) table.AddRow($"proc{i}", $"{i}.0");
+
+        table.SelectedIndex = 37;                       // far below any first screenful
+
+        var text = ConsoleSnapshot.ToText(table, 40, 10);
+        Assert.Contains("proc37", text);                // scrolled into view on the first render
+        Assert.Equal(37, table.SelectedIndex);
+    }
+
     [Theory]
     [InlineData(60, "Command", "CPU %", "Count", "Memory %")]   // everything fits
     [InlineData(38, "Command", "CPU %", "Count")]               // Memory % dropped

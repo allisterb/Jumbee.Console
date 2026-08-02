@@ -252,6 +252,9 @@ public class DataTable : Control
         var height = ActualHeight;
         if (width <= 0 || height <= 0 || _columns.Count == 0) return;
 
+        // A selection made before the control had a size deferred its scroll until now (see ScrollToSelected).
+        if (_scrollToSelectionPending) { _scrollToSelectionPending = false; ScrollToSelected(); }
+
         var visible = VisibleRows();
         ClampScroll(visible);
 
@@ -379,6 +382,11 @@ public class DataTable : Control
     private void ScrollToSelected()
     {
         if (_rows.Count == 0) { _scroll = 0; return; }
+        // Before the first layout there is no geometry to scroll against: ActualWidth/Height are 0, so VisibleRows
+        // would measure against a one-cell-wide table. Defer to the first Render, which runs with a real size —
+        // otherwise a selection set at construction time (a common thing to do) is either dropped or resolved
+        // against a table that doesn't exist yet.
+        if (!HasLayout) { _scrollToSelectionPending = true; return; }
         var visible = VisibleRows();
         _selected = Math.Clamp(_selected, 0, _rows.Count - 1);
         if (visible <= 0) { _scroll = _selected; return; }
@@ -403,7 +411,9 @@ public class DataTable : Control
 
     // Non-data chrome rows (top border + header + header separator + bottom border). Measured from a ONE-row probe
     // — a header-only table omits the header separator that appears once there is data, so it would mislead.
-    private int ChromeTotal() { Measure(); return _chromeTotal; }
+    // Clamped because Measure() leaves the cache at -1 until the control has a layout; every drawing-time caller
+    // runs after that, so the 0 is only ever seen by a pre-layout query.
+    private int ChromeTotal() { Measure(); return Math.Max(0, _chromeTotal); }
 
     // Rows drawn above the first data row (everything except the bottom border).
     //
@@ -411,7 +421,7 @@ public class DataTable : Control
     // anything positioning against drawn rows must use (the highlight, the scrollbar, click hit-testing). ChromeTop()
     // is the pre-render estimate from Measure()'s probe, used only to decide how many rows to ask for before there
     // is a real table to measure.
-    private int ChromeTop() { Measure(); return _chromeTop; }
+    private int ChromeTop() { Measure(); return Math.Max(0, _chromeTop); }
 
     // Chrome rows above the first data row in the most recently rendered table. Falls back to the probe estimate
     // until the first render has happened.
@@ -422,6 +432,12 @@ public class DataTable : Control
         // Re-measure when the columns change OR the width changes (an early measure at a transient tiny width would
         // render a degenerate table and cache the wrong chrome).
         if (_chromeTotal >= 0 && _measuredWidth == ContentWidth) return;
+        // Never probe before there is a layout. ContentWidth clamps to 1 when ActualWidth is 0, and a multi-column
+        // table one cell wide has no width to give any column: every column minimum comes out 0, so Spectre's
+        // Ratio.Distribute is asked to share space between ratios summing to zero (Debug.Assert "Sum or ratios must
+        // be > 0"). Release builds compile that assert out and carry on, which is why this stayed invisible.
+        // Leaving the cache unset means the first real measurement happens once a width exists.
+        if (!HasLayout) return;
 
         var probe = new Table { Border = TableBorder.Rounded, Width = Math.Max(1, ContentWidth), Expand = true };
         foreach (var column in _columns)
@@ -464,5 +480,6 @@ public class DataTable : Control
     // unlike _chromeTop's probe-based estimate, so everything that positions against drawn rows uses it.
     private int _renderedChromeTop = -1;
     private int _measuredWidth = -1;
+    private bool _scrollToSelectionPending;   // selection moved before the control had a size; resolve on first Render
     #endregion
 }
