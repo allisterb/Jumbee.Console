@@ -16,7 +16,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{C9B2828B-DAC4-4D99-B75E-890596A0B988}"
 	ProjectSection(SolutionItems) = preProject
 		..\.gitignore = ..\.gitignore
-		..\CHANGELOG.md = ..\CHANGELOG.md
+		..\CHANGELOG.txt = ..\CHANGELOG.txt
 		..\CLAUDE.md = ..\CLAUDE.md
 		..\CONTRIBUTING.md = ..\CONTRIBUTING.md
 		..\GEMINI.md = ..\GEMINI.md
