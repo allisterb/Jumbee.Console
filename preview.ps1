@@ -70,7 +70,7 @@ New-Item -ItemType Directory -Path $feed, $docs, (Join-Path $docs 'docs') | Out-
 Copy-Item (Join-Path $repo 'artifacts\*.nupkg') $feed
 
 # 2. Public docs ONLY (allowlist — never src/, ext/, docs/internal/, CLAUDE.md, GEMINI.md).
-foreach ($f in 'README.md','GETTING-STARTED.md','TROUBLESHOOTING.md','CONTRIBUTING.md','CHANGELOG.md','docker.md') {
+foreach ($f in 'README.md','GETTING-STARTED.md','TROUBLESHOOTING.md','CONTRIBUTING.md','CHANGELOG.txt','docker.md') {
     Copy-Item (Join-Path $repo $f) $docs
 }
 Copy-Item (Join-Path $repo 'package') (Join-Path $docs 'package') -Recurse           # NuGet-page READMEs

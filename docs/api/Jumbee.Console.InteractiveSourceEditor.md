@@ -318,10 +318,10 @@ Raised (on the UI thread, coalesced per frame) after the document text actually 
     caret-only movement. Carries the new text.
 
 ```csharp
-public event Action<string>? TextChanged
+public event EventHandler<string>? TextChanged
 ```
 
 #### Event Type
 
- Action<string\>?
+ EventHandler<string\>?
 

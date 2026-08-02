@@ -387,24 +387,24 @@ public void SetDirty(CodeEditor editor, bool dirty)
 Raised after the active document changes (its editor, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when none remain).
 
 ```csharp
-public event Action<CodeEditor?>? ActiveDocumentChanged
+public event EventHandler<CodeEditor?>? ActiveDocumentChanged
 ```
 
 #### Event Type
 
- Action<[CodeEditor](Jumbee.Console.CodeEditor.md)?\>?
+ EventHandler<[CodeEditor](Jumbee.Console.CodeEditor.md)?\>?
 
 ### <a id="Jumbee_Console_MultiTabCodeEditor_DocumentClosed"></a> DocumentClosed
 
 Raised after a document's tab has been removed.
 
 ```csharp
-public event Action<CodeEditor>? DocumentClosed
+public event EventHandler<CodeEditor>? DocumentClosed
 ```
 
 #### Event Type
 
- Action<[CodeEditor](Jumbee.Console.CodeEditor.md)\>?
+ EventHandler<[CodeEditor](Jumbee.Console.CodeEditor.md)\>?
 
 ### <a id="Jumbee_Console_MultiTabCodeEditor_DocumentClosing"></a> DocumentClosing
 
@@ -424,10 +424,10 @@ public event EventHandler<DocumentClosingEventArgs>? DocumentClosing
 Raised after a document is opened (its editor + tab exist and it is selected).
 
 ```csharp
-public event Action<CodeEditor>? DocumentOpened
+public event EventHandler<CodeEditor>? DocumentOpened
 ```
 
 #### Event Type
 
- Action<[CodeEditor](Jumbee.Console.CodeEditor.md)\>?
+ EventHandler<[CodeEditor](Jumbee.Console.CodeEditor.md)\>?
 

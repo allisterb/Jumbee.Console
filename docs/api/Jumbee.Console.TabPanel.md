@@ -361,24 +361,24 @@ Raised when the "+" new-tab button is clicked (see <xref href="Jumbee.Console.Ta
     typically opens a new tab.
 
 ```csharp
-public event Action? NewTabRequested
+public event EventHandler? NewTabRequested
 ```
 
 #### Event Type
 
- Action?
+ EventHandler?
 
 ### <a id="Jumbee_Console_TabPanel_SelectionChanged"></a> SelectionChanged
 
 Raised after the selected tab changes, with the new index (-1 when no tab is selectable).
 
 ```csharp
-public event Action<int>? SelectionChanged
+public event EventHandler<int>? SelectionChanged
 ```
 
 #### Event Type
 
- Action<int\>?
+ EventHandler<int\>?
 
 ### <a id="Jumbee_Console_TabPanel_TabCloseRequested"></a> TabCloseRequested
 
@@ -402,10 +402,10 @@ Set <xref href="Jumbee.Console.TabCloseEventArgs.Cancel" data-throw-if-not-resol
 Raised after a tab has been removed (via ✕, <xref href="Jumbee.Console.TabPanel.RemoveTab(Jumbee.Console.TabItem)" data-throw-if-not-resolved="false"></xref>, etc.), with its handle.
 
 ```csharp
-public event Action<TabItem>? TabRemoved
+public event EventHandler<TabItem>? TabRemoved
 ```
 
 #### Event Type
 
- Action<[TabItem](Jumbee.Console.TabItem.md)\>?
+ EventHandler<[TabItem](Jumbee.Console.TabItem.md)\>?
 

@@ -194,7 +194,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [MarkdownWithMermaidLanguage](Jumbee.Console.Documents.MarkdownWithMermaidLanguage.md) — A ColorCode `ILanguage` that highlights Markdown *and* the contents of embedded ````mermaid` fenced blocks (using the `MermaidLanguage` grammar) — for editing Markdown that contains mermaid diagrams in a `CodeEditor`.
 - [MermaidLanguage](Jumbee.Console.Documents.MermaidLanguage.md) — A ColorCode `ILanguage` grammar for Mermaid diagram source, for syntax-highlighting a Mermaid document in a `CodeEditor` (`new CodeEditor(MermaidLanguage.Instance)`).
 - [MermaidStyles](Jumbee.Console.Documents.MermaidStyles.md) — Colours and scale for `MermaidViewer`.
-- [MermaidViewer](Jumbee.Console.Documents.MermaidViewer.md) — A read-only, scrollable viewer for Mermaid `flowchart`/`graph` and `stateDiagram` diagrams.
+- [MermaidViewer](Jumbee.Console.Documents.MermaidViewer.md) — A read-only, scrollable viewer for Mermaid `flowchart`/`graph`, `stateDiagram`, `classDiagram`, `erDiagram` and `sequenceDiagram` diagrams.
 
 ## Jumbee.Console.Drawing
 

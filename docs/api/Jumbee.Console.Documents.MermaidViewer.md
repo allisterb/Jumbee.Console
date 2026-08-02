@@ -3,7 +3,8 @@
 Namespace: [Jumbee.Console.Documents](Jumbee.Console.Documents.md)  
 Assembly: Jumbee.Console.Documents.dll  
 
-A read-only, scrollable viewer for Mermaid <code>flowchart</code>/<code>graph</code> and <code>stateDiagram</code> diagrams.
+A read-only, scrollable viewer for Mermaid <code>flowchart</code>/<code>graph</code>, <code>stateDiagram</code>,
+<code>classDiagram</code>, <code>erDiagram</code> and <code>sequenceDiagram</code> diagrams.
 
 ```csharp
 public class MermaidViewer : Control, IFocusable
@@ -134,7 +135,7 @@ border, title and scrollbar; ↑/↓, PgUp/PgDn, Home/End and the wheel scroll i
 
 <p>
 Parsing/layout runs on a background thread so setting <xref href="Jumbee.Console.Documents.MermaidViewer.Mermaid" data-throw-if-not-resolved="false"></xref> never blocks the UI thread; the view
-fills in when the render completes. Other diagram types (sequence, class, ER, …) are not supported yet and show a
+fills in when the render completes. Diagram types beyond those listed above are not supported yet and show a
 short message. The diagram is drawn at its intrinsic size and clips horizontally if wider than the control.
 </p>
 

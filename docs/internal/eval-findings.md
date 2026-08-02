@@ -1,6 +1,6 @@
 # Eval findings — jc-curious / reviewer loop
 
-Running backlog of Jumbee.Console API/doc gaps and bugs surfaced by the **jc-curious** port eval loop and its **jc-curious-reviewer** critic (see `.claude/agents/jc-curious*.md`). Each item is a *candidate* fix; graduate accepted ones into `CHANGELOG.md`. This log is the backlog, not a commitment.
+Running backlog of Jumbee.Console API/doc gaps and bugs surfaced by the **jc-curious** port eval loop and its **jc-curious-reviewer** critic (see `.claude/agents/jc-curious*.md`). Each item is a *candidate* fix; graduate accepted ones into `CHANGELOG.txt`. This log is the backlog, not a commitment.
 
 Port targets so far: **eilmeldung** (RSS reader, rounds 1–4 below) · **scope-tui** (audio scope) · **vtop** (activity monitor, see the vtop section at the end). The agent `.md`s are single-target and get rewritten per target; prior briefs are in git history.
 
@@ -61,7 +61,7 @@ Modernization **validated the 0.1.4 doc/packaging work**: jc-curious found & ado
 
 ## 0.1.4 disposition (2026-07-20)
 
-Graduated into 0.1.4 (see `CHANGELOG.md`):
+Graduated into 0.1.4 (see `CHANGELOG.txt`):
 - **Fixed (code/packaging):** R2-2 + R3-3 (bundle private assemblies' XML docs — Styles/Spectre/etc., verified in the packed nupkg) · R1-4 (`TreeNode.Tag` + `ListBoxItem.Tag`) · R2-3 (`TreeNode.UpdateTree()` → public) · R2-4 (`Tree.SelectionChanged`) · R3-2 (`TreeGuide.None`). New `TreeApiTests.cs` covers the four Tree/item adds; full suite 819/819.
 - **Documented:** R2-1 + R3-1 (hotkey process-global scope on `UI.RegisterHotKey`) · R1-2 (`Grid` fixed-cell sizing) · R1-3 (`SplitPanel.MinFirst` 1-cell floor) · R1-1 (single-child composite = `SetContent(new Boundary(child))`) · R1-5 (`Tree`/`Spectre.Console.Tree` `CS0104` note) · R1-6 (`MarkdownViewer` is in core, not Documents). *(XML-doc changes reach the generated `docs/api/*.md` on the next `pack`/`build-api-docs`.)*
 

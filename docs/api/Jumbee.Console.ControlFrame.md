@@ -520,10 +520,10 @@ public event FocusableEventHandler? OnLostFocus
 Raised after the vertical scroll position (<xref href="Jumbee.Console.ControlFrame.Top" data-throw-if-not-resolved="false"></xref>) changes.
 
 ```csharp
-public event Action? Scrolled
+public event EventHandler? Scrolled
 ```
 
 #### Event Type
 
- Action?
+ EventHandler?
 

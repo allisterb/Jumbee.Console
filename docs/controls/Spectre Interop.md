@@ -109,13 +109,19 @@ using Spectre.Console.Rendering;
 
 public sealed class StatusLine : RenderableControl
 {
-    private static readonly Style Green = Color.Green;   // Color → Jumbee Style, implicitly
+    // Qualified because this file also imports Spectre.Console, which has its own Style and Color.
+    private static readonly Jumbee.Console.Style Green = Jumbee.Console.Color.Green;
     private string _text = "";
 
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth) =>
-        [new Segment(_text, Green)];                     // Jumbee Style → Spectre Style, implicitly
+        [new Segment(_text, Green)];   // Jumbee Style → Spectre Style, implicitly
 }
 ```
+
+> **`Style` and `Color` exist in both namespaces.** A file that imports `Jumbee.Console` *and* `Spectre.Console` —
+> which is normal on this page — gets an ambiguous reference for either bare name. Qualify them, or alias one:
+> `using Style = Jumbee.Console.Style;`. This bites on interop files specifically; a file importing only
+> `Jumbee.Console` is fine.
 
 The two-step conversion above is deliberate. `Jumbee.Console.Style`'s two-colour constructor requires **both** a
 foreground and a background, but a `Color` converts implicitly to a `Style`, and a Jumbee `Style` converts

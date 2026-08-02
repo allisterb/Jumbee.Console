@@ -13,7 +13,7 @@ Every link below is raw Markdown and can be fetched directly. The API reference 
 - [Documentation index](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/README.md): Entry point to the guides, control docs and API reference.
 - [API reference index](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/README.md): All public types grouped by namespace, each with its summary.
 - [Troubleshooting](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/TROUBLESHOOTING.md): Common build, rendering and terminal problems and their fixes.
-- [Changelog](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/CHANGELOG.md): Release history.
+- [Changelog](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/CHANGELOG.txt): Release history (plain text).
 - [Running with Docker](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docker.md): Run the demo apps with only Docker installed; also how the images are built.
 - [Contributing](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/CONTRIBUTING.md): Building the repo (submodules required), running the tests.
 
@@ -212,7 +212,7 @@ Every link below is raw Markdown and can be fetched directly. The API reference 
 - [MarkdownWithMermaidLanguage (class)](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/Jumbee.Console.Documents.MarkdownWithMermaidLanguage.md): A ColorCode `ILanguage` that highlights Markdown *and* the contents of embedded ````mermaid` fenced blocks (using the `MermaidLanguage` grammar) — for editing Markdown that contains mermaid diagrams in a `CodeEditor`.
 - [MermaidLanguage (class)](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/Jumbee.Console.Documents.MermaidLanguage.md): A ColorCode `ILanguage` grammar for Mermaid diagram source, for syntax-highlighting a Mermaid document in a `CodeEditor` (`new CodeEditor(MermaidLanguage.Instance)`).
 - [MermaidStyles (class)](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/Jumbee.Console.Documents.MermaidStyles.md): Colours and scale for `MermaidViewer`.
-- [MermaidViewer (class)](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/Jumbee.Console.Documents.MermaidViewer.md): A read-only, scrollable viewer for Mermaid `flowchart`/`graph` and `stateDiagram` diagrams.
+- [MermaidViewer (class)](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/docs/api/Jumbee.Console.Documents.MermaidViewer.md): A read-only, scrollable viewer for Mermaid `flowchart`/`graph`, `stateDiagram`, `classDiagram`, `erDiagram` and `sequenceDiagram` diagrams.
 
 ## API reference: Jumbee.Console.Drawing
 

@@ -226,10 +226,10 @@ public override IFocusable this[int row, int column] { get; }
 Raised after <xref href="Jumbee.Console.SplitPanel.SplitPosition" data-throw-if-not-resolved="false"></xref> changes, with the new first-pane extent.
 
 ```csharp
-public event Action<int>? SplitChanged
+public event EventHandler<int>? SplitChanged
 ```
 
 #### Event Type
 
- Action<int\>?
+ EventHandler<int\>?
 

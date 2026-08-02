@@ -66,4 +66,8 @@ var t = UI.Start(root, width: 34, height: 6, input: new VtInputSource(anyMotion:
 t.Wait();
 ```
 
-See [GETTING-STARTED.md](https://github.com/allisterb/Jumbee.Console/blob/master/GETTING-STARTED.md) and the [documentation](https://github.com/allisterb/Jumbee.Console/tree/master/docs).
+See [GETTING-STARTED.md](https://github.com/allisterb/Jumbee.Console/blob/master/GETTING-STARTED.md) and the [documentation](https://github.com/allisterb/Jumbee.Console/tree/master/docs). To find the right control for a job, start with the [control guides](https://github.com/allisterb/Jumbee.Console/blob/master/docs/controls/README.md) — a decision table over the whole library, then a guide per category.
+
+## For LLMs and coding agents
+
+[**llms.txt**](https://raw.githubusercontent.com/allisterb/Jumbee.Console/master/llms.txt) ([what this is](https://llmstxt.org)) is a curated index of every doc and API page in this project, as absolute links to raw Markdown. Fetch it first to find the page you need, then fetch that page directly.

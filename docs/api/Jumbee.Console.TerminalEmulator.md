@@ -424,22 +424,22 @@ are handled here. Returns <a href="https://learn.microsoft.com/dotnet/csharp/lan
 Raised on the UI thread after the child process exits (never for a manually-driven terminal).
 
 ```csharp
-public event Action? Exited
+public event EventHandler? Exited
 ```
 
 #### Event Type
 
- Action?
+ EventHandler?
 
 ### <a id="Jumbee_Console_TerminalEmulator_TitleChanged"></a> TitleChanged
 
 Raised on the UI thread when the running program changes the window title (OSC 0/2).
 
 ```csharp
-public event Action<string>? TitleChanged
+public event EventHandler<string>? TitleChanged
 ```
 
 #### Event Type
 
- Action<string\>?
+ EventHandler<string\>?
 

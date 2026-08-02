@@ -9,7 +9,7 @@
   <!-- Shared assembly version for the Jumbee.Console libraries. Projects opt in by mapping their AssemblyVersion /
        FileVersion / Version to this property, so bumping the version here restamps them all on the next build. -->
   <PropertyGroup Label="Versioning">
-    <ProjectAssemblyVersion>0.1.9</ProjectAssemblyVersion>
+    <ProjectAssemblyVersion>0.1.10</ProjectAssemblyVersion>
   </PropertyGroup>
 
   <!-- Shared NuGet package metadata. Projects are NOT packed by default; the shipped libraries
@@ -28,10 +28,12 @@
     <PackageTags>tui;terminal;console;ansi;ui;jumbee</PackageTags>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageVersion>$(ProjectAssemblyVersion)</PackageVersion>
-    <!-- NuGet release notes: the repo CHANGELOG.md is packed as the release notes for all three shipped packages.
-         Update CHANGELOG.md each release (newest entry on top); the Exists guard keeps the build working if it's
-         ever absent. -->
-    <PackageReleaseNotes Condition="Exists('$(MSBuildThisFileDirectory)../CHANGELOG.md')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../CHANGELOG.md'))</PackageReleaseNotes>
+    <!-- NuGet release notes: the repo CHANGELOG.txt is packed as the release notes for all three shipped packages.
+         Update CHANGELOG.txt each release (newest entry on top); the Exists guard keeps the build working if it's
+         ever absent. It is plain text, not Markdown, and the extension is deliberate: nuget.org and the Visual
+         Studio package manager show release notes as plain text, and GitHub renders a .txt verbatim rather than
+         trying to interpret it as Markdown. -->
+    <PackageReleaseNotes Condition="Exists('$(MSBuildThisFileDirectory)../CHANGELOG.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../CHANGELOG.txt'))</PackageReleaseNotes>
   </PropertyGroup>
 
   <!-- Shared package icon (the same logo for all three packages). Harmless on non-packable projects (only used

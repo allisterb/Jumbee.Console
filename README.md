@@ -104,7 +104,7 @@ UI.SetFocus(button);                             // focus it so Enter/Space acti
 var t = UI.Start(root, width: 34, height: 6, input: new VtInputSource(anyMotion: true));
 
 // Wait until the UI stops.
-t.Wait()
+t.Wait();
 ```
 
 For more examples see [GETTING-STARTED.md](https://github.com/allisterb/Jumbee.Console/blob/master/GETTING-STARTED.md), the [gallery](https://github.com/allisterb/Jumbee.Console/tree/master/gallery), the [documentation](https://github.com/allisterb/Jumbee.Console/tree/master/docs)

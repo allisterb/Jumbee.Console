@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The forked/vendored assemblies (Spectre's Segment/RenderOptions, ConsoleGUI's Control, ...) come from
+       tests\Directory.Build.props, which already imports src\ExternalReferences.props. They are referenced by
+       Jumbee.Console with PrivateAssets="all", so they do not flow transitively and the snippet compilation would
+       otherwise fail to resolve them. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Compiles the extracted snippets in-memory so the test can inspect diagnostics and ignore CS0103
+         (identifiers the reader is expected to supply). A plain build guard cannot do that. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Jumbee.Console\Jumbee.Console.csproj" />
+    <ProjectReference Include="..\..\src\Jumbee.Console.Documents\Jumbee.Console.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Jumbee.Console.Snapshot\Jumbee.Console.Snapshot.csproj" />
+  </ItemGroup>
+
+</Project>

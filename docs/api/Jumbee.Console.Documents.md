@@ -54,5 +54,6 @@ Colours and scale for <xref href="Jumbee.Console.Documents.MermaidViewer" data-t
 
  [MermaidViewer](Jumbee.Console.Documents.MermaidViewer.md)
 
-A read-only, scrollable viewer for Mermaid <code>flowchart</code>/<code>graph</code> and <code>stateDiagram</code> diagrams.
+A read-only, scrollable viewer for Mermaid <code>flowchart</code>/<code>graph</code>, <code>stateDiagram</code>,
+<code>classDiagram</code>, <code>erDiagram</code> and <code>sequenceDiagram</code> diagrams.
 

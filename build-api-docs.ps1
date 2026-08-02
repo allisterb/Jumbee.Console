@@ -216,7 +216,7 @@ $topDocs = @(
     @{ Title = 'Documentation index'; Path = 'docs/README.md';   Notes = 'Entry point to the guides, control docs and API reference.' },
     @{ Title = 'API reference index'; Path = 'docs/api/README.md'; Notes = 'All public types grouped by namespace, each with its summary.' },
     @{ Title = 'Troubleshooting';  Path = 'TROUBLESHOOTING.md';  Notes = 'Common build, rendering and terminal problems and their fixes.' },
-    @{ Title = 'Changelog';        Path = 'CHANGELOG.md';        Notes = 'Release history.' },
+    @{ Title = 'Changelog';        Path = 'CHANGELOG.txt';       Notes = 'Release history (plain text).' },
     @{ Title = 'Running with Docker'; Path = 'docker.md';        Notes = 'Run the demo apps with only Docker installed; also how the images are built.' },
     @{ Title = 'Contributing';     Path = 'CONTRIBUTING.md';     Notes = 'Building the repo (submodules required), running the tests.' }
 )
