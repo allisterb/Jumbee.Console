@@ -118,7 +118,7 @@ Most "I need a custom control" turns out not to. Work down this ladder and stop 
 3. **Subclass an existing control** when you want its behaviour with a difference. This is the cheapest real
    customisation and the library uses it heavily: `Checkbox`, `RadioButton` and `Switch` are all `ToggleButton`
    with different glyphs and semantics; `MarkdownExtendedViewer` is a `MarkdownViewer` with an extra render seam.
-4. **Write a new control** only when the drawing or the input handling is genuinely new.
+4. **Write a new control** only when the drawing or the input handling is new.
 
 ### Choosing a base class
 

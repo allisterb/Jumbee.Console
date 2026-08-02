@@ -22,7 +22,7 @@ cell count, so the *region* grows and the grid doesn't.
 
 Nesting does not rescue it — a `Grid` inside a `DockPanel`'s fill slot still renders at its declared size. If your
 app looks right at one terminal size and squashed or letterboxed at every other, a `Grid` at the root is almost
-always why. Build the shell from `DockPanel` and `SplitPanel`; use `Grid` for regions where you genuinely want fixed
+always why. Build the shell from `DockPanel` and `SplitPanel`; use `Grid` for regions where you want fixed
 geometry (a form, a dialog interior, a dashboard tile).
 
 This is the single most common structural mistake with this library — four independent cold-start ports all made it.

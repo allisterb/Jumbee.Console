@@ -233,21 +233,38 @@ foreach ($d in $topDocs) {
 # groups:"). Any guide without an entry here still falls back to Get-DocNote, so adding a new guide
 # needs no script change — the directory is globbed.
 $controlNotes = @{
-    'Layouts'            = 'Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.'
-    'Live Data'          = 'Wiring a continuously-updating data source into the UI: sample off the UI thread, apply one immutable snapshot per tick via UI.Invoke, split fast and slow cadences, keep the frame path cheap, and measure it with PerfHud.'
-    'Composite Controls' = 'Building one reusable Control out of several children (CompositeControl), how content height and scrolling work, and a worked example.'
-    'Display Widgets'    = 'Widgets for presenting information: labels, badges, gauges, spinners, sparklines, tables and charts.'
-    'Links'              = 'Link, the focusable clickable control that opens a URL or runs an action.'
-    'Selection Controls' = 'Checkboxes, radio buttons, switches, and the single- and multi-select list controls (RadioSet, SelectionList, ToggleList).'
+    'README'               = 'START HERE to find the right control. A decision table mapping a task ("I want to...") to the control that does it, across the whole library, then one guide per category. Also links the cross-cutting concept guides.'
+    'Control Model'        = 'What nests inside what: Control, ControlFrame, ILayout and CompositeControl. Framing is a property of a control rather than a wrapper node; sizing order (Width/Height, then intrinsic, then allocated) and why 0 means unset; focus exclusivity and input tunnelling; how redraw is requested.'
+    'Writing Applications' = 'Retained mode versus immediate mode and why it matters if you come from Spectre.Console: your app has no render loop. What the framework owns (frame loop, redraw scheduling, terminal setup/restore, input routing, layout) versus what you own, and how to choose a base class when writing a control.'
+    'What Happens When'    = 'Behavioural FAQ with the answer first: resizing the terminal, a Grid that will not grow, no resize event, Width = 0 meaning unset, reading ActualWidth before layout, mutating a control off the UI thread, UI.Invoke swallowing exceptions, expensive work in Render, a control that throws every frame failing invisibly, double-click routing, themed properties pinning.'
+    'Layouts'              = 'Arranging controls, and which layouts fill the terminal and which do not (DockPanel and SplitPanel fill; Grid is fixed-size). Boundary, overlays, and recipes for an app shell, master-detail and a dashboard.'
+    'Text and Input'       = 'Showing and entering text: TextLabel, TextInput (and its orientation-first TextLabel gotcha), TextPrompt, Autocomplete, and the editor stack TextEditor -> CodeEditor -> MultiTabCodeEditor, plus ChatPrompt for an agent/chat input line.'
+    'Lists and Data'       = 'Presenting rows: ListBox, DataTable, Tree, Log and TextPanel, and how to pick between them, including which own their scrolling and which need a ControlFrame, why Log rather than a growing ListBox for a stream, and DataTable having no sort and no in-place row update.'
+    'Selection Controls'   = 'Checkboxes, radio buttons, switches, the single- and multi-select list controls (RadioSet, SelectionList), and the collapsed drop-down Select, including when to show every option versus collapse them.'
+    'Charts'               = 'Plot, Canvas, BarChart, RunChart and Globe, and choosing between them: numeric bars (Plot) versus labelled categories (BarChart), and the dense braille filled-area chart being Canvas plus Drawing.FilledLine rather than Plot. Live series via AddLiveSeries.'
+    'Display Widgets'      = 'Small self-contained readouts and status indicators: Sparkline, Digits, Gauge, ProgressBar, Spinner, Badge, Footer, GlassPanel, PerfHud and Log, including which of the four progress-ish controls to use.'
+    'Navigation'           = 'Buttons, menus, modals and help: Button, MenuBar, ContextMenu, Dialog (with the Control-not-ILayout content gotcha and how to snapshot-test a modal), TabPanel and the F1 help system.'
+    'Links'                = 'Link, the focusable clickable control that opens a URL or runs an action, and wiring app-level keys with UI.RegisterHotKey.'
+    'Documents'            = 'Rendering and editing Markdown, AsciiDoc and Mermaid: MarkdownViewer, MarkdownExtendedViewer, AsciiDocViewer, MermaidViewer and the Interactive*Editor split-preview editors. Which are core and which need the Jumbee.Console.Documents package; all parse off the UI thread and need a frame to scroll.'
+    'Terminal'             = 'TerminalEmulator: running a child process in a pseudo-console (ConPty on Windows, UnixPty elsewhere) and painting its output as a control. Input forwarding, why app hotkeys need UI.RegisterHotKey to survive it, and disposing to avoid orphan processes.'
+    'Spectre Interop'      = 'Bringing existing Spectre.Console code in: SpectreControl<T> wrapping any IRenderable, SpectreLiveDisplay and SpectreTaskProgress, subclassing RenderableControl for a new control, and the AnsiConsoleBuffer bridge. Mutate wrapped widgets through UpdateContent, never directly.'
+    'Composite Controls'   = 'Building one reusable Control out of several children (CompositeControl), how content height and scrolling work, and a worked example.'
+    'Live Data'            = 'Wiring a continuously-updating data source into the UI: sample off the UI thread, apply one immutable snapshot per tick via UI.Invoke, split fast and slow cadences, keep the frame path cheap, and measure it with PerfHud.'
 }
 
 $controlsDir = Join-Path $repoRoot 'docs/controls'
 if (Test-Path $controlsDir) {
     [void]$lb.AppendLine('## Control guides')
     [void]$lb.AppendLine('')
-    foreach ($f in (Get-ChildItem -Path $controlsDir -Filter '*.md' | Sort-Object Name)) {
-        $title = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
-        $note = if ($controlNotes.ContainsKey($title)) { $controlNotes[$title] } else { Get-DocNote $f.FullName }
+    # The folder's README is the hub the other guides hang off, so it leads the section rather than sorting
+    # into the middle of it under the unhelpful title "README".
+    $controlFiles = @(Get-ChildItem -Path $controlsDir -Filter '*.md' | Sort-Object Name)
+    $controlFiles = @($controlFiles | Where-Object { $_.Name -eq 'README.md' }) +
+                    @($controlFiles | Where-Object { $_.Name -ne 'README.md' })
+    foreach ($f in $controlFiles) {
+        $key = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+        $title = if ($key -eq 'README') { 'Controls: start here' } else { $key }
+        $note = if ($controlNotes.ContainsKey($key)) { $controlNotes[$key] } else { Get-DocNote $f.FullName }
         [void]$lb.AppendLine((New-LlmsLink $title "docs/controls/$($f.Name)" $note))
     }
     [void]$lb.AppendLine('')

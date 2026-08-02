@@ -56,7 +56,7 @@ code you have to run whenever the size changes, not something the layout maintai
 - **Alternate whole pages?** `TabPanel`.
 - **Pop-ups, menus, modals?** `Overlay` — see below.
 
-A typical app is a few nested `DockPanel`s with `Grid`s inside the regions that genuinely want fixed geometry.
+A typical app is a few nested `DockPanel`s with `Grid`s inside the regions that want fixed geometry.
 
 ## Giving a docked child a size: `Boundary`
 

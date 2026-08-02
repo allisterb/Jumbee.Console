@@ -214,6 +214,28 @@ they match.
 Dock it to the bottom of the shell. For the fuller, on-demand version, use the F1 help system described in
 [Navigation](Navigation.md).
 
+## `GlassPanel`
+
+A translucent panel that floats over the app — a HUD, a tooltip, a heads-up readout that shouldn't fully hide
+what's behind it.
+
+```csharp
+var hud = new GlassPanel(width: 30, height: 8, tint: Color.Black, factor: 0.6f);
+hud.Content = someControl;
+hud.Show(x: 4, y: 2);       // floats in UI.Overlay; Hide() and Toggle() do the obvious
+```
+
+`tint` is the glass colour the layer beneath is blended toward, and `factor` the blend strength — `0` is fully
+see-through, `1` a solid fill. `frosted` (on by default) collapses each cell beneath to a single perceived colour
+so content behind becomes a faithful blur; turn it off and the glyphs underneath show through, tinted.
+`gammaCorrect` blends in linear light.
+
+A terminal cell has no alpha channel — ANSI has no way to express one — so this is a software flatten of the
+overlapping layers to opaque colours, done lazily as cells are drawn. Only the panel's own cells are blended, and
+only when a frame redraws them.
+
+`PerfHud` below is a `GlassPanel` subclass, which is what it looks like in practice.
+
 ## `PerfHud`
 
 A development overlay showing frame timings, allocation rate and lock contention, floating over the app.

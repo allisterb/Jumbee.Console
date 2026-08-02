@@ -1,11 +1,14 @@
 # Controls
 
-Jumbee.Comsole contains many controls and layouts to help you achieve the TUI look and feel you want. This page is a quick reference to help you find you to the right one quickly: skim the decision table, then read the guide for that category.
-You can also look [**Writing applications**](Writing%20Applications.md) explains the retained-mode model, what the framework
-owns versus what you own, and how to choose a base class when you write your own control.
+Jumbee.Console has a lot of controls and layouts. This page is a quick reference for finding the right one: skim
+the decision table, then read the guide for that category.
 
-If your app is already running and behaving oddly you can look at [**What happens when…**](What%20Happens%20When.md) to answer questions like why the app doesn't fill the terminal, why an update never appears, why
-a control silently stopped drawing.
+[**Writing applications**](Writing%20Applications.md) covers the retained-mode model, what the framework owns
+versus what you own, and how to choose a base class when you write your own control.
+
+If your app is already running and behaving oddly, [**What happens when…**](What%20Happens%20When.md) answers
+questions like why it doesn't fill the terminal, why an update never appears, or why a control silently stopped
+drawing.
 
 ## Quick decision guide
 
@@ -50,7 +53,10 @@ a control silently stopped drawing.
 | Show a key-hints bar along the bottom | `Footer` |
 | Show large numeric readouts | `Digits` |
 | Show frame timings and allocation while developing | `PerfHud` |
+| Float a translucent panel over the app | `GlassPanel` |
 | **Navigation and commands** | |
+| Give the user a button to press | `Button` (`Button.Primary` / `Button.Secondary` for the themed roles) |
+| Wire a keyboard shortcut, or quit on Escape | `UI.RegisterHotKey` — see [Links](Links.md) |
 | Add a menu bar | `MenuBar` |
 | Add a right-click menu | `ContextMenu` (draws its own nested submenu chain) |
 | Ask a question, confirm an action | `Dialog.Confirm` / `Dialog.Message`, or a custom `Dialog` |
@@ -76,8 +82,8 @@ a control silently stopped drawing.
 | [Lists and Data](Lists%20and%20Data.md) | `ListBox`, `DataTable`, `Tree`, `Log`, `TextPanel` | Presenting rows, hierarchy and streams — and picking between them |
 | [Selection Controls](Selection%20Controls.md) | `Checkbox`, `RadioButton`, `Switch`, `RadioSet`, `SelectionList`, `Select` | Toggles and the single-/multi-select list controls |
 | [Charts](Charts.md) | `Plot`, `Canvas`, `BarChart`, `RunChart`, `Globe`, `Drawing` shapes | Plotting data and drawing graphics |
-| [Display Widgets](Display%20Widgets.md) | `Sparkline`, `Digits`, `Gauge`, `ProgressBar`, `Spinner`, `Badge`, `Footer`, `Log` | Small self-contained readouts and status indicators |
-| [Navigation](Navigation.md) | `MenuBar`, `ContextMenu`, `Dialog`, `HelpControl`, `TabPanel` | Menus, modals, help, and moving around the app |
+| [Display Widgets](Display%20Widgets.md) | `Sparkline`, `Digits`, `Gauge`, `ProgressBar`, `Spinner`, `Badge`, `Footer`, `GlassPanel`, `Log` | Small self-contained readouts and status indicators |
+| [Navigation](Navigation.md) | `Button`, `MenuBar`, `ContextMenu`, `Dialog`, `HelpControl`, `TabPanel` | Buttons, menus, modals, help, and moving around the app |
 | [Links](Links.md) | `Link` | Clickable links, and wiring app-level keys |
 | [Documents](Documents.md) | `MarkdownViewer`, `AsciiDocViewer`, `MermaidViewer`, `Interactive*Editor` | Rendering and editing Markdown, AsciiDoc and Mermaid |
 | [Terminal](Terminal.md) | `TerminalEmulator`, `ConPty`, `UnixPty` | Running a child process in an embedded pseudo-console |

@@ -38,6 +38,11 @@ so they chain and never change what you're holding. `HasFrame` and `Frame` read 
 The consequence: **you place the control, and the frame comes with it.** There's no wrapper object to keep track of,
 and no risk of adding the control while its frame stays behind.
 
+> **A frame has exactly one title slot.** There's no second, independently-positioned title, so the common
+> monitoring-panel look — a name top-left and a live value top-right *in the same border row* — can't be expressed.
+> Put the readout in the content area's first row instead. Three separate developers have tried the border route
+> and worked around it the same way.
+
 When a control is framed, the frame owns the border, the title, the margin, the scrollbar and — for scrollable
 content — the viewport. That's why `ListBox` and `Tree` need a frame to scroll: they size to their content and let
 the frame do the scrolling. `Log` and `DataTable` don't, because they own their viewports (`FillsFrameViewport`).

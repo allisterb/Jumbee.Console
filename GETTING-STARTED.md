@@ -199,7 +199,7 @@ Every widget derives from `Control`. The library ships a large catalogue, includ
 - **Text & input:** `TextLabel`, `TextPanel`, `TextInput`, `TextEditor`, `CodeEditor`, `ChatPrompt`.
 - **Buttons & toggles:** `Button`, `Checkbox`, `RadioButton`, `RadioSet`, `Switch`, `ToggleButton`,
   `SelectionList`, `Select`.
-- **Lists & trees:** `ListBox`, `Tree`, `Menu`, `MenuBar`, `DataTable`.
+- **Lists & trees:** `ListBox`, `Tree`, `ContextMenu`, `MenuBar`, `DataTable`.
 - **Readouts & charts:** `Digits`, `Sparkline`, `Gauge`, `BarChart`, `RunChart`, `Plot`, `Badge`, `Log`.
 - **Rich content:** `MarkdownViewer`, `Canvas`, `Globe`, `TerminalEmulator`, and the Spectre bridges
   (`SpectreControl<T>`, `SpectreLiveDisplay`, `SpectreTaskProgress`).

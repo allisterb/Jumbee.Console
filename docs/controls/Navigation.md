@@ -1,11 +1,12 @@
 # Navigation
 
-Menus, dialogs, tabs and help — the chrome that lets people move around an app and act on it.
+Buttons, menus, dialogs, tabs and help — the chrome that lets people move around an app and act on it.
 
 ## Choosing
 
 | I want | Use |
 |---|---|
+| A button the user clicks or activates | `Button` |
 | A menu bar across the top | `MenuBar` |
 | A right-click menu | `ContextMenu` |
 | To ask a question or confirm | `Dialog.Confirm` / `Dialog.Message`, or a custom `Dialog` |
@@ -16,6 +17,36 @@ Menus, dialogs, tabs and help — the chrome that lets people move around an app
 
 `MenuBar`, `ContextMenu` and `Dialog` all float in the ambient `UI.Overlay`, which `UI.Start` sets up for you —
 there's no overlay wiring to do.
+
+## `Button`
+
+A focusable, clickable button. Enter, Space or a click activates it.
+
+```csharp
+var save = new Button("Save");
+save.Activated += (_, _) => Save();
+```
+
+`Text` is the label, `Activate()` fires it from code, and `Activated` is the event. Two static factories give you
+the themed roles without building a style by hand:
+
+```csharp
+var ok     = Button.Primary("OK");         // the accent role — the action you expect
+var cancel = Button.Secondary("Cancel");
+```
+
+`Style` takes a `ButtonStyle`, whose `Shape` decides the whole look: `ButtonShape.Flat` is a single-row text
+button (the default), `ButtonShape.Modern` a solid three-row tile with a raised bevel derived from the fill
+colour. `WithColors`, `WithShape` and `WithWidth` build a variant without spelling out every field.
+
+```csharp
+save.Style = save.Style.WithShape(ButtonShape.Modern);
+```
+
+Note the height difference: a `Modern` button occupies **three** rows, so a row of them needs the space allocated
+for it. Buttons draw their own focus cue (`RendersOwnFocus`), so they don't take the default background tint.
+
+For a button row inside a modal, you don't need any of this — [`Dialog`](#dialog) builds and drives its own.
 
 ## `MenuBar`
 

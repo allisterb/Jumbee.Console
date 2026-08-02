@@ -9,6 +9,12 @@ The selection family lets users pick and toggle values. It comes in two groups:
 | `Switch` | one on/off value | `(─●)` / `(●─)` Label | independent |
 | `RadioSet` | one option from a list | a column of `(●)`/`( )` rows | single-select |
 | `SelectionList` | any options from a list | a column of `[X]`/`[ ]` rows | multi-select |
+| `Select` | one option from a list | one row: the value plus `▼`, options in a pop-up | single-select |
+
+`RadioSet` and `Select` both pick one option from a list; the difference is space. `RadioSet` shows every option
+all the time, which is right for a handful of choices the user should be able to compare. `Select` costs one row
+whatever the list length, at the price of a click to see the options — right for long lists, and for forms where
+vertical space matters more than visibility.
 
 All of them are in the `Jumbee.Console` namespace and are used like any other control — placed in a layout and
 shown with `UI.Start`.
@@ -130,6 +136,28 @@ The user navigates with **Up/Down** and toggles the highlighted row with **Space
 Both list controls also expose `CursorIndex` (the highlighted row), which you can set to move the keyboard cursor
 programmatically.
 
+## Collapsed single-select: `Select`
+
+A drop-down. Closed, it shows the current value and a `▼`; opening it floats the options in the ambient
+`UI.Overlay`.
+
+```csharp
+var method = new Select("GET", "POST", "PUT", "DELETE") { Placeholder = "method" };
+method.SelectionChanged += (_, value) => request.Method = value;
+```
+
+`SelectedIndex` and `SelectedValue` read and set the choice, `Options` is the list, and `Placeholder` is shown
+while nothing is selected. `Open()` drops the list from code.
+
+Clicking it — or Enter/Space while focused — opens the list; choosing an option commits it and raises
+`SelectionChanged`. **Escape, or a click outside, cancels** and leaves the previous value alone. By default the
+list opens below the control and flips above when there isn't room; `PopupPosition` pins it if you'd rather it
+didn't move.
+
+Because the pop-up uses `UI.Overlay`, which `UI.Start` sets up, there's no overlay wiring to do — but it does mean
+the list is drawn above everything else, so don't rely on the control's own bounds when reasoning about what's on
+screen.
+
 ## Layout, focus, and frames
 
 **Placement.** Add controls to a layout such as `Grid` and pass it to `UI.Start`:
@@ -190,6 +218,7 @@ Explicit values like these survive a runtime theme switch; everything you leave 
 | `Checkbox` / `RadioButton` / `Switch` | click | Enter / Space toggles (when focused) |
 | `RadioSet` | click a row | Up / Down move, Enter / Space select |
 | `SelectionList` | click a row | Up / Down move, Enter / Space toggle |
+| `Select` | click to open, click an option | Enter / Space opens, Up / Down move, Enter selects, Esc cancels |
 
 Double-clicking a toggle counts as two activations (e.g. a checkbox ends where it started), so rapid clicks
 behave predictably.

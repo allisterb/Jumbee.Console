@@ -97,7 +97,7 @@ progress.StartAsync(async ctx =>
 
 For a **single** task that you place and theme like a normal control, use
 [`ProgressBar`](Display%20Widgets.md) instead — it's a plain composable control you drive with `Value`, rather than
-a widget that owns a callback. `SpectreTaskProgress` earns its place when you genuinely have several concurrent
+a widget that owns a callback. `SpectreTaskProgress` earns its place when you have several concurrent
 tasks and want Spectre's column layout.
 
 ## Building a control on Spectre rendering

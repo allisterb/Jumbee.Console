@@ -66,26 +66,15 @@ as a `string[]`, which is what you use to identify it (see the rebuild pattern b
 **It doesn't sort.** There is no sort API and no clickable header. Sort your own data and rebuild the table. The
 control shows what you give it, in the order you give it.
 
-**It has no in-place row update.** The row API is `AddRow` / `RemoveRow(int)` / `Clear()`. A table whose values
-change every tick must be rebuilt, and rebuilding drops the selection — so restore it by key, never by index, since
-rows reorder between ticks:
+**It has no in-place row update.** The row API is `AddRow` / `RemoveRow(int)` / `Clear()`, so a table whose values
+change every tick must be rebuilt — and rebuilding drops the selection, which has to be restored by key rather than
+by index because rows reorder between ticks. [Live Data](Live%20Data.md) has the worked recipe, under "Tearing
+down views"; do the whole sequence inside one `UI.Invoke` so no frame paints a half-rebuilt table.
 
-```csharp
-var selectedKey = table.SelectedRow?[0];        // remember by identity
-
-table.Clear();
-foreach (var p in snapshot) table.AddRow(p.Name, p.Cpu.ToString("F1"), p.Count.ToString(), p.Mem.ToString("F1"));
-
-if (selectedKey is not null)
-    for (var i = 0; i < table.RowCount; i++)
-    {
-        table.SelectedIndex = i;
-        if (table.SelectedRow?[0] == selectedKey) break;
-    }
-```
-
-Do the whole sequence inside one `UI.Invoke` so no frame ever paints a half-rebuilt table. [Live
-Data](Live%20Data.md) covers the surrounding pattern.
+Its colours come from the active theme rather than from properties on the control: the selection bar and the
+surface follow `IStyleTheme`, so restyle it by supplying a theme rather than looking for a `SelectedBackground` on
+`DataTable`. `IStyleTheme`'s members are default-implemented, so a custom theme means overriding the few you care
+about, not all of them — see [Theming](../internal/Theming.md).
 
 **When it gets narrow, columns are dropped rather than wrapped.** `DropNarrowColumns` defaults to `true`: the table
 drops columns from the right and always keeps the leftmost, because a table whose headers have broken mid-word is
