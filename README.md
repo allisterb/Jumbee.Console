@@ -11,7 +11,7 @@ Jumbee.Console is a .NET library for advanced TUIs that focuses on performance a
 * 100% managed AOT-compatible code.
 * Retained-mode GUI framework with a modern API designed to be easy to use and extend.
 * Sub-ms frame rendering times and minimal CPU consumption even with complex displays like multi-tab document editing and syntax highlighting.
-* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, focus reporting, bracketed paste, and the alternate screen buffer.
+* Uses modern terminal features: ANSI/VT control sequences, 24-bit colour, SGR-encoded mouse with motion tracking, bracketed paste, focus reporting, and the alternate screen buffer.
 * Also supports the classic Windows non-ANSI console.
 * Uses Spectre.Console-compatible markup, styles, text rendering, and widgets in a retained-mode rendering pipeline.
 * Supports both fixed-width layouts like `Grid` and flexible, resizable layouts like `DockPanel`, `HorizontalStack`, `VerticalStack`, resizable `SplitPanel`.
@@ -75,15 +75,12 @@ using Jumbee.Console;
 using static Jumbee.Console.Color;   // import the static colour names
 
 var count = 0;
-
-var label = new TextLabel(TextLabelOrientation.Horizontal, "Count: 0", Cyan1);
+var label = new TextLabel(TextLabelOrientation.Horizontal, $"Count: {count}", Cyan1);
 var button = new Button("Increment");
 
 // Change the label text when the button is clicked or pressed
-button.Activated += (_, _) =>
-{
-    label.Text = $"Count: {++count}";
-};
+button.Activated += (_, _) => label.Text = $"Count: {++count}";
+
 
 // One column, two rows: the label above the button.
 var root = new Grid(
@@ -96,7 +93,7 @@ var root = new Grid(
     ]);
 
 UI.RegisterHotKey(UI.HotKeys.Escape, UI.Stop);   // Esc quits (Ctrl+Q also quits by default)
-UI.SetFocus(button);                             // focus it so Enter/Space activates
+UI.SetFocus(button);                             // focus the button so Enter/Space activates
 
 // Start the UI with a width/height. Mouse/hover need a VtInputSource.
 // Returns a Task.
