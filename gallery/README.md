@@ -6,10 +6,12 @@
 
 ### Document Editing Demo
 ![](https://i.imgur.com/mpNylpY.gif)
+[source](../examples/Jumbee.Console.Examples/Examples/Editors/)
 
 ### Audio Scope Demo
-[![](https://i.imgur.com/uCdpqJC.gif)](../examples/Jumbee.Console.AudioScopeDemo)
-[source](../examples/Jumbee.Console.Examples/Examples/Editors/)
+![](https://i.imgur.com/uCdpqJC.gif)
+[source](../examples/Jumbee.Console.AudioScopeDemo)
+
 
 ### Agent Harness Demo
 ![](https://imgur.com/zM24PDY.gif)

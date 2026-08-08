@@ -29,6 +29,9 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\src\Jumbee.Console\Controls\**\*.cs" Link="ControlSource\%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console\Layouts\**\*.cs" Link="LayoutSource\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Remove="Examples\Viewers\**" />
+    <EmbeddedResource Remove="Examples\Viewers\**" />
+    <None Remove="Examples\Viewers\**" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console\SpectreControl.cs" Link="ControlSource\SpectreControl.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Styles\ButtonStyle.cs" Link="ControlSource\ButtonStyle.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Documents\AsciiDoc\AsciiDocViewer.cs" Link="ControlSource\AsciiDocViewer.cs" />
@@ -43,9 +46,6 @@
        and shown as a "Input.md" source tab beside it). The resource name ends with ".Input.md" for SourceLoader. -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\internal\Input.md" Link="DocSource\Input.md" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Examples\Viewers\" />
   </ItemGroup>
 
 </Project>
