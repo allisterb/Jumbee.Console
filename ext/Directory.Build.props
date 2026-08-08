@@ -5,4 +5,17 @@
     <Nullable>enable</Nullable>
     <NoWarn>NETSDK1233</NoWarn>
   </PropertyGroup>
+
+  <!-- Debugging into the bundled forks. The core package ships these assemblies in lib/ but no .pdb files, so a
+       consumer stepping into them got decompiled output with no comments and lowered async/iterator code.
+       DebugType=embedded puts the PDB inside the DLL, which is what makes this work at all here: the bundling
+       target copies assemblies into lib/ and would leave a sibling .pdb behind. SourceLink then maps those PDB
+       paths to the fork's own public GitHub repo, so the debugger fetches the real source at the exact commit.
+       (ext/spectre.console has its own Directory.Build.props under src/ which already sets all of this, and takes
+       precedence — MSBuild stops at the first Directory.Build.props it finds walking up.) -->
+  <PropertyGroup Label="Symbols">
+    <DebugType>embedded</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
 </Project>

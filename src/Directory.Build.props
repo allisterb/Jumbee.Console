@@ -28,6 +28,14 @@
     <PackageTags>tui;terminal;console;ansi;ui;jumbee</PackageTags>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageVersion>$(ProjectAssemblyVersion)</PackageVersion>
+    <!-- Debug symbols travel inside the assembly rather than as a separate symbols package. A .snupkg only reaches
+         consumers who have enabled the NuGet.org symbol server; an embedded PDB needs no configuration at all, and
+         it survives the bundling target that copies assemblies into lib/. SourceLink maps the recorded paths to
+         this repo on GitHub, so stepping in shows the real source — comments included — at the exact commit.
+         Note this is NOT paired with ContinuousIntegrationBuild/deterministic builds: see Deterministic above. -->
+    <DebugType>embedded</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <!-- NuGet release notes: the repo CHANGELOG.txt is packed as the release notes for all three shipped packages.
          Update CHANGELOG.txt each release (newest entry on top); the Exists guard keeps the build working if it's
          ever absent. It is plain text, not Markdown, and the extension is deliberate: nuget.org and the Visual

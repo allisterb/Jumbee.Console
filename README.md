@@ -1,7 +1,7 @@
 # Jumbee.Console
 [![NuGet Version](https://img.shields.io/nuget/v/Jumbee.Console?style=plastic)](https://www.nuget.org/packages/Jumbee.Console)
 
-![](https://i.imgur.com/zM24PDY.gif)
+![](https://i.imgur.com/mpNylpY.gif)
 
 ## About
 Jumbee.Console is a .NET library for advanced TUIs that focuses on performance and usability. Inspired by libs like [ratatui](https://ratatui.rs/) and [Textual](https://textual.textualize.io/), it tries to provide a high-performance retained-mode library that is easy-to-use with idiomatic .NET GUI and Task patterns, while flexible enough to create different types of TUI applications from news readers to animated dashboards to IDEs to agent harnesses to graphics apps.
@@ -102,6 +102,7 @@ var t = UI.Start(root, width: 34, height: 6, input: new VtInputSource(anyMotion:
 // Wait until the UI stops.
 t.Wait();
 ```
+![](https://i.imgur.com/SPVPmW6.png)
 
 For more examples see [GETTING-STARTED.md](https://github.com/allisterb/Jumbee.Console/blob/master/GETTING-STARTED.md), the [gallery](https://github.com/allisterb/Jumbee.Console/tree/master/gallery), the [documentation](https://github.com/allisterb/Jumbee.Console/tree/master/docs)
 and a longer example [of building a TUI newsreader](examples/Jumbee.Console.NewsReaderDemo/README.md).
