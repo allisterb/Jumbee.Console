@@ -16,6 +16,11 @@ public sealed class SpawnSettings
     /// <summary>How far above the target a spawned body appears, so it drops in rather than materialising inside
     /// whatever is already there.</summary>
     public float DropHeight => 2f;
+
+    /// <summary>Radius of the sphere that encloses what a spawn produces — a box's corner is further from its centre
+    /// than its face, so a cube of half-extent <c>h</c> needs <c>h·√3</c>. Used to work out how far in front of the
+    /// camera a launched body has to start (see <see cref="SceneView.Launch"/>).</summary>
+    public float BoundingRadius => Shape == BodyShape.Sphere ? 0.5f * Scale : 0.5f * Scale * 1.7320508f;
     #endregion
 
     #region Methods

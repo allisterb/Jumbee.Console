@@ -83,18 +83,26 @@ public sealed class SceneView : CompositeControl
         var position = Camera.Target + new Vector3(0, Spawn.DropHeight, 0);
         var (shape, scale, key) = (Spawn.Shape, Spawn.Scale, nextColorKey++);
         runner.Post(scene => scene.Add(shape, position, scale, key));
+        selectNewestSpawn = true;
     }
 
     /// <summary>Fires a body out of the camera along the view direction — the sandbox's blunt instrument.</summary>
+    /// <remarks>
+    /// The muzzle distance is <b>derived from how big the body is</b>, not a constant. Spawning it a fixed 1 unit in
+    /// front of the eye (which is what inertia does) puts it on the lens: a default sphere projects to 141% of the
+    /// viewport height on its first frame, so what you see is a screen-filling shape collapsing to a dot rather than
+    /// an object being thrown. Solving <c>ndcRadius = focal · r / distance</c> for a target on-screen size instead
+    /// keeps the first frame legible, and keeps it legible after <c>+</c>/<c>-</c> changes the spawn size.
+    /// </remarks>
     public void Launch()
     {
         var view = Camera.GetView();
-        // A body's length clear of the eye, or it spawns intersecting the near plane and the first frame looks like
-        // it came from nowhere.
-        var origin = view.Eye + (view.Forward * 1f);
+        var muzzle = MathF.Max(MinMuzzleDistance, renderer.Projection.Focal * Spawn.BoundingRadius / MuzzleNdcRadius);
+        var origin = view.Eye + (view.Forward * muzzle);
         var velocity = view.Forward * Spawn.LaunchSpeed;
         var (shape, scale, key) = (Spawn.Shape, Spawn.Scale, nextColorKey++);
         runner.Post(scene => scene.Add(shape, origin, scale, key, velocity));
+        selectNewestSpawn = true;
     }
 
     /// <summary>Deletes the selected body, if there is one.</summary>
@@ -327,6 +335,17 @@ public sealed class SceneView : CompositeControl
         // stops resolving -- drop it rather than leave a highlight pointing at nothing.
         if (selected is { } id && snapshot.IndexOf(id) < 0) Selected = null;
 
+        // Select whatever the last spawn produced, once the physics thread has actually created it. Ids only come
+        // back through the snapshot -- the command that made it ran over there -- so this waits for a tick carrying
+        // a higher id than we had. Without it, pressing f gives no feedback beyond a shape appearing.
+        if (selectNewestSpawn && snapshot.Count > 0 && snapshot.Ids[^1] > highestSeenId)
+        {
+            Selected = snapshot.Ids[^1];
+            selectNewestSpawn = false;
+        }
+
+        if (snapshot.Count > 0) highestSeenId = Math.Max(highestSeenId, snapshot.Ids[^1]);
+
         renderer.Draw(snapshot, Camera);
         Drawn = snapshot;
         Drew?.Invoke(snapshot);
@@ -340,6 +359,12 @@ public sealed class SceneView : CompositeControl
     private const float MaxThrowSpeed = 40f;
     private const int ThrowSampleCount = 5;
 
+    // The on-screen radius a launched body should have on its first frame, in NDC. The viewport's Y half-span is the
+    // cell aspect (~0.6 on a wide terminal), so 0.2 is about a third of the half-height -- clearly an object, not a
+    // wall. See the remarks on Launch for why this is derived rather than a fixed muzzle distance.
+    private const float MuzzleNdcRadius = 0.2f;
+    private const float MinMuzzleDistance = 2f;
+
     private readonly PhysicsRunner runner;
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private readonly Queue<(TimeSpan At, Vector3 Point)> throwSamples = new();
@@ -347,6 +372,8 @@ public sealed class SceneView : CompositeControl
     private ISceneRenderer renderer;
     private int? selected;
     private int nextColorKey = 100;
+    private bool selectNewestSpawn;
+    private int highestSeenId;
     private bool orbiting;
     private int? grabbed;
     private Vector3 grabPlanePoint;

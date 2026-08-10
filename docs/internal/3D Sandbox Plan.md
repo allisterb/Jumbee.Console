@@ -330,6 +330,14 @@ Design notes worth keeping:
   not fling it.
 - **`Pick` is a default interface method on `ISceneRenderer`** — it needs only `Viewport` and `Projection`, so both
   renderers get it without duplication. Note it is then callable only through the interface, not the concrete type.
+- **The launch muzzle distance is derived from the body's size, not a constant.** Inertia spawns the projectile at
+  `eye + dir * 1.0`, which in a terminal viewport puts it on the lens: measured, a default sphere projects to an NDC
+  radius of 0.866 on its first frame — **141% of the viewport height, a circle 42 rows tall on a 30-row view** — and
+  because NDC X spans ±1 while Y spans ±0.61 it is clipped top and bottom, so it reads as a full-width *ellipse*
+  collapsing to a dot rather than as an object being thrown. Solving `ndcRadius = focal · r / distance` for a target
+  first-frame size (0.2 NDC) instead gives ~4.3 units for a sphere and ~7.5 for a box, and stays right when `+`/`-`
+  changes the spawn scale. A spawn or launch also selects what it produced, so the footer names it — the id only
+  comes back through the snapshot, since the command that created it ran on the physics thread.
 
 **The finding that matters, because it is a library trap and it bit a user, not a test.** The arrow keys did nothing
 in the shipped M0 build. The cause:
