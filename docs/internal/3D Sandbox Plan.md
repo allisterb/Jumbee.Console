@@ -199,6 +199,115 @@ dep flows, before anything depends on it; (3) Box3D world with falling boxes on 
 wireframe. Look at `IDebugDrawer` here and decide whether it beats walking bodies ourselves. Record the numbers
 from (1) in this file.
 
+### M0.1 result — the full-screen repaint ceiling (measured 2026-08-09)
+
+`tests/Jumbee.Console.Benchmarks -- --fullscreen` (`FullScreenBenchmarks.cs`) drives a `Control` that rewrites its
+whole area every frame with `▀`/`▄` half-blocks carrying independent fg/bg RGB — the `Globe` technique the solid
+renderer will use — through the real `ConsoleManager` headlessly. Four fills bracket where the time goes: `blank`
+paints nothing, `static` writes every cell but always the same value (full paint, nothing emitted), `animated`
+changes every cell *and* leaves no two neighbours agreeing, `shaded` changes every cell in moving 8-cell bands.
+
+Per frame at 200×50 (10,000 cells), and at 240×67 (16,080 — a maximised window):
+
+| Fill | frame, 200×50 | ANSI bytes/frame | frame, 240×67 | ANSI bytes/frame |
+|---|---|---|---|---|
+| blank | ~0.6 ms | 4 B | ~0.9 ms | 4 B |
+| static | ~1.0 ms | 4 B | ~1.3 ms | 4 B |
+| **shaded** | **~1.0–1.6 ms** | **51 KB** (3.0 MB/s at 60 fps) | **~2.0 ms** | **83 KB** (4.9 MB/s) |
+| animated | ~3.1–5.3 ms | 369 KB (21.6 MB/s) | ~5.0–8.7 ms | 596 KB (34.9 MB/s) |
+
+**There is budget.** A flat-shaded viewport at 200×50 costs ~1.6 ms of a 16.6 ms frame — under 10%, with the
+scalar rasteriser still to be paid for out of the remaining 15 ms. The plan's bad case ("if full-screen repaint
+costs 8 ms there is no budget for anything clever") did not happen.
+
+**Three findings that change the renderer's design:**
+
+1. **Emission dominates, not painting.** Writing 16,080 cells costs ~0.3 ms; compositing and emitting them costs
+   1.7–8.3 ms. Optimising our shading loop is optimising the wrong 5%.
+2. **Cost tracks how much adjacent cells differ, far more than cell count.** Same cells, same writes, same paint
+   time — `shaded` emits **7× fewer bytes** than `animated` and runs **~3× faster** end to end, purely because
+   neighbours share a style and the renderer coalesces the run. So **quantise the shade ramp**: flat facets with
+   few distinct colours are not just stylistically right for this demo, they are the single largest perf lever
+   available. A smooth or dithered gradient would put us in the `animated` column.
+3. **`ConsoleManager.LastFrameDirtyCells` counts cells *re-composited*, not cells emitted** — a whole-area
+   repainter always reports 100%, in every fill including the ones that emit 4 bytes. It is not a usable signal
+   here; ANSI bytes is. (Consistent with the documented `Damage` semantics: damage narrows what is scanned, never
+   what is sent.)
+
+**On trusting these numbers:** the byte counts are exact — identical to the digit across three runs (369,090 /
+596,188 / 51,277 / 82,793). The times are not: the same configuration varied up to 2.3× between runs on this
+desktop (240×67 `blank` draw: 0.6 / 1.4 / 0.6 ms). Quote the bytes; treat the times as order-of-magnitude. This is
+`perf-measurement-methodology` playing out exactly as recorded — deterministic counters over microseconds.
+
+### M0.2 result — Box3D under NativeAOT (2026-08-09)
+
+The API in 0.3.0 lives in namespace **`Box3D`** (not `Box3D.NET`), and differs from what this document recorded:
+both `world.CreateDynamicBody(pos)` and `world.CreateBody(BodyDefinition.Dynamic(pos))` exist, and shapes are built
+with factories — `Box.Cube(0.5f)`, `Box.FromSize(v)`, `new Sphere(r)` — not `new Box(halfExtents)`. Also
+`PhysicsWorld.Count` is **static** (worlds, not bodies); the per-world body figure is `AwakeBodyCount`. One thing
+absent from the surface: there is no way to read a box shape's half extents back off a `Shape` — `Shape.Bounds`
+gives a world AABB, which for a rotated box is not the same thing. The renderer must therefore **keep the extents
+it spawned with**, which the snapshot was going to carry anyway.
+
+The smoke check (`Program.cs` at this milestone) drops eight unit cubes onto a static plane and steps 600 × 1/60 s.
+They settle at y = 0.499, 1.496, 2.492 … and all eight go to sleep — the engine loads, simulates and sleeps.
+
+- **win-x64 NativeAOT: works, and trims clean.** 1.12 MB binary (a real AOT image — the apphost-stub tell is
+  ~76 KB), plus `box3d.dll` 1.10 MB alongside; runs and exits 0. **Zero `IL2xxx`/`IL3xxx` warnings.** As with
+  NAudio, P/Invoke is the supported AOT path and nothing here needs a rooting descriptor.
+  Needs the host-toolchain workaround: `$env:PATH = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer;' + $env:PATH`.
+- **linux-x64: the native asset flows.** `dotnet publish -r linux-x64` stages `libbox3d.so` (1.13 MB) beside the
+  managed assemblies, so the RID-specific resolution is correct.
+- **The linux NativeAOT *link* is deferred to M5's Docker target.** NativeAOT cannot cross-compile OS boundaries —
+  it needs clang in a linux image, which is exactly what `Dockerfile.aot` already does for AudioScope. Doing it
+  now would mean pulling `dotnet/sdk:10.0` + clang (~3–4 GB) onto a host disk at 98% (23 GB free), which is the
+  condition that corrupted the Docker WSL disk once already. The residual risk is low: the managed side has zero
+  AOT warnings and the per-RID native asset resolves.
+
+### M0.3 result — the wireframe spike (2026-08-09)
+
+Shipped: `Camera.cs` (orbit rig, view basis, projection — 130 lines, `System.Numerics`, faithful to inertia's maths
+including the φ clamp and the project-a-point-one-radius-right sphere trick), `SceneSnapshot.cs` (parallel arrays),
+`PhysicsRunner.cs` (background thread, fixed 1/60 with the catch-up budget, `PhysicsScene` command queue),
+`ISceneRenderer.cs`, `WireframeRenderer.cs`, `SceneView.cs`, `SceneFooter.cs`, `Program.cs`.
+
+Validated headlessly — a scratch harness compiling the demo's sources against `Jumbee.Console.Snapshot`, letting the
+physics settle 180 steps, then painting one frame: the floor grid recedes correctly to a horizon with the box stack
+standing on it. Orientation was checked numerically rather than by eye (tower top projects to ndc.y = +0.54, world
+origin to −0.07 — up is up).
+
+**Frame cost of the real scene**, 100×34, camera orbiting every frame, median over 150 frames:
+
+| Bodies | project + `Canvas.Add` | Canvas rasterise | composite + emit | total | ANSI |
+|---|---|---|---|---|---|
+| 11 | 36 µs | 420 µs | 1345 µs | 1.80 ms (11% of a 60 fps frame) | 5.7 KB |
+| 50 | 128 µs | 1089 µs | 1443 µs | 2.66 ms (16%) | 8.2 KB |
+| 200 | 418 µs | 2783 µs | 1468 µs | 4.67 ms (28%) | 11.8 KB |
+
+**This inverts M0.1's conclusion for the wireframe, and it is worth being precise about why.** M0.1 measured a
+control that rewrites *every cell*; a wireframe lights a sparse scatter of braille cells and leaves the rest blank,
+so it emits 6–12 KB/frame rather than 51–369 KB — **30× less** — and emission stops being the bottleneck. What
+dominates instead is `Canvas`'s own rasterisation, and it scales with body count (2.8 ms at 200 bodies) while
+emission stays flat. So the two renderers have genuinely different bottlenecks: **wireframe is paint-bound and
+scales with bodies; solid will be emission-bound and scale with screen area.** M0.1's "quantise the shade ramp"
+lever applies to the solid renderer only.
+
+Note the `Canvas.Add` column is the closure-churn the batch API would remove — 418 µs at 200 bodies, ~13% of that
+frame. Real, worth fixing, still not blocking.
+
+**Two library findings, both confirmed by being bitten:**
+
+1. **`FillsFrameViewport` is a trap with a silent failure mode.** A framed `SceneView` came out **97×1000**, not
+   97×31: a wrapping `ControlFrame` offers an unbounded height so a scrollable child can grow, and a control with
+   no intrinsic height falls through `CalculateSize` to the 1000-row clamp. The camera's whole picture then lands
+   off-screen and the viewport renders **completely empty** — which reads as "my projection maths is wrong", not as
+   a layout problem. This is the third demo to meet it (see the AudioScope notes). Any control that is a *window*
+   rather than a *document* needs `FillsFrameViewport => true`, and nothing in the failure points at it.
+2. **`protected internal` virtuals are awkward to override from another assembly.** Both `FillsFrameViewport` and
+   `GetHelpInfo` must be overridden as plain `protected` outside the library, and writing the modifier the base
+   declares gives `CS0507: cannot change access modifiers` — an error that reads as nonsense when you have copied
+   the signature verbatim. Cheap fix: document the `protected override` form on both members.
+
 **M1 — sandbox.** Grid floor, spawn box/sphere at the camera target, launch impulse, grab and drag, delete,
 reset, pause and single-step.
 

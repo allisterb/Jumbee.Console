@@ -29,4 +29,13 @@ if (args.Length >= 1 && args[0] == "--damage")
     return;
 }
 
+// The ceiling for a full-screen animated viewport — whole-area repaint, every cell changed, at several sizes:
+//   dotnet run -c Release --project tests/Jumbee.Console.Benchmarks -- --fullscreen
+//   dotnet run -c Release --project tests/Jumbee.Console.Benchmarks -- --fullscreen 80x24,200x50
+if (args.Length >= 1 && args[0] == "--fullscreen")
+{
+    Jumbee.Console.Benchmarks.FullScreenDiagnostics.Diagnose(args.Length > 1 ? args[1] : null);
+    return;
+}
+
 BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args);

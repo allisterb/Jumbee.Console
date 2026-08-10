@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,12 +6,22 @@
     <RootNamespace>Jumbee.Console.SandboxDemo</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- PublishAot is per-project, not inherited: a plain `dotnet publish` on a project without it yields a
+         framework-dependent apphost stub that crashes silently in an SDK-less image. See Dockerfile.aot. -->
     <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- A binding over Erin Catto's Box3D C engine (not a managed port): speaks System.Numerics, so no conversion
+         at the boundary. Box3D.NET.Native ships six RIDs including linux-x64/arm64, and P/Invoke is the supported
+         NativeAOT path — same situation as NAudio in AudioScopeDemo. -->
     <PackageReference Include="Box3D.NET" Version="0.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Jumbee.Console\Jumbee.Console.csproj" />
   </ItemGroup>
 
 </Project>
