@@ -8,18 +8,19 @@ using Jumbee.Console.SandboxDemo;
 // on its own thread, an orbit camera, and a wireframe renderer drawing projected edges onto a Canvas at braille
 // resolution.
 //
-// M0 spike. The camera and projection are ~120 lines of System.Numerics (Camera.cs) -- Box3D speaks those types, so
-// nothing is converted anywhere between the engine and the screen.
+// The camera and projection are ~200 lines of System.Numerics (Camera.cs) -- Box3D speaks those types, so nothing
+// is converted anywhere between the engine and the screen.
 //
 // Threading is the pattern from docs/controls/Live Data.md: the physics world, the body list and every Box3D handle
 // belong to the physics thread, which publishes one immutable SceneSnapshot per tick. The UI thread only ever reads
 // the newest snapshot (a reference swap, so it always sees a whole consistent tick) and posts scene mutations back
-// through PhysicsRunner.Post. There is no lock anywhere.
+// through PhysicsRunner.Post. There is no lock anywhere. Picking, selection and the drag maths all run on the UI
+// thread against the snapshot, so none of them can ever see a body mid-step.
 
 var runner = new PhysicsRunner(BuildScene);
 var renderer = new WireframeRenderer();
 var view = new SceneView(runner, renderer);
-var footer = new SceneFooter { Mode = renderer.Name };
+var footer = new SceneFooter(view);
 
 // The footer reports the snapshot that was actually DRAWN, not the newest one, so its body count and clock always
 // agree with the picture above it.
@@ -31,13 +32,19 @@ view.Drew += snapshot =>
 
 _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
 
-// DockPanel, never a Grid at the root: the footer takes its one line and the viewport fills whatever is left, at
+// DockPanel, never a Grid at the root: the footer takes its two lines and the viewport fills whatever is left, at
 // every terminal size, with no split positions to recompute.
 var root = new DockPanel(DockedControlPlacement.Bottom, footer, view);
 
+// App-level keys are global hotkeys; everything that acts on the SCENE lives in SceneView.OnInput instead, so it
+// only fires while the viewport has focus and travels with the control.
 UI.RegisterHotKey(UI.HotKeys.Char(' '), () => runner.Paused = !runner.Paused);
 UI.RegisterHotKey(UI.HotKeys.Char('.'), runner.StepOnce);
-UI.RegisterHotKey(UI.HotKeys.Char('r'), () => runner.Post(scene => { scene.ClearBodies(); Populate(scene); }));
+UI.RegisterHotKey(UI.HotKeys.Char('r'), () =>
+{
+    view.Selected = null;
+    runner.Post(scene => { scene.ClearBodies(); Populate(scene); });
+});
 UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
 UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
 

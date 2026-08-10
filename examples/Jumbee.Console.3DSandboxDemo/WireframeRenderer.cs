@@ -44,6 +44,15 @@ public sealed class WireframeRenderer : ISceneRenderer
     /// <inheritdoc/>
     public Control Surface => canvas;
 
+    /// <inheritdoc/>
+    public Projection Projection { get; } = new(60f);
+
+    /// <inheritdoc/>
+    public Viewport Viewport { get; private set; }
+
+    /// <inheritdoc/>
+    public int? Selected { get; set; }
+
     /// <summary>Half-width of the floor grid, in world units.</summary>
     public int GridHalfExtent { get; set; } = 12;
 
@@ -55,12 +64,14 @@ public sealed class WireframeRenderer : ISceneRenderer
     /// <inheritdoc/>
     public void Draw(SceneSnapshot snapshot, OrbitCamera camera)
     {
-        var (w, h) = (canvas.ActualWidth, canvas.ActualHeight);
-        if (w <= 0 || h <= 0) return;
+        // ActualWidth/Height are read HERE, in the draw, never cached from a constructor or a setter -- they are
+        // only real once the control has been laid out, and they change on every terminal resize.
+        var viewport = new Viewport(canvas.ActualWidth, canvas.ActualHeight);
+        Viewport = viewport;
+        if (!viewport.IsValid) return;
 
-        var cellAspect = 2.0 * h / w;
         canvas.XBounds = (-1, 1);
-        canvas.YBounds = (-cellAspect, cellAspect);
+        canvas.YBounds = (-viewport.CellAspect, viewport.CellAspect);
         canvas.Clear();
 
         var view = camera.GetView();
@@ -79,7 +90,8 @@ public sealed class WireframeRenderer : ISceneRenderer
         for (var i = snapshot.Count - 1; i >= 0; i--)
         {
             var b = order[i];
-            var color = Palette.For(snapshot.ColorKeys[b], snapshot.Awake[b]);
+            var selected = Selected == snapshot.Ids[b];
+            var color = selected ? Palette.Selection : Palette.For(snapshot.ColorKeys[b], snapshot.Awake[b]);
             switch (snapshot.Shapes[b])
             {
                 case BodyShape.Sphere:
@@ -89,8 +101,13 @@ public sealed class WireframeRenderer : ISceneRenderer
                     DrawBox(view, snapshot.Positions[b], snapshot.Rotations[b], snapshot.HalfExtents[b], color);
                     break;
             }
+
+            // A selected body also gets a crosshair through its centre -- the recolour alone is easy to lose in a
+            // busy scene, and at this resolution a small box is only a handful of lit sub-cells.
+            if (selected) DrawMarker(view, snapshot.Positions[b]);
         }
     }
+
     #endregion
 
     #region Private methods
@@ -126,21 +143,29 @@ public sealed class WireframeRenderer : ISceneRenderer
 
     private void DrawSphere(in CameraView view, Vector3 center, float radius, Color color)
     {
-        if (!projection.TryProject(view.Transform(center), out var x, out var y)) return;
+        if (!Projection.TryProject(view.Transform(center), out var x, out var y)) return;
         // The radius on screen: project a point one radius to the camera's right and measure the gap. Doing it this
         // way rather than by trigonometry means perspective foreshortening comes out right for free.
-        if (!projection.TryProject(view.Transform(center + (view.Right * radius)), out var ex, out var ey)) return;
+        if (!Projection.TryProject(view.Transform(center + (view.Right * radius)), out var ex, out var ey)) return;
 
         var screenRadius = MathF.Sqrt(((ex - x) * (ex - x)) + ((ey - y) * (ey - y)));
         canvas.Add(new Circle(x, y, screenRadius, color));
+    }
+
+    private void DrawMarker(in CameraView view, Vector3 center)
+    {
+        if (!Projection.TryProject(view.Transform(center), out var x, out var y)) return;
+        const float Arm = 0.05f;
+        canvas.Add(new Line(x - Arm, y, x + Arm, y, Palette.Selection));
+        canvas.Add(new Line(x, y - Arm, x, y + Arm, Palette.Selection));
     }
 
     private void DrawWorldLine(in CameraView view, Vector3 a, Vector3 b, Color color)
     {
         // Per-endpoint reject, no near-plane clipping: an edge with one end behind the camera is dropped rather than
         // drawn wrong. Cheap, and at the distances an orbit camera holds it is rarely visible.
-        if (projection.TryProject(view.Transform(a), out var x1, out var y1) &&
-            projection.TryProject(view.Transform(b), out var x2, out var y2))
+        if (Projection.TryProject(view.Transform(a), out var x1, out var y1) &&
+            Projection.TryProject(view.Transform(b), out var x2, out var y2))
         {
             canvas.Add(new Line(x1, y1, x2, y2, color));
         }
@@ -164,7 +189,6 @@ public sealed class WireframeRenderer : ISceneRenderer
     ];
 
     private readonly Canvas canvas;
-    private readonly Projection projection = new(60f);
     private readonly Vector3[] corners = new Vector3[8];
 
     private int[] order = new int[64];
@@ -194,6 +218,9 @@ public static class Palette
 
     /// <summary>The grid line along world Z.</summary>
     public static readonly Color AxisZ = new(70, 90, 150);
+
+    /// <summary>The selected body — deliberately outside the body palette so it can never be mistaken for one.</summary>
+    public static readonly Color Selection = new(255, 255, 255);
 
     private static readonly Color[] Bodies =
     [

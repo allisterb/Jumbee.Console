@@ -93,6 +93,73 @@ public readonly record struct CameraView(Vector3 Eye, Vector3 Right, Vector3 Up,
 }
 
 /// <summary>
+/// The screen window the scene is drawn into: how many character cells, and the NDC rectangle they map to.
+/// </summary>
+/// <remarks>
+/// <para>
+/// X always spans [-1, 1] and Y spans ±<see cref="CellAspect"/>, where the aspect is <c>2·rows/columns</c> because a
+/// character cell is about twice as tall as it is wide. That keeps world units square on screen — a circle stays a
+/// circle — and it letterboxes a wide terminal rather than stretching it.
+/// </para>
+/// <para>
+/// <b>One place, deliberately.</b> The renderer uses this to set the canvas bounds and the view uses it to turn a
+/// mouse cell back into a world ray; if the two ever disagreed, picking would land next to the thing you clicked
+/// and nothing would say why.
+/// </para>
+/// </remarks>
+public readonly struct Viewport
+{
+    #region Constructors
+    /// <summary>Builds the viewport for a control of <paramref name="width"/> × <paramref name="height"/> cells.</summary>
+    public Viewport(int width, int height)
+    {
+        Width = width;
+        Height = height;
+        CellAspect = width > 0 ? 2.0 * height / width : 1.0;
+    }
+    #endregion
+
+    #region Properties
+    /// <summary>Width in character cells.</summary>
+    public int Width { get; }
+
+    /// <summary>Height in character cells.</summary>
+    public int Height { get; }
+
+    /// <summary>Half the NDC height: Y spans ±this. See the remarks on <see cref="Viewport"/>.</summary>
+    public double CellAspect { get; }
+
+    /// <summary><see langword="true"/> when the viewport is big enough to map coordinates into.</summary>
+    public bool IsValid => Width > 1 && Height > 1;
+    #endregion
+
+    #region Methods
+    /// <summary>Maps a cell in this control to NDC, or returns <see langword="false"/> if it lies outside.</summary>
+    public bool TryToNdc(int column, int row, out float x, out float y)
+    {
+        x = y = 0;
+        if (!IsValid || column < 0 || row < 0 || column >= Width || row >= Height) return false;
+        x = -1f + ((float)column / (Width - 1) * 2f);
+        y = (float)(CellAspect - ((double)row / (Height - 1) * 2.0 * CellAspect));
+        return true;
+    }
+
+    /// <summary>The world-space ray through a cell: back out of the projection to a camera-space direction, then
+    /// into world space through the view basis. The inverse of <see cref="Projection.TryProject"/>.</summary>
+    public bool TryRay(int column, int row, in CameraView view, in Projection projection, out Vector3 origin, out Vector3 direction)
+    {
+        origin = view.Eye;
+        direction = default;
+        if (!TryToNdc(column, row, out var nx, out var ny)) return false;
+
+        var f = projection.Focal;
+        direction = Vector3.Normalize((view.Right * (nx / f)) + (view.Up * (ny / f)) + view.Forward);
+        return true;
+    }
+    #endregion
+}
+
+/// <summary>
 /// A pinhole perspective projection: camera space to normalized device coordinates, with a near-plane reject.
 /// </summary>
 public readonly struct Projection
@@ -128,6 +195,22 @@ public readonly struct Projection
 
         x = Focal * view.X / view.Z;
         y = Focal * view.Y / view.Z;
+        return true;
+    }
+
+    /// <summary>Where a ray meets the plane through <paramref name="point"/> with normal <paramref name="normal"/>,
+    /// or <see langword="false"/> if it runs parallel to it or would hit behind the origin. The drag plane and the
+    /// ground plane are both found this way.</summary>
+    public static bool TryPlaneHit(Vector3 origin, Vector3 direction, Vector3 point, Vector3 normal, out Vector3 hit)
+    {
+        hit = default;
+        var denominator = Vector3.Dot(direction, normal);
+        if (MathF.Abs(denominator) < 1e-6f) return false;
+
+        var t = Vector3.Dot(point - origin, normal) / denominator;
+        if (t <= 0) return false;
+
+        hit = origin + (direction * t);
         return true;
     }
     #endregion

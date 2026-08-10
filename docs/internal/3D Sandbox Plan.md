@@ -311,6 +311,56 @@ frame. Real, worth fixing, still not blocking.
 **M1 — sandbox.** Grid floor, spawn box/sphere at the camera target, launch impulse, grab and drag, delete,
 reset, pause and single-step.
 
+### M1 result — the sandbox interactions (2026-08-09)
+
+All of M1 is in, faithful to inertia's approach: screen-space picking (project each body's centre, nearest within
+0.08 NDC), ray/plane dragging, and a kinematic hold. New: `SpawnSettings.cs`, plus `Viewport` in `Camera.cs`,
+selection/pick on `ISceneRenderer`, and spawn/launch/grab/delete on `SceneView` and `PhysicsScene`.
+
+Design notes worth keeping:
+
+- **Selection is by id, not index.** `SceneSnapshot.Ids` carries a stable per-body id assigned at spawn; deleting a
+  body shifts every index after it, so an index-keyed selection would silently retarget.
+- **A held body goes kinematic**, is steered with `Body.MoveTowards` (a real velocity, so it shoves the rest of the
+  scene rather than teleporting through it), and is handed back to the solver with a throw velocity on release. The
+  drag target is re-applied *every step* rather than once per pointer move — applying it once lets the body arrive
+  and then overshoot on the following steps.
+- **Throw velocity is measured from where the grab point went**, over the last 5 samples, capped at 40 m/s. A flick
+  across a coarse terminal grid otherwise implies an absurd speed, and releasing after a pause should drop a body,
+  not fling it.
+- **`Pick` is a default interface method on `ISceneRenderer`** — it needs only `Viewport` and `Projection`, so both
+  renderers get it without duplication. Note it is then callable only through the interface, not the concrete type.
+
+**The finding that matters, because it is a library trap and it bit a user, not a test.** The arrow keys did nothing
+in the shipped M0 build. The cause:
+
+> `Layout.OnInput` treats a `CompositeControl` as a *container*: it calls `RouteInterceptInput` and then dispatches
+> into the composite's **content layout**, so the key lands on whichever child has focus. **`CompositeControl.OnInput`
+> is never called on this path.** A composite whose children are display-only — here a `Canvas`, which does not
+> handle input — therefore drops every key silently.
+
+The fix is to handle keys in **`InterceptInput`**, which is consulted on *both* routes (`Layout.OnInput` before it
+descends, and `ControlFrame.OnInput` before it forwards). A composite that owns its keys rather than delegating them
+to children belongs there.
+
+**And the reason this shipped: the obvious test passes.** `UI.SendInput(control, key)` dispatches to
+`control.FocusableControl` — the `ControlFrame` — which *does* reach `OnInput` via its
+`FocusedControl ?? _control` fallback. The live loop instead hands the event to the **root layout**
+(`UI.OnInput` → `layout.OnInput`), which takes the branch above. So the two paths genuinely differ, and a test built
+on `UI.SendInput` is green while the app is dead. **Route keyboard tests through the root layout**
+(`root.OnInput(new UI.InputEventArgs(new InputEvent(key)))`) when what is under test is a composite.
+
+Mouse routing does *not* have this problem: `CompositeControl`'s indexer attaches the composite's own listener to any
+cell whose child carries none, provided the composite sets `WantsMouse`. Click-to-select was verified end to end
+through `ConsoleSnapshot.ToTextAfterClick`.
+
+**Verification.** A headless harness (scratchpad `render3d`) exercises 28 checks against the real physics thread and
+compositor: keyboard through the root layout, click-to-select through the real mouse routing, spawn, launch,
+pick round-trip (project a body, pick that cell back, expect the same body — this catches the renderer's bounds and
+the viewport's un-projection drifting apart), grab/drag/throw/fall, delete, clear, and the selection highlight read
+back as emitted colour via `AnsiConsoleSnapshot`. All pass. **M5 should promote this harness into a real test
+project** — it has already caught one shipped bug.
+
 **M2 — solid renderer.** Z-buffer plus flat-shaded triangles at half-block resolution, one directional light,
 runtime toggle against wireframe.
 

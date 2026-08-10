@@ -39,10 +39,12 @@ public sealed class SceneSnapshot
     /// <summary>Allocates a snapshot sized for <paramref name="capacity"/> bodies.</summary>
     public SceneSnapshot(int capacity)
     {
+        Ids = new int[capacity];
         Positions = new Vector3[capacity];
         Rotations = new Quaternion[capacity];
         HalfExtents = new Vector3[capacity];
         Velocities = new Vector3[capacity];
+        Masses = new float[capacity];
         Shapes = new BodyShape[capacity];
         Awake = new bool[capacity];
         ColorKeys = new int[capacity];
@@ -66,7 +68,25 @@ public sealed class SceneSnapshot
     public double StepMilliseconds { get; set; }
     #endregion
 
+    #region Methods
+    /// <summary>Finds the entry for <paramref name="id"/>, or -1 if that body is gone. Selection is by id, so this
+    /// is how the UI resolves it against whichever snapshot it happens to be holding.</summary>
+    public int IndexOf(int id)
+    {
+        for (var i = 0; i < Count; i++)
+        {
+            if (Ids[i] == id) return i;
+        }
+
+        return -1;
+    }
+    #endregion
+
     #region Fields
+    /// <summary>Stable per-body identifiers, assigned at spawn. Selection and every posted scene command key off
+    /// these rather than an array index, which shifts when a body is deleted.</summary>
+    public readonly int[] Ids;
+
     /// <summary>Body centres in world space.</summary>
     public readonly Vector3[] Positions;
 
@@ -78,6 +98,9 @@ public sealed class SceneSnapshot
 
     /// <summary>Linear velocities, for the velocity colour mode and the inspector.</summary>
     public readonly Vector3[] Velocities;
+
+    /// <summary>Body masses, for the inspector.</summary>
+    public readonly float[] Masses;
 
     /// <summary>Which shape each body is drawn as.</summary>
     public readonly BodyShape[] Shapes;

@@ -146,9 +146,11 @@ public sealed class PhysicsRunner : IDisposable
         for (var i = 0; i < bodies.Count; i++)
         {
             var b = bodies[i];
+            next.Ids[i] = b.Id;
             next.Positions[i] = b.Handle.Position;
             next.Rotations[i] = b.Handle.Rotation;
             next.Velocities[i] = b.Handle.LinearVelocity;
+            next.Masses[i] = b.Handle.Mass;
             next.HalfExtents[i] = b.HalfExtents;
             next.Shapes[i] = b.Shape;
             next.ColorKeys[i] = b.ColorKey;
@@ -214,31 +216,95 @@ public sealed class PhysicsScene : IDisposable
     }
 
     /// <summary>Spawns a dynamic box and remembers the half extents Box3D will not give back.</summary>
-    public SandboxBody AddBox(Vector3 position, Vector3 halfExtents, int colorKey)
+    public int AddBox(Vector3 position, Vector3 halfExtents, int colorKey, Vector3 velocity = default)
     {
         var handle = world.CreateDynamicBody(position);
         handle.AddBox(Box.FromSize(halfExtents * 2));
-        return Track(new SandboxBody(handle, BodyShape.Box, halfExtents, colorKey));
+        return Track(handle, BodyShape.Box, halfExtents, colorKey, velocity);
     }
 
     /// <summary>Spawns a dynamic sphere.</summary>
-    public SandboxBody AddSphere(Vector3 position, float radius, int colorKey)
+    public int AddSphere(Vector3 position, float radius, int colorKey, Vector3 velocity = default)
     {
         var handle = world.CreateDynamicBody(position);
         handle.AddSphere(new Sphere(radius));
-        return Track(new SandboxBody(handle, BodyShape.Sphere, new Vector3(radius, radius, radius), colorKey));
+        return Track(handle, BodyShape.Sphere, new Vector3(radius, radius, radius), colorKey, velocity);
+    }
+
+    /// <summary>Spawns whichever shape <paramref name="shape"/> names, sized by <paramref name="scale"/>.</summary>
+    public int Add(BodyShape shape, Vector3 position, float scale, int colorKey, Vector3 velocity = default) =>
+        shape == BodyShape.Sphere
+            ? AddSphere(position, 0.5f * scale, colorKey, velocity)
+            : AddBox(position, new Vector3(0.5f * scale), colorKey, velocity);
+
+    /// <summary>Destroys one body. Silently does nothing if it has already gone.</summary>
+    public void Remove(int id)
+    {
+        var i = IndexOf(id);
+        if (i < 0) return;
+        if (grabbed == id) grabbed = null;
+        bodies[i].Handle.Destroy();
+        bodies.RemoveAt(i);
     }
 
     /// <summary>Removes every dynamic body, leaving the static geometry.</summary>
     public void ClearBodies()
     {
+        grabbed = null;
         foreach (var b in bodies) b.Handle.Destroy();
         bodies.Clear();
     }
 
-    /// <summary>Advances the world one fixed step.</summary>
+    /// <summary>Takes a body out of the solver's hands so the pointer can drive it: kinematic bodies are moved by
+    /// the application and push dynamic ones out of the way, rather than being pushed themselves.</summary>
+    public void BeginGrab(int id)
+    {
+        var i = IndexOf(id);
+        if (i < 0) return;
+        ReleaseGrab(Vector3.Zero);
+        grabbed = id;
+        // Body is a handle, not the body: it is a small value the world resolves, so copying it out of the record
+        // is free and the setter still reaches the one body in the native world.
+        var handle = bodies[i].Handle;
+        grabTarget = handle.Position;
+        handle.Type = BodyType.Kinematic;
+    }
+
+    /// <summary>Sets where the held body should be. Re-applied on every step (see <see cref="Step"/>) rather than
+    /// once per pointer move, so the body tracks the pointer smoothly between mouse events instead of lurching to
+    /// the last target and overshooting it.</summary>
+    public void DragTo(int id, Vector3 target)
+    {
+        if (grabbed != id) return;
+        grabTarget = target;
+    }
+
+    /// <summary>Hands the body back to the solver, throwing it at <paramref name="velocity"/> — so letting go
+    /// mid-swing throws it, which is the whole point of dragging things around.</summary>
+    public void ReleaseGrab(Vector3 velocity)
+    {
+        if (grabbed is not { } id) return;
+        grabbed = null;
+        var i = IndexOf(id);
+        if (i < 0) return;
+
+        var handle = bodies[i].Handle;
+        handle.Type = BodyType.Dynamic;
+        handle.LinearVelocity = velocity;
+    }
+
+    /// <summary>Advances the world one fixed step, first steering any held body toward its target.</summary>
     public void Step(float dt)
     {
+        if (grabbed is { } id)
+        {
+            var i = IndexOf(id);
+            // MoveTowards gives the body a real velocity for this step rather than teleporting it, so it shoves
+            // the rest of the scene around properly on the way.
+            if (i >= 0) bodies[i].Handle.MoveTowards(grabTarget, bodies[i].Handle.Rotation, dt, wake: true);
+            else grabbed = null;
+        }
+
         world.Step(dt);
         StepCount++;
     }
@@ -248,22 +314,40 @@ public sealed class PhysicsScene : IDisposable
     #endregion
 
     #region Private methods
-    private SandboxBody Track(SandboxBody body)
+    private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity)
     {
-        bodies.Add(body);
-        return body;
+        var id = ++nextId;
+        handle.UserData = (ulong)id;
+        if (velocity != Vector3.Zero) handle.LinearVelocity = velocity;
+        bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey));
+        return id;
+    }
+
+    private int IndexOf(int id)
+    {
+        for (var i = 0; i < bodies.Count; i++)
+        {
+            if (bodies[i].Id == id) return i;
+        }
+
+        return -1;
     }
     #endregion
 
     #region Fields
     private readonly PhysicsWorld world;
     private readonly List<SandboxBody> bodies = [];
+
+    private int nextId;
+    private int? grabbed;
+    private Vector3 grabTarget;
     #endregion
 }
 
 /// <summary>A dynamic body plus the shape and colour the renderer needs and the engine does not store.</summary>
+/// <param name="Id">Stable identifier — what selection and posted commands refer to.</param>
 /// <param name="Handle">The Box3D handle. Valid only on the physics thread.</param>
 /// <param name="Shape">How to draw it.</param>
 /// <param name="HalfExtents">Extents as spawned — see <see cref="SceneSnapshot.HalfExtents"/>.</param>
 /// <param name="ColorKey">Palette index, fixed at spawn so a body keeps its colour.</param>
-public readonly record struct SandboxBody(Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey);
+public readonly record struct SandboxBody(int Id, Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey);
