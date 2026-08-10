@@ -28,6 +28,7 @@ public sealed class SceneView : CompositeControl
     {
         this.runner = runner;
         this.renderer = renderer;
+        renderers.Add(renderer);
         SetContent(new Boundary(renderer.Surface));
 
         // The scene changes continuously, so drive redraws on a clock rather than waiting for a state change to
@@ -77,12 +78,42 @@ public sealed class SceneView : CompositeControl
         Invalidate();
     }
 
+    /// <summary>Adds a renderer to the set <c>v</c> cycles through. The first one added is the one in use.</summary>
+    public void AddRenderer(ISceneRenderer next)
+    {
+        if (!renderers.Contains(next)) renderers.Add(next);
+    }
+
+    /// <summary>Switches to the next renderer — the same scene, drawn a different way, live.</summary>
+    public void NextRenderer()
+    {
+        if (renderers.Count < 2) return;
+        var i = renderers.IndexOf(renderer);
+        SetRenderer(renderers[(i + 1) % renderers.Count]);
+    }
+
+    /// <summary>Cycles the shaded renderer's silhouette treatment: none, ink outline, edge glyphs. A no-op under
+    /// the other renderers, which have none.</summary>
+    public void NextEdgeStyle()
+    {
+        if (renderer is not ShadedRenderer shaded) return;
+        shaded.Edges = shaded.Edges switch
+        {
+            SilhouetteStyle.None => SilhouetteStyle.Ink,
+            SilhouetteStyle.Ink => SilhouetteStyle.Glyph,
+            _ => SilhouetteStyle.None,
+        };
+    }
+
+    /// <summary>The active silhouette style, or <see langword="null"/> when the current renderer has none.</summary>
+    public SilhouetteStyle? Edges => renderer is ShadedRenderer s ? s.Edges : null;
+
     /// <summary>Drops a body in above the camera target, so it lands in view wherever the camera is pointing.</summary>
     public void SpawnAtTarget()
     {
         var position = Camera.Target + new Vector3(0, Spawn.DropHeight, 0);
-        var (shape, scale, key) = (Spawn.Shape, Spawn.Scale, nextColorKey++);
-        runner.Post(scene => scene.Add(shape, position, scale, key));
+        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
+        runner.Post(scene => scene.Add(shape, position, scale, key, default, mesh));
         selectNewestSpawn = true;
     }
 
@@ -100,8 +131,8 @@ public sealed class SceneView : CompositeControl
         var muzzle = MathF.Max(MinMuzzleDistance, renderer.Projection.Focal * Spawn.BoundingRadius / MuzzleNdcRadius);
         var origin = view.Eye + (view.Forward * muzzle);
         var velocity = view.Forward * Spawn.LaunchSpeed;
-        var (shape, scale, key) = (Spawn.Shape, Spawn.Scale, nextColorKey++);
-        runner.Post(scene => scene.Add(shape, origin, scale, key, velocity));
+        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
+        runner.Post(scene => scene.Add(shape, origin, scale, key, velocity, mesh));
         selectNewestSpawn = true;
     }
 
@@ -275,11 +306,14 @@ public sealed class SceneView : CompositeControl
         .WithKey("Drag", "On a body: grab and throw it. On empty space: orbit. Wheel zooms")
         .WithKey("Click", "Select the body under the pointer")
         .WithKey("Tab / Esc", "Select the next body / clear the selection")
-        .WithKey("b", "Toggle the spawn shape between box and sphere")
+        .WithKey("b", "Cycle the spawn shape: box, sphere, mesh")
+        .WithKey("m", "Switch to the next loaded mesh")
         .WithKey("n", "Drop one in above the camera target")
         .WithKey("f", "Fire one out of the camera")
         .WithKey("Del / x", "Delete the selected body")
         .WithKey("c", "Clear every body")
+        .WithKey("v", "Cycle renderer: wireframe (braille edges), solid (flat-shaded), shaded (point light + edges + AO)")
+        .WithKey("e", "Shaded only: cycle silhouettes — off, ink outline, edge glyphs")
         .WithKey("+ / -", "Grow / shrink what gets spawned")
         .WithKey("] / [", "Raise / lower the launch speed");
     #endregion
@@ -294,6 +328,9 @@ public sealed class SceneView : CompositeControl
             case 'f': Launch(); return true;
             case 'x': DeleteSelected(); return true;
             case 'c': ClearScene(); return true;
+            case 'v': NextRenderer(); return true;
+            case 'e': NextEdgeStyle(); return true;
+            case 'm': Spawn.NextMesh(); return true;
             case '+' or '=': Spawn.StepScale(+1); return true;
             case '-' or '_': Spawn.StepScale(-1); return true;
             case ']': Spawn.StepLaunchSpeed(+1); return true;
@@ -366,6 +403,7 @@ public sealed class SceneView : CompositeControl
     private const float MinMuzzleDistance = 2f;
 
     private readonly PhysicsRunner runner;
+    private readonly List<ISceneRenderer> renderers = [];
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private readonly Queue<(TimeSpan At, Vector3 Point)> throwSamples = new();
 

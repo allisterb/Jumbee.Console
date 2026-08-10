@@ -372,6 +372,245 @@ project** — it has already caught one shipped bug.
 **M2 — solid renderer.** Z-buffer plus flat-shaded triangles at half-block resolution, one directional light,
 runtime toggle against wireframe.
 
+### M2 result — the solid renderer (2026-08-09)
+
+`HalfBlockSurface.cs` (a `W × 2H` sub-pixel colour + depth buffer presented as `▀` cells, fg = upper sub-pixel,
+bg = lower), `Meshes.cs` (indexed unit cube and UV sphere, built once), `SolidRenderer.cs` (perspective-correct
+z-tested triangle fill, backface culling, one directional light, quantised shading, checkerboard ground). `v`
+switches renderers live; `SceneView` holds a list and swaps the layout child.
+
+**The headline number: the solid renderer emits FEWER ANSI bytes than the wireframe, at every size** — despite
+covering every cell rather than a scatter of them. Median of 120 frames, 7 bodies, camera orbiting every frame:
+
+| | scene | paint | emit | total | % of a 60 fps frame | ANSI |
+|---|---|---|---|---|---|---|
+| solid, 100×34 | 377 µs | 98 µs | 892 µs | 1.37 ms | 8% | 4.3 KB |
+| wireframe, 100×34 | 7 µs | 329 µs | 255 µs | 0.59 ms | 4% | 5.0 KB |
+| solid, 200×50 | 291 µs | 191 µs | 1141 µs | 1.62 ms | 10% | **11.8 KB** |
+| wireframe, 200×50 | 10 µs | 648 µs | 831 µs | 1.49 ms | 9% | 12.7 KB |
+
+This is the M0.1 lever paying off, and it is worth stating plainly because it inverts the intuition: a wireframe
+lights *fewer* cells but they are scattered singletons, each needing its own cursor move and SGR change, while
+quantised flat shading produces long runs the renderer coalesces. Against M0.1's synthetic bounds at 200×50 — 51 KB
+for coherent content, 369 KB when every neighbour differs — the real solid renderer lands at **11.8 KB**, better
+than even the coherent synthetic case, because a real scene has large uniform regions the synthetic one never had.
+
+Both renderers sit at ~10% of a 60 fps frame at 200×50. There is plenty of budget left for M3–M4.
+
+**A sign bug worth recording, because the reflex answer is wrong.** Meshes are wound counter-clockwise seen from
+outside in world space, but the screen mapping inverts Y (NDC +y is up, rows count downward) and that flip
+*reverses handedness* — so an outward-facing triangle arrives at the culling test with a **negative** signed area.
+Culling `area <= 0` therefore discards every visible face and keeps only hidden ones: bodies render as their own
+far side, and single-sided geometry like the ground vanishes completely. The failure looks like "almost nothing is
+drawn", not like "the culling is backwards".
+
+#### Half-lambert, from `voxcii` (2026-08-10)
+
+`reference/projects/voxcii-main` is a triangle rasteriser with a z-buffer — architecturally a **subset** of what
+`MeshRenderer` already does (orthographic rather than perspective, one sample per cell rather than two sub-pixels,
+ANSI-256 by material index rather than true colour, a hardcoded `1.8f` cell-aspect fudge rather than a derived one).
+Nothing in its rasteriser is worth taking. One line of its shading is:
+
+```
+sim = norm.dot(light) * 0.5 + 0.5      // instead of max(0, N·L)
+```
+
+**Half-lambert wrapping, and it earns its place *because* a terminal has so few shade levels.** Clamping sends every
+face turned past perpendicular to the same flat black, so the entire unlit half of an object collapses to one value.
+Now `ShadedRenderer.WrapLighting` (default on). Note the specular must gate on the **raw** dot, not the wrapped one —
+wrapped never returns zero for a merely-turned-away face, so gating on it puts highlights on surfaces facing into
+shadow.
+
+**The first comparison suggested it was a slight loss**, because the camera and lamp were on the same side: with no
+unlit faces visible, wrapping only compresses the lit range and costs contrast. Re-shot from the opposite side, the
+result is unambiguous — clamped renders the box tower as a near-black column with its colours gone, wrapped keeps
+all seven bodies legible and individually coloured. For a sandbox where bodies tumble and the camera orbits freely,
+the dark side is a constant case, so it stays on.
+
+Unexpected secondary benefit, measured: wrapping emits **16% fewer ANSI bytes** (15,584 vs 18,591 at 200×50).
+Compressing the lit side into the upper half of the range means adjacent cells land on the same quantised level more
+often, so runs coalesce better — the M0.1 model predicting its own consequence.
+
+**Also worth taking from that repo, but not a rendering technique:** OBJ/STL loading. `models/` has bunny (4,968
+faces), cow (5,804) and teapot (6,320) — all within budget — plus a 249,882-face dragon that is not. The value is
+that Box3D's `ConvexHull.FromPoints`/`Body.AddHull` and `CollisionMesh.FromTriangles`/`Body.AddMesh` would make a
+loaded model an actual rigid body to grab and throw, not scenery. Deferred as its own milestone.
+
+#### Three renderers, and what looking at a PNG changed (2026-08-10)
+
+Point lighting, silhouettes and contact darkening were first bolted onto `SolidRenderer` as modes. That was wrong —
+it turned one renderer into a mode matrix and made "solid" mean two different things. Split into three renderers
+cycled by `v`, sharing a rasteriser:
+
+| | `MeshRenderer` (abstract) | shading | post-process |
+|---|---|---|---|
+| `WireframeRenderer` | — (drives a `Canvas`) | one colour per body | — |
+| `SolidRenderer` | ✓ | flat, per **triangle**, directional | — |
+| `ShadedRenderer` | ✓ | point light + specular, per **pixel** | silhouettes + contact darkening |
+
+**The methodology lesson is the bigger one.** Every visual judgement up to here was made from an ASCII luminance
+dump piped through bash, which mangles `▀`, braille and `◆◇◈◊` into `?`. `ConsoleSnapshot.SavePng` was available
+the whole time and needs only `SnapshotImageOptions.FontFamily = "Cascadia Mono"` for glyph coverage. The first
+actual PNG immediately exposed three defects that every passing test had missed:
+
+1. **The shaded renderer was much darker than the flat one.** `attenuation = 1/(1 + d²/R²)` at `R = 14` collapsed
+   the far checkerboard to near-black, destroying the recession cue that makes the flat renderer read as 3D. The
+   point light exists for the *gradient across a face*, not for dramatic falloff — `R = 40` fixed it.
+2. **Edge glyphs were outlining the ground plane's own outer boundary**, which reads as speckle along the horizon
+   rather than as shape. Sub-pixels now carry a `group` byte (scenery vs body) and only bodies are outlined.
+3. **The outline was invisible on sleeping bodies.** A sleeping body is drawn at a third brightness, so an outline
+   that inherits its surface colour came out as the faintest glyph in a dark colour on a dark background — present
+   in the buffer, and invisible on screen. Edge cells now *boost* brightness rather than inherit it.
+
+None of these were detectable from the tests, all three were obvious in one image. Two of them were things I had
+explicitly reasoned about and got wrong.
+
+Also flushed out: the harness's selection-highlight check asserted an exact `(255,255,255)`, which only held while
+shading was flat enough to reach full intensity. Now that the tint is lit and quantised like any other surface, the
+check tests the real signature — achromatic and bright, which no body colour or ground shade can produce.
+
+**Cost**, 200×50, 7 bodies, orbiting camera (bytes exact, times noisy):
+
+| | scene | total | ANSI |
+|---|---|---|---|
+| wireframe | 22 µs | 2.36 ms (14%) | 12,833 B |
+| solid | 253 µs | 1.71 ms (10%) | 11,748 B |
+| shaded | 1292 µs | 2.28 ms (14%) | 16,877 B |
+| shaded + AO | 1390 µs | 2.36 ms (14%) | 16,379 B |
+| shaded + AO + glyph edges | 1431 µs | 2.45 ms (15%) | 16,740 B |
+
+`solid` remains the cheapest by both measures. The AO and edge passes are each a single linear scan of the depth
+buffer and cost nothing measurable; the whole difference is per-pixel shading. All three fit comfortably.
+
+#### Lighting: what `c_ascii_render` actually does differently (2026-08-10)
+
+Prompted by `reference/projects/c_ascii_render-main`, a C ray-marching ASCII renderer whose lighting looks markedly
+richer. Worth recording what the difference really is, because the obvious answer is wrong.
+
+**It is not ray marching.** That project marches exactly one SDF (`sdf_cube` is the only one in `sdf.c`); the busy
+scene around it — pyramids, rain, equaliser bars — is 2D procedural glyph work in `render_environment_background`
+with no geometry behind it. What makes its *cube* look better than our facets is two things, neither tied to SDFs:
+
+1. **A point light, not a directional one** (`to_light = light.position - hit_point`). The direction to a nearby
+   lamp changes across a surface, so a flat face picks up a genuine gradient. Ours was directional.
+2. **Shading evaluated per pixel, not per triangle.** Together with (1) this is decisive, and the reason is worth
+   stating plainly: with a face normal and a light at infinity, `N·L` is **constant across a face**, so a box face
+   is mathematically one colour — no number of shade levels can produce a gradient. It was never a resolution
+   problem.
+
+Both are now implemented as `LightingMode.Point` (the default), toggleable against `LightingMode.Flat` with `l`.
+Per-pixel world position comes from perspective-correct barycentric interpolation (interpolate `world/z`, divide by
+the interpolated `1/z`), and the depth test moved *before* shading so hidden pixels cost only the compare.
+
+**Measured cost**, 200×50, 7 bodies, orbiting camera:
+
+| | scene draw | total | ANSI |
+|---|---|---|---|
+| flat (per-face, directional) | 319 µs | 1.74 ms (10%) | 11,759 B |
+| point (per-pixel, + specular) | 1186 µs | 2.24 ms (13%) | 14,955 B |
+
+Shading per pixel costs **3.7× the scene-draw time** and **+27% ANSI bytes** — the byte increase being exactly the
+predicted trade, since a gradient makes more cells differ from frame to frame. Quantising to 5 levels is what keeps
+it to +27% rather than several times; distinct fg/bg pairs went 22 → 44. At 13% of a 60 fps frame it is affordable,
+and the times here are noisy while the byte counts are exact (they reproduce to within one byte across runs).
+
+**Still absent versus theirs, and these ones genuinely do want the SDF:** soft shadows (march toward the light,
+accumulate `min(shadow, k·dist/t)`) and ambient occlusion (a few samples along the normal). A rasteriser needs a
+shadow map and an SSAO-style pass for the equivalent.
+
+#### Silhouettes and creases (2026-08-10)
+
+Their `detect_edge` asks whether a hit lies near two or more of a **box's** local boundaries — an SDF test tied to
+one primitive, which does not generalise to arbitrary meshes. The depth buffer offers something better.
+
+**The detector is the second difference of the inverse-depth field**, and it is exact rather than approximate:
+`1/z` is *linear in screen space* across any planar surface — the very property that lets the rasteriser
+interpolate it with barycentrics. So on a plane the second difference is **identically zero**, however steeply that
+plane recedes, and it goes non-zero in exactly two places: a **crease** where two differently-oriented planes meet
+(a box edge), and a **silhouette** where depth jumps to whatever lies behind. That is the same set their
+box-specific test finds, with no knowledge of what is being drawn.
+
+This matters because the obvious detector cannot work here: a plain "do neighbouring depths differ" test fails on
+ground seen near the horizon, where adjacent rows legitimately differ enormously, so any threshold either paints
+the whole far plane or misses close-up edges. Measured on the real scene: **0 of 3,556 wholly-planar sub-pixels**
+register as edges, while 57 sub-pixels of body creases and silhouettes do.
+
+Two presentations, cycled with `e` (`SilhouetteStyle`):
+
+- **`Glyph`** — the `◆◇◈◊◌` ramp, as theirs. Note the trade this carries *here* and not there: a glyph has one
+  foreground and one background, so an edge cell **gives up its two independent sub-pixels** and the outline lands
+  on a full-cell boundary instead of a half-cell one. Free for a renderer sampling once per cell; a real cost at
+  double vertical resolution.
+- **`Ink`** — darken the edge sub-pixels instead, keeping full resolution.
+
+**Measured cost**, 200×50, point lighting, orbiting camera — the detection pass is a single linear scan of the
+depth buffer and does not move the scene-draw time at all (1176 → 1179 µs):
+
+| | ANSI | vs no edges |
+|---|---|---|
+| point, no edges | 14,955 B | — |
+| point + glyph | 14,810 B | **−1%** |
+| point + ink | 15,937 B | +7% |
+
+Edge glyphs are effectively free, and marginally *cheaper*: substituting a glyph collapses an edge cell's two
+colours into a canonically ordered (brighter, darker) pair, which is more stable frame to frame than two sub-pixels
+that can swap. Ink costs a little because darkening creates additional distinct colour values.
+
+**Verification.** The ASCII luminance dump caught the winding bug, but the proof is numeric: for sub-pixels showing
+bare ground, cast that pixel's ray, intersect `y = 0` analytically, and compare against the z-buffer —
+**0.00% error over 10 pixels**, which exercises the projection, the screen mapping and the perspective-correct
+reciprocal-depth interpolation together. The harness also asserts the shade ramp stays quantised (22 distinct fg/bg
+pairs, not hundreds); if that ever regressed, the byte count would follow it into the expensive column.
+
+**M2.5 — loaded meshes.** OBJ loading, a generated torus knot, and mesh bodies you can spawn, grab and throw.
+
+### M2.5 result — grabbable teapots (2026-08-10)
+
+`ObjLoader.cs` (geometry-only Wavefront reader), `Meshes.TorusKnot()`, a mesh registry, `BodyShape.Mesh` +
+`SceneSnapshot.MeshIds`, `PhysicsScene.AddMeshBody`, and mesh drawing in all three renderers. `m` cycles the loaded
+meshes, `b` now cycles box → sphere → mesh. Any `.obj` on the command line is registered at startup.
+
+**The constraint that shaped the design: `Body.AddMesh` requires a *static* body.** A triangle mesh cannot be a
+dynamic rigid body in Box3D at all, so a spawned model **renders as its triangles and collides as its convex hull**
+(`ConvexHull.FromPoints` with a 32-vertex budget). That is the standard games arrangement rather than a shortcut,
+and the visible consequence is that concavities are solid to the solver — nothing falls through the torus knot's
+hole and a teapot's handle will not catch. Approximating a concave shape properly needs a compound of hulls
+(`CompoundBuilder.AddHull`), which is a separate piece of work.
+
+**A generated torus knot ships alongside the loader**, deliberately. It gives the renderers geometry with real
+curvature and self-occlusion to be compared on — uniform boxes and spheres flatter every renderer equally — and it
+means the mesh path is exercisable with no third-party asset and no licensing question attached. Model *files*
+are a separate question from voxcii's MIT code licence, so nothing is vendored.
+
+**Two wrong assumptions, both caught by testing rather than by reading:**
+
+1. **The reference models are already triangulated.** All of teapot/bunny/cow are pure 3-gons, so loading one
+   exercises the n-gon path not at all — the test asserting "more triangles than faces" failed because its premise
+   was wrong, not the loader. Fan triangulation now has a synthetic case (a quad and a pentagon → 2 and 3
+   triangles), as do the `v`, `v/vt`, `v//vn`, `v/vt/vn` and negative-index face forms.
+2. **"The mesh body never falls"** was the test dropping it at the origin, straight into the box tower, which held
+   it up. Spawning it clear of the stack, it falls from y=7.44 to y=0.35 and sleeps.
+
+**Wireframe is the weak renderer for meshes, and this is a real limitation rather than a tuning problem.** A box is
+exactly 12 edges and a sphere exactly one circle, so the wireframe's representation of a primitive is *exact*. A
+dense mesh has no cheap exact wireframe: a 6,320-triangle teapot has ~9,500 unique edges, and a body is only ~30
+cells (60 braille sub-pixels) across. The first cap of 400 rendered as a solid scribble; 64 reads as a sparse wire
+cloud — better, but still a subset of edges rather than a silhouette, so it never quite reads as the object. The
+principled fix is to draw the **convex hull's** edges, which is a genuine shape at ~30–60 edges, but Box3D's
+`ConvexHull` does not expose its geometry so that means writing a hull ourselves. Left as a known limitation; the
+solid and shaded renderers handle meshes well, and they are the ones meshes are for.
+
+**Cost** with two meshes plus a sphere (200×50, orbiting camera):
+
+| | scene | total | ANSI |
+|---|---|---|---|
+| wireframe | 81 µs | 2.20 ms (13%) | 12,929 B |
+| solid | 769 µs | 2.38 ms (14%) | 12,028 B |
+| shaded + AO + glyph edges | 1797 µs | 2.93 ms (18%) | 17,452 B |
+
+A 6,320-triangle teapot and a 2,400-triangle knot cost the solid renderer ~3× what the primitive scene did
+(253 → 769 µs) and still leave everything under a fifth of a 60 fps frame.
+
 **M3 — UI.** Sidebar panels (mode, params, spawn, inspector showing the selected body's mass/velocity/sleep
 state), footer key hints, F1 help via `HelpInfo`.
 

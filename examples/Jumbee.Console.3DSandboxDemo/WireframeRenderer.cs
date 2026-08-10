@@ -97,6 +97,10 @@ public sealed class WireframeRenderer : ISceneRenderer
                 case BodyShape.Sphere:
                     DrawSphere(view, snapshot.Positions[b], snapshot.HalfExtents[b].X, color);
                     break;
+                case BodyShape.Mesh:
+                    DrawMesh(view, Meshes.Get(snapshot.MeshIds[b]), snapshot.Positions[b], snapshot.Rotations[b],
+                        snapshot.HalfExtents[b].X / 0.5f, color);
+                    break;
                 default:
                     DrawBox(view, snapshot.Positions[b], snapshot.Rotations[b], snapshot.HalfExtents[b], color);
                     break;
@@ -152,6 +156,23 @@ public sealed class WireframeRenderer : ISceneRenderer
         canvas.Add(new Circle(x, y, screenRadius, color));
     }
 
+    // A loaded model drawn edge-for-edge would swamp this renderer -- a 6,300-face teapot has ~9,500 unique edges,
+    // against 12 for a box -- and cheapness is the whole reason the wireframe exists. Mesh.WireEdges is a thinned,
+    // capped sample of them, so a model costs about what a dozen boxes do and still reads as its shape.
+    private void DrawMesh(in CameraView view, Mesh mesh, Vector3 center, Quaternion rotation, float scale, Color color)
+    {
+        EnsureMeshCapacity(mesh.Vertices.Length);
+        for (var i = 0; i < mesh.Vertices.Length; i++)
+            meshWorld[i] = center + Vector3.Transform(mesh.Vertices[i] * scale, rotation);
+
+        foreach (var (a, b) in mesh.WireEdges) DrawWorldLine(view, meshWorld[a], meshWorld[b], color);
+    }
+
+    private void EnsureMeshCapacity(int count)
+    {
+        if (meshWorld.Length < count) meshWorld = new Vector3[Math.Max(count, meshWorld.Length * 2)];
+    }
+
     private void DrawMarker(in CameraView view, Vector3 center)
     {
         if (!Projection.TryProject(view.Transform(center), out var x, out var y)) return;
@@ -190,6 +211,7 @@ public sealed class WireframeRenderer : ISceneRenderer
 
     private readonly Canvas canvas;
     private readonly Vector3[] corners = new Vector3[8];
+    private Vector3[] meshWorld = new Vector3[64];
 
     private int[] order = new int[64];
     private float[] depths = new float[64];
@@ -221,6 +243,12 @@ public static class Palette
 
     /// <summary>The selected body — deliberately outside the body palette so it can never be mistaken for one.</summary>
     public static readonly Color Selection = new(255, 255, 255);
+
+    /// <summary>Light squares of the solid renderer's checkerboard ground.</summary>
+    public static readonly Color GroundLight = new(96, 100, 112);
+
+    /// <summary>Dark squares of the solid renderer's checkerboard ground.</summary>
+    public static readonly Color GroundDark = new(58, 62, 72);
 
     private static readonly Color[] Bodies =
     [

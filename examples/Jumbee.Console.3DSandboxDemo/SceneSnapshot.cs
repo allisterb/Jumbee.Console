@@ -13,6 +13,17 @@ public enum BodyShape : byte
 
     /// <summary>A capsule, drawn as its two end spheres joined by the segment between them.</summary>
     Capsule,
+
+    /// <summary>
+    /// A loaded or generated triangle mesh, identified by <see cref="SceneSnapshot.MeshIds"/>.
+    /// </summary>
+    /// <remarks>
+    /// It is drawn as the real mesh but <b>collides as its convex hull</b>: <c>Body.AddMesh</c> requires a static
+    /// body, so a triangle mesh cannot be a dynamic rigid body in Box3D at all. That is the usual arrangement in
+    /// games, and it means concavities — a teapot's handle and spout, the hole through a torus — are solid to the
+    /// solver even though you can see through them.
+    /// </remarks>
+    Mesh,
 }
 
 /// <summary>
@@ -45,6 +56,7 @@ public sealed class SceneSnapshot
         HalfExtents = new Vector3[capacity];
         Velocities = new Vector3[capacity];
         Masses = new float[capacity];
+        MeshIds = new int[capacity];
         Shapes = new BodyShape[capacity];
         Awake = new bool[capacity];
         ColorKeys = new int[capacity];
@@ -101,6 +113,10 @@ public sealed class SceneSnapshot
 
     /// <summary>Body masses, for the inspector.</summary>
     public readonly float[] Masses;
+
+    /// <summary>For a <see cref="BodyShape.Mesh"/> body, its id in the <see cref="Meshes"/> registry; ignored
+    /// otherwise. An id rather than a reference so the snapshot stays a plain value type across the thread boundary.</summary>
+    public readonly int[] MeshIds;
 
     /// <summary>Which shape each body is drawn as.</summary>
     public readonly BodyShape[] Shapes;

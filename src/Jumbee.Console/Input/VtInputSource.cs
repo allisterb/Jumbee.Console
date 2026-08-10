@@ -48,6 +48,18 @@ public sealed class VtInputSource : IInputSource, IDisposable
         _reader = new Thread(ReaderLoop) { IsBackground = true, Name = "Jumbee.VtInput" };
         _reader.Start();
     }
+
+    // Test seam: runs the reader loop over an arbitrary stream without touching the real terminal's input mode, so
+    // the loop's behaviour when a read FAILS can be exercised. That path is otherwise unreachable in a test, and it
+    // is the one that used to kill the reader thread outright.
+    internal VtInputSource(Stream stdin, int idleFlushMs)
+    {
+        _idleFlushMs = idleFlushMs;
+        _mode = null;
+        _stdin = stdin;
+        _reader = new Thread(ReaderLoop) { IsBackground = true, Name = "Jumbee.VtInput.Test" };
+        _reader.Start();
+    }
     #endregion
 
     #region Methods
@@ -72,14 +84,43 @@ public sealed class VtInputSource : IInputSource, IDisposable
         var loggedEof = false;
         Log("reader thread started");
 
+        var failures = 0;
+
         while (_running)
         {
             read ??= _stdin.ReadAsync(bytes, 0, bytes.Length);
-            if (read.Wait(_idleFlushMs))
+
+            bool ready;
+            int n = 0;
+            try
             {
-                int n;
-                try { n = read.Result; }
-                catch (Exception ex) { Log($"read threw: {ex.GetType().Name}: {ex.Message}"); break; } // stream closed (dispose)
+                // BOTH of these can throw, and it must be caught in one place. Task.Wait rethrows a faulted task's
+                // exception (wrapped in an AggregateException) just as .Result does, so catching only around .Result
+                // — which is what this did — leaves the Wait itself unguarded and any read failure escapes as an
+                // unhandled exception that kills the reader thread. On Windows a console read can fail transiently
+                // (a resize while a read is outstanding has been seen to surface ERROR_PIPE_NOT_CONNECTED), and
+                // losing all keyboard input to a crash dialog is far worse than the blip that caused it.
+                ready = read.Wait(_idleFlushMs);
+                if (ready) n = read.Result;
+            }
+            catch (Exception ex)
+            {
+                // The task is complete (faulted or cancelled), so drop it and start a fresh read.
+                read = null;
+                if (!_running) { Log($"read failed during shutdown: {ex.GetType().Name}: {ex.Message}"); break; }
+
+                // Retry rather than give up: a transient failure should cost a frame of input, not the session. The
+                // backoff after a few consecutive failures keeps a permanently broken stdin from spinning a core —
+                // the thread stays alive so input resumes if the console does, and Dispose still ends it.
+                failures++;
+                if (failures <= 3 || failures % 40 == 0) Log($"read failed ({failures}): {ex.GetType().Name}: {ex.Message}");
+                Thread.Sleep(failures > 3 ? BrokenInputBackoffMs : _idleFlushMs);
+                continue;
+            }
+
+            failures = 0;
+            if (ready)
+            {
                 read = null;
                 if (n <= 0) { if (!loggedEof) { Log("read returned EOF (<=0)"); loggedEof = true; } Thread.Sleep(_idleFlushMs); continue; }
                 loggedEof = false;
@@ -98,6 +139,8 @@ public sealed class VtInputSource : IInputSource, IDisposable
                 flushedWhileIdle = true;
             }
         }
+
+        Log("reader thread exiting");
     }
 
     private void Enqueue(IReadOnlyList<TerminalInputEvent> events)
@@ -119,16 +162,20 @@ public sealed class VtInputSource : IInputSource, IDisposable
     {
         if (!_running) return;
         _running = false;     // reader exits on its next idle timeout (it is a background thread)
-        _mode.Dispose();      // disable reporting + restore the original console mode
+        _mode?.Dispose();     // disable reporting + restore the original console mode (null on the test seam)
     }
     #endregion
 
     #region Fields
+    // How long to wait between read attempts once stdin has failed repeatedly. Long enough that a permanently
+    // broken input costs nothing, short enough that recovery is imperceptible.
+    private const int BrokenInputBackoffMs = 250;
+
     private readonly AnsiInputDecoder _decoder = new();
     private readonly System.Collections.Concurrent.ConcurrentQueue<TerminalInputEvent> _queue = new();
     private readonly Stream _stdin;
     private readonly Thread _reader;
-    private readonly TerminalInputMode _mode;
+    private readonly TerminalInputMode? _mode;   // null only on the internal test-seam constructor
     private readonly int _idleFlushMs;
     private volatile bool _running = true;
     #endregion

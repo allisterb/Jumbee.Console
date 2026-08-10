@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "Jumbee.Console.3DSandboxDemo": {
+      "commandName": "Project"
+    },
+    "Teapots": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Projects\\Jumbee.Console\\reference\\projects\\voxcii-main\\models\\teapot.obj"
+    }
+  }
+}

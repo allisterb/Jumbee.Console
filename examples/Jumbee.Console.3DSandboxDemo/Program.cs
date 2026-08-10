@@ -17,9 +17,39 @@ using Jumbee.Console.SandboxDemo;
 // through PhysicsRunner.Post. There is no lock anywhere. Picking, selection and the drag maths all run on the UI
 // thread against the snapshot, so none of them can ever see a body mid-step.
 
+// Complex geometry to spawn, grab and throw. The torus knot is generated, so the mesh path always works with no
+// third-party asset and no licensing question; any .obj passed on the command line is registered alongside it.
+//
+// A mesh body RENDERS as its triangles but COLLIDES as its convex hull -- Box3D's triangle-mesh shape is static
+// only, so that is not a shortcut but the only way a mesh can be a dynamic rigid body. See PhysicsScene.AddMeshBody.
+Meshes.Register(Meshes.TorusKnot(), "knot");
+foreach (var path in args.Where(a => a.EndsWith(".obj", StringComparison.OrdinalIgnoreCase)))
+{
+    try
+    {
+        Meshes.Register(ObjLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+    }
+    catch (Exception ex) when (ex is IOException or InvalidDataException)
+    {
+        Console.Error.WriteLine($"could not load '{path}': {ex.Message}");
+        return 1;
+    }
+}
+
 var runner = new PhysicsRunner(BuildScene);
-var renderer = new WireframeRenderer();
-var view = new SceneView(runner, renderer);
+
+// Three renderers over one scene, cycled live with 'v', in rising order of cost and fidelity:
+//
+//   wireframe -- projected edges on a Canvas at braille resolution; painter's sort, no fill.
+//   solid     -- z-buffered flat-shaded triangles from a directional light; one colour per face.
+//   shaded    -- per-pixel point light with specular, plus silhouettes and contact darkening.
+//
+// They reach the screen by genuinely different routes (a Canvas versus half-block cells with a private z-buffer),
+// which is why each brings its own surface and SceneView swaps the child rather than the drawing code. The two
+// solid ones share their rasteriser through MeshRenderer and differ only in shading.
+var view = new SceneView(runner, new ShadedRenderer());
+view.AddRenderer(new WireframeRenderer());
+view.AddRenderer(new SolidRenderer());
 var footer = new SceneFooter(view);
 
 // The footer reports the snapshot that was actually DRAWN, not the newest one, so its body count and clock always

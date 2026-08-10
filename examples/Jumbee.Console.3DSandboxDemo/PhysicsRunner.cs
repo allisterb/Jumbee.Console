@@ -153,6 +153,7 @@ public sealed class PhysicsRunner : IDisposable
             next.Masses[i] = b.Handle.Mass;
             next.HalfExtents[i] = b.HalfExtents;
             next.Shapes[i] = b.Shape;
+            next.MeshIds[i] = b.MeshId;
             next.ColorKeys[i] = b.ColorKey;
             next.Awake[i] = b.Handle.IsAwake;
             if (next.Awake[i]) awake++;
@@ -231,11 +232,42 @@ public sealed class PhysicsScene : IDisposable
         return Track(handle, BodyShape.Sphere, new Vector3(radius, radius, radius), colorKey, velocity);
     }
 
+    /// <summary>
+    /// Spawns a dynamic body shaped like <paramref name="meshId"/>'s mesh, colliding as that mesh's convex hull.
+    /// </summary>
+    /// <remarks>
+    /// A hull, not the triangles, and not by choice: <c>Body.AddMesh</c> requires a <b>static</b> body, so a
+    /// triangle mesh cannot be a dynamic rigid body at all. Rendering the real mesh while colliding with its hull is
+    /// the standard arrangement — the cost is that concavities are solid to the solver, so a teapot's handle will
+    /// not catch on anything and nothing drops through a torus's hole. Approximating a concave shape properly means
+    /// a compound of several hulls (<c>CompoundBuilder.AddHull</c>), which is a bigger piece of work.
+    /// </remarks>
+    public int AddMeshBody(int meshId, Vector3 position, float scale, int colorKey, Vector3 velocity = default)
+    {
+        var mesh = Meshes.Get(meshId);
+        var points = new Vector3[mesh.Vertices.Length];
+        for (var i = 0; i < points.Length; i++) points[i] = mesh.Vertices[i] * scale;
+
+        var handle = world.CreateDynamicBody(position);
+        // The vertex budget matters: a 3,600-vertex teapot would otherwise build a hull with far more faces than
+        // the solver wants to test every step, for no behavioural gain at this scale.
+        using (var hull = ConvexHull.FromPoints(points, HullVertexBudget))
+        {
+            handle.AddHull(hull);
+        }
+
+        var radius = 0.5f * scale;
+        return Track(handle, BodyShape.Mesh, new Vector3(radius), colorKey, velocity, meshId);
+    }
+
     /// <summary>Spawns whichever shape <paramref name="shape"/> names, sized by <paramref name="scale"/>.</summary>
-    public int Add(BodyShape shape, Vector3 position, float scale, int colorKey, Vector3 velocity = default) =>
-        shape == BodyShape.Sphere
-            ? AddSphere(position, 0.5f * scale, colorKey, velocity)
-            : AddBox(position, new Vector3(0.5f * scale), colorKey, velocity);
+    public int Add(BodyShape shape, Vector3 position, float scale, int colorKey, Vector3 velocity = default,
+                   int meshId = -1) => shape switch
+    {
+        BodyShape.Sphere => AddSphere(position, 0.5f * scale, colorKey, velocity),
+        BodyShape.Mesh when meshId >= 0 => AddMeshBody(meshId, position, scale, colorKey, velocity),
+        _ => AddBox(position, new Vector3(0.5f * scale), colorKey, velocity),
+    };
 
     /// <summary>Destroys one body. Silently does nothing if it has already gone.</summary>
     public void Remove(int id)
@@ -314,12 +346,12 @@ public sealed class PhysicsScene : IDisposable
     #endregion
 
     #region Private methods
-    private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity)
+    private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity, int meshId = -1)
     {
         var id = ++nextId;
         handle.UserData = (ulong)id;
         if (velocity != Vector3.Zero) handle.LinearVelocity = velocity;
-        bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey));
+        bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey, meshId));
         return id;
     }
 
@@ -335,6 +367,9 @@ public sealed class PhysicsScene : IDisposable
     #endregion
 
     #region Fields
+    // Vertex budget for a spawned mesh body's collision hull. Points beyond it are merged by the engine.
+    private const int HullVertexBudget = 32;
+
     private readonly PhysicsWorld world;
     private readonly List<SandboxBody> bodies = [];
 
@@ -350,4 +385,5 @@ public sealed class PhysicsScene : IDisposable
 /// <param name="Shape">How to draw it.</param>
 /// <param name="HalfExtents">Extents as spawned — see <see cref="SceneSnapshot.HalfExtents"/>.</param>
 /// <param name="ColorKey">Palette index, fixed at spawn so a body keeps its colour.</param>
-public readonly record struct SandboxBody(int Id, Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey);
+/// <param name="MeshId">Registry id for a <see cref="BodyShape.Mesh"/> body; -1 otherwise.</param>
+public readonly record struct SandboxBody(int Id, Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey, int MeshId = -1);

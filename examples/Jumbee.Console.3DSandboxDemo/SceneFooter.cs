@@ -43,16 +43,17 @@ public sealed class SceneFooter : Control
         // Line 1 is the run and the spawn settings -- everything that changes. Kept under ~90 columns so it survives
         // a narrow terminal: an earlier version ran to ~110 and silently clipped the selection readout off the end,
         // which looked exactly like selection not working.
-        var status = $" {(paused ? "PAUSED" : "RUN   ")} {view.Renderer.Name}  " +
+        var edges = view.Edges is { } e and not SilhouetteStyle.None ? $"/{e.ToString().ToLowerInvariant()}" : "";
+        var status = $" {(paused ? "PAUSED" : "RUN   ")} {view.Renderer.Name}{edges}  " +
                      $"{s?.Count ?? 0} bodies · {s?.AwakeCount ?? 0} awake  t={s?.SimTime ?? 0:F1}s  " +
                      $"step {s?.StepMilliseconds ?? 0:F2}ms  " +
-                     $"spawn {(spawn.Shape == BodyShape.Sphere ? "sphere" : "box")} x{spawn.Scale:F2}  " +
+                     $"spawn {spawn.ShapeName} x{spawn.Scale:F2}  " +
                      $"launch {spawn.LaunchSpeed:F1}";
 
         // Line 2 leads with the selection so it is never the thing that gets clipped, then fills the rest with key
         // reminders in falling order of usefulness. F1 has the full list, so losing the tail of this is survivable.
-        var line2 = $" {Selection(s)}  │ drag orbit · click select · n drop · f fire · b shape · " +
-                    "+- size · [] speed · x del · c clear · space pause · . step · r reset · F1 help · q quit";
+        var line2 = $" {Selection(s)}  │ drag orbit · click select · n drop · f fire · b shape · v render · " +
+                    "e edge · m mesh · +- size · [] speed · x del · c clear · space pause · . step · r reset · F1 · q quit";
 
         WriteRow(0, status, new Color(200, 205, 215), new Color(28, 30, 38));
         WriteRow(1, line2, new Color(140, 146, 160), new Color(22, 24, 30));
