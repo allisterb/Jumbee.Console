@@ -98,8 +98,12 @@ public sealed class WireframeRenderer : ISceneRenderer
                     DrawSphere(view, snapshot.Positions[b], snapshot.HalfExtents[b].X, color);
                     break;
                 case BodyShape.Mesh:
-                    DrawMesh(view, Meshes.Get(snapshot.MeshIds[b]), snapshot.Positions[b], snapshot.Rotations[b],
-                        snapshot.HalfExtents[b].X / 0.5f, color);
+                    DrawMesh(view, Meshes.Get(snapshot.MeshIds[b]), snapshot.Positions[b],
+                        snapshot.LocalTransforms is { } t
+                            ? t[b]
+                            : Matrix4x4.CreateScale(snapshot.HalfExtents[b].X / 0.5f)
+                              * Matrix4x4.CreateFromQuaternion(snapshot.Rotations[b]),
+                        color);
                     break;
                 default:
                     DrawBox(view, snapshot.Positions[b], snapshot.Rotations[b], snapshot.HalfExtents[b], color);
@@ -159,11 +163,11 @@ public sealed class WireframeRenderer : ISceneRenderer
     // A loaded model drawn edge-for-edge would swamp this renderer -- a 6,300-face teapot has ~9,500 unique edges,
     // against 12 for a box -- and cheapness is the whole reason the wireframe exists. Mesh.WireEdges is a thinned,
     // capped sample of them, so a model costs about what a dozen boxes do and still reads as its shape.
-    private void DrawMesh(in CameraView view, Mesh mesh, Vector3 center, Quaternion rotation, float scale, Color color)
+    private void DrawMesh(in CameraView view, Mesh mesh, Vector3 center, Matrix4x4 transform, Color color)
     {
         EnsureMeshCapacity(mesh.Vertices.Length);
         for (var i = 0; i < mesh.Vertices.Length; i++)
-            meshWorld[i] = center + Vector3.Transform(mesh.Vertices[i] * scale, rotation);
+            meshWorld[i] = center + Vector3.Transform(mesh.Vertices[i], transform);
 
         foreach (var (a, b) in mesh.WireEdges) DrawWorldLine(view, meshWorld[a], meshWorld[b], color);
     }

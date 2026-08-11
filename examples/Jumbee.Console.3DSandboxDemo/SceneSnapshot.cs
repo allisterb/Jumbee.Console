@@ -126,5 +126,15 @@ public sealed class SceneSnapshot
 
     /// <summary>An index into the renderer's palette, assigned at spawn so a body keeps its colour.</summary>
     public readonly int[] ColorKeys;
+
+    /// <summary>
+    /// Optional full affine transform per body, replacing the position/rotation/scale path when present.
+    /// </summary>
+    /// <remarks>
+    /// Null for the physics scene, which has no use for it: Box3D bodies are a position and a rotation, and no
+    /// collision shape can be sheared. It exists for <see cref="ModelScene"/>, where shear and non-uniform scale are
+    /// the point and there is no solver to disagree with them. A quaternion cannot express either.
+    /// </remarks>
+    public Matrix4x4[]? LocalTransforms;
     #endregion
 }

@@ -611,6 +611,44 @@ solid and shaded renderers handle meshes well, and they are the ones meshes are 
 A 6,320-triangle teapot and a 2,400-triangle knot cost the solid renderer ~3× what the primitive scene did
 (253 → 769 µs) and still leave everything under a fifth of a 60 fps frame.
 
+### M2.5b — the `obj` model viewer and affine transforms (2026-08-10)
+
+A loaded model at sandbox scale is a few dozen cells across, where a teapot and a rock look identical. The `obj`
+verb opens a second scene — one asset filling the viewport on a turntable — which is the only size at which the
+loader and the renderers can be judged. `System.CommandLine` provides the verb; `[`/`]` step models, `xyz`/`XYZ`
+scale per axis, `,.` and `;'` shear, `0` resets, `p` stops the spin.
+
+`ModelScene : ISceneSource` is a static scene with no physics. `SceneView` now takes an `ISceneSource` for reading
+and treats the simulation as optional (`source as PhysicsRunner`), so spawn/grab/delete quietly do nothing when
+there is nothing to act on — one view, two scenes, no duplicated camera or input code.
+
+**Affine transforms cost almost nothing to render, and that is a property of a decision made back in M2.** The
+rasteriser derives each face normal from the **world-space winding of the already-transformed triangle**, not by
+transforming a stored normal — so shear and non-uniform scale come out correctly lit with **no inverse-transpose**,
+which the usual arrangement would need. Verified in the render: a sheared teapot has no black facets and no
+inverted shading. `SceneSnapshot.LocalTransforms` (a nullable `Matrix4x4[]`) carries the map, since a quaternion
+cannot express a shear; it is null for the physics scene, which pays nothing for it.
+
+**Transforms stay out of the sandbox on purpose.** Box3D has no sheared collision shape, so a sheared rigid body
+would render one way and collide another — the same render/collide divergence that mesh bodies already carry for
+an unavoidable reason, which would be gratuitous here. Non-uniform *scale* would be supportable for boxes (Box3D
+boxes already take half-extents) but not for spheres.
+
+Two CLI details worth keeping. The sandbox's model list is an **option** (`--model`), not a positional argument: a
+positional on the root command is inherited by the `obj` subcommand — its help listed `<models>` twice — and makes
+`app foo.obj` versus `app obj` ambiguous to parse.
+
+And `obj` takes **one** path, which may be a file or a directory; either way the whole directory is loaded and
+`[`/`]` cycle it, with a named file only deciding where cycling starts. The useful unit for a viewer is the
+directory — one you have to restart to see the next asset is a worse tool than one you step through with a keypress.
+The rules live in `ModelLibrary.Resolve` rather than in `Program` so they can be tested without launching a UI;
+every branch is an edge case (file vs directory vs neither, empty directory, no argument at all, and the
+case-insensitive match that finds the start index).
+
+Loading is **eager**, measured rather than assumed: the four reference models parse in ~750 ms total, of which the
+250k-triangle dragon is 608 ms. Parsing on first display would move that cost into the middle of cycling, which is
+the worse place for it — a startup pause reads as loading, a mid-interaction stall reads as a hang.
+
 **M3 — UI.** Sidebar panels (mode, params, spawn, inspector showing the selected body's mass/velocity/sleep
 state), footer key hints, F1 help via `HelpInfo`.
 

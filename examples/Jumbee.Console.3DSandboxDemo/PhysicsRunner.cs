@@ -25,7 +25,7 @@ using Box3D;
 /// of time trying to catch up.
 /// </para>
 /// </remarks>
-public sealed class PhysicsRunner : IDisposable
+public sealed class PhysicsRunner : ISceneSource, IDisposable
 {
     #region Constructors
     /// <summary>Creates the runner and starts its thread. <paramref name="build"/> populates the initial scene and

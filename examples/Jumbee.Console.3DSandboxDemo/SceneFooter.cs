@@ -37,6 +37,12 @@ public sealed class SceneFooter : Control
     /// <inheritdoc/>
     protected override void Render()
     {
+        if (view.Model is { } model)
+        {
+            RenderViewer(model);
+            return;
+        }
+
         var s = snapshot;
         var spawn = view.Spawn;
 
@@ -61,6 +67,24 @@ public sealed class SceneFooter : Control
     #endregion
 
     #region Private methods
+    // The model viewer reports the asset and its transform; body counts, spawn settings and a sim clock all mean
+    // nothing here, and showing them would be noise.
+    private void RenderViewer(ModelScene model)
+    {
+        var edges = view.Edges is { } e and not SilhouetteStyle.None ? $"/{e.ToString().ToLowerInvariant()}" : "";
+        var mesh = model.Mesh;
+        var status = $" MODEL  {view.Renderer.Name}{edges}  {model.Name}  " +
+                     $"{mesh.TriangleCount} tris · {mesh.Vertices.Length} verts  " +
+                     $"scale {model.Scale.X:F2},{model.Scale.Y:F2},{model.Scale.Z:F2}  " +
+                     $"shear {model.Shear.X:+0.00;-0.00;0.00},{model.Shear.Y:+0.00;-0.00;0.00}";
+
+        const string Keys = " drag orbit · wheel zoom · [] model · xyz shrink · XYZ stretch · ,. ;' shear · " +
+                            "0 reset · p spin · v render · e edge · F1 help · q quit";
+
+        WriteRow(0, status, new Color(200, 205, 215), new Color(28, 30, 38));
+        WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));
+    }
+
     private string Selection(SceneSnapshot? s)
     {
         if (view.Selected is not { } id || s is null) return "no selection";

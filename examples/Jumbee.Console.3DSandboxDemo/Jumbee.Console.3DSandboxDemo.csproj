@@ -18,6 +18,7 @@
          at the boundary. Box3D.NET.Native ships six RIDs including linux-x64/arm64, and P/Invoke is the supported
          NativeAOT path — same situation as NAudio in AudioScopeDemo. -->
     <PackageReference Include="Box3D.NET" Version="0.3.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.10" />
   </ItemGroup>
 
   <ItemGroup>

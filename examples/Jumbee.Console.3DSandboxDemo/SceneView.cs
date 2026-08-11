@@ -24,9 +24,10 @@ public sealed class SceneView : CompositeControl
 {
     #region Constructors
     /// <summary>Creates the viewport over <paramref name="runner"/>, starting with <paramref name="renderer"/>.</summary>
-    public SceneView(PhysicsRunner runner, ISceneRenderer renderer, int fps = 60)
+    public SceneView(ISceneSource source, ISceneRenderer renderer, int fps = 60)
     {
-        this.runner = runner;
+        this.source = source;
+        this.runner = source as PhysicsRunner;
         this.renderer = renderer;
         renderers.Add(renderer);
         SetContent(new Boundary(renderer.Surface));
@@ -108,12 +109,16 @@ public sealed class SceneView : CompositeControl
     /// <summary>The active silhouette style, or <see langword="null"/> when the current renderer has none.</summary>
     public SilhouetteStyle? Edges => renderer is ShadedRenderer s ? s.Edges : null;
 
+    /// <summary>Set when this view is showing a <see cref="ModelScene"/> rather than a simulation: enables the
+    /// model-picking and transform keys, and turns the turntable.</summary>
+    public ModelScene? Model { get; init; }
+
     /// <summary>Drops a body in above the camera target, so it lands in view wherever the camera is pointing.</summary>
     public void SpawnAtTarget()
     {
         var position = Camera.Target + new Vector3(0, Spawn.DropHeight, 0);
         var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
-        runner.Post(scene => scene.Add(shape, position, scale, key, default, mesh));
+        runner?.Post(scene => scene.Add(shape, position, scale, key, default, mesh));
         selectNewestSpawn = true;
     }
 
@@ -132,7 +137,7 @@ public sealed class SceneView : CompositeControl
         var origin = view.Eye + (view.Forward * muzzle);
         var velocity = view.Forward * Spawn.LaunchSpeed;
         var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
-        runner.Post(scene => scene.Add(shape, origin, scale, key, velocity, mesh));
+        runner?.Post(scene => scene.Add(shape, origin, scale, key, velocity, mesh));
         selectNewestSpawn = true;
     }
 
@@ -141,20 +146,20 @@ public sealed class SceneView : CompositeControl
     {
         if (Selected is not { } id) return;
         Selected = null;
-        runner.Post(scene => scene.Remove(id));
+        runner?.Post(scene => scene.Remove(id));
     }
 
     /// <summary>Removes every dynamic body.</summary>
     public void ClearScene()
     {
         Selected = null;
-        runner.Post(scene => scene.ClearBodies());
+        runner?.Post(scene => scene.ClearBodies());
     }
 
     /// <summary>Moves the selection to the next body, in spawn order, wrapping.</summary>
     public void SelectNext(int direction = 1)
     {
-        var snapshot = Drawn ?? runner.Snapshot;
+        var snapshot = Drawn ?? source.Snapshot;
         if (snapshot.Count == 0)
         {
             Selected = null;
@@ -230,7 +235,7 @@ public sealed class SceneView : CompositeControl
         lastDrag = position;
         CaptureMouse();
 
-        var snapshot = Drawn ?? runner.Snapshot;
+        var snapshot = Drawn ?? source.Snapshot;
         var hit = renderer.Pick(position.X, position.Y, snapshot, Camera);
         if (hit is not { } id)
         {
@@ -255,7 +260,7 @@ public sealed class SceneView : CompositeControl
         grabbed = id;
         throwSamples.Clear();
         RecordThrowSample(grabPlanePoint);
-        runner.Post(scene => scene.BeginGrab(id));
+        runner?.Post(scene => scene.BeginGrab(id));
     }
 
     /// <inheritdoc/>
@@ -267,7 +272,7 @@ public sealed class SceneView : CompositeControl
 
         grabbed = null;
         var velocity = ThrowVelocity();
-        runner.Post(scene => scene.ReleaseGrab(velocity));
+        runner?.Post(scene => scene.ReleaseGrab(velocity));
     }
 
     /// <inheritdoc/>
@@ -291,7 +296,7 @@ public sealed class SceneView : CompositeControl
 
         var target = contact + grabOffset;
         RecordThrowSample(target);
-        runner.Post(scene => scene.DragTo(id, target));
+        runner?.Post(scene => scene.DragTo(id, target));
     }
 
     /// <inheritdoc/>
@@ -319,8 +324,34 @@ public sealed class SceneView : CompositeControl
     #endregion
 
     #region Private methods
+    // The viewer's own keys, checked first so they can retarget characters the sandbox uses for things that do not
+    // exist here (nothing to delete, no launch speed to set).
+    private bool HandleModelChar(char c)
+    {
+        if (Model is not { } model) return false;
+        switch (c)
+        {
+            case '[': model.Step(-1); return true;
+            case ']': model.Step(+1); return true;
+            case 'x': model.ScaleAxis(0, 1 / 1.15f); return true;
+            case 'X': model.ScaleAxis(0, 1.15f); return true;
+            case 'y': model.ScaleAxis(1, 1 / 1.15f); return true;
+            case 'Y': model.ScaleAxis(1, 1.15f); return true;
+            case 'z': model.ScaleAxis(2, 1 / 1.15f); return true;
+            case 'Z': model.ScaleAxis(2, 1.15f); return true;
+            case ',': model.Nudge(-0.08f, 0); return true;
+            case '.': model.Nudge(+0.08f, 0); return true;
+            case ';': model.Nudge(0, -0.08f); return true;
+            case '\'': model.Nudge(0, +0.08f); return true;
+            case '0': model.ResetTransform(); return true;
+            case 'p': model.SpinRate = model.SpinRate == 0f ? 0.35f : 0f; return true;
+            default: return false;
+        }
+    }
+
     private bool HandleChar(char c)
     {
+        if (HandleModelChar(c)) return true;
         switch (c)
         {
             case 'b': Spawn.ToggleShape(); return true;
@@ -366,7 +397,13 @@ public sealed class SceneView : CompositeControl
 
     private void Tick()
     {
-        var snapshot = runner.Snapshot;
+        // The turntable is driven from wall clock, not a frame count, so it turns at the same rate whatever the
+        // paint rate or the terminal size.
+        var now = clock.Elapsed;
+        Model?.Advance((now - lastTick).TotalSeconds);
+        lastTick = now;
+
+        var snapshot = source.Snapshot;
 
         // Selection is by id, so a body deleted by anything other than us (a scene clear, a preset reload) just
         // stops resolving -- drop it rather than leave a highlight pointing at nothing.
@@ -402,9 +439,14 @@ public sealed class SceneView : CompositeControl
     private const float MuzzleNdcRadius = 0.2f;
     private const float MinMuzzleDistance = 2f;
 
-    private readonly PhysicsRunner runner;
+    private readonly ISceneSource source;
+
+    // The simulation, when the source IS one. Null for a static scene (the model viewer), where spawning, grabbing
+    // and deleting have nothing to act on and quietly do nothing.
+    private readonly PhysicsRunner? runner;
     private readonly List<ISceneRenderer> renderers = [];
     private readonly Stopwatch clock = Stopwatch.StartNew();
+    private TimeSpan lastTick;
     private readonly Queue<(TimeSpan At, Vector3 Point)> throwSamples = new();
 
     private ISceneRenderer renderer;

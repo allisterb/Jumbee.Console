@@ -154,8 +154,21 @@ public abstract class MeshRenderer : ISceneRenderer
             : Palette.For(snapshot.ColorKeys[i], snapshot.Awake[i]);
 
         EnsureVertexCapacity(mesh.Vertices.Length);
-        for (var v = 0; v < mesh.Vertices.Length; v++)
-            world[v] = center + Vector3.Transform(mesh.Vertices[v] * scale, rotation);
+        // A full affine transform when the scene supplies one -- shear and non-uniform scale cannot go through the
+        // scale-then-quaternion path. Lighting needs no special handling either way: Triangle() derives the face
+        // normal from the WORLD-space winding of the transformed triangle, which is correct under any affine map,
+        // so there is no inverse-transpose to apply.
+        if (snapshot.LocalTransforms is { } transforms)
+        {
+            var m = transforms[i];
+            for (var v = 0; v < mesh.Vertices.Length; v++)
+                world[v] = center + Vector3.Transform(mesh.Vertices[v], m);
+        }
+        else
+        {
+            for (var v = 0; v < mesh.Vertices.Length; v++)
+                world[v] = center + Vector3.Transform(mesh.Vertices[v] * scale, rotation);
+        }
 
         var idx = mesh.Indices;
         for (var t = 0; t < idx.Length; t += 3)
