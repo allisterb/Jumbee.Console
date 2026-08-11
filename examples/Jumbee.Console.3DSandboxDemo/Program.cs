@@ -27,7 +27,9 @@ var modelPath = new Argument<string?>("path")
 {
     Arity = ArgumentArity.ZeroOrOne,
     Description = "An .obj file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
-                  "cycle through it; naming a file just decides which one opens first. Defaults to the current directory.",
+                  "cycle through it; naming a file just decides which one opens first. Defaults to the current " +
+                  "directory. NOTE: models are parsed before the UI appears, so a directory holding large ones " +
+                  "pauses at startup (a 250k-triangle model takes ~600ms; a 6k-triangle one takes ~4ms).",
 };
 
 // An OPTION on the root, not a positional argument: a positional there would be inherited by the `obj` subcommand

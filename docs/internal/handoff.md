@@ -1,29 +1,66 @@
-# Handoff — end of the 0.1.10 session (2026-08-02)
+# Handoff — end of the 3D sandbox session (2026-08-10)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
 
 ## Next session starts here
 
-**Build the 3D physics sandbox.** The plan is written and approved:
-[`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md). Read it first — everything in it was verified against the sources,
-not recalled, and it carries the API facts, the maths, and the file references so you don't have to re-derive them.
+**The 3D sandbox is through M2.5**, committed up to `3d79a59`. Read
+[`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md) first — it now carries a result section per milestone with the
+measured numbers and every finding, written as the work happened rather than recalled afterwards.
 
-Two decisions already made, so don't reopen them:
+**Next: M3 — the sidebar UI.** Sidebar panels (mode, params, spawn, inspector showing the selected body's
+mass/velocity/sleep state), footer key hints, F1 help via `HelpInfo`. The footer already carries a live inspector
+line, so M3 is mostly moving that into a docked panel and adding the spawn/params blocks.
 
-- **Solid shading is in v1.** Wireframe alone is an inertia port; the half-block z-buffered renderer is the reason
-  to build this at all.
-- **Fix the `Canvas` batch API properly in the library**, not around it in the demo. Note the cost model is milder
-  than first thought: `Rebuild()` is only `_dirty = true; Invalidate();` (`Canvas.cs:294`) and `BuildLayers` runs
-  once per frame, so per-shape `Add` costs a closure and a redundant invalidate — ~12k allocations/sec at 200
-  shapes and 60 fps — not a re-rasterisation. Worth fixing, **not** a prerequisite for starting.
-  `DamageTracking` is *not* a mitigation and should stay off for the 3D view: it narrows the compositor's scan,
-  not `Add`/`BuildLayers`, and an orbiting camera changes nearly every cell every frame.
+One library change also landed this session, outside the demo: `src/Jumbee.Console/Input/VtInputSource.cs` no
+longer dies when a console read fails, plus `tests/Jumbee.Console.Tests/VtInputSourceTests.cs`. See the operational
+note below for what it was.
 
-Scaffold exists at `examples/Jumbee.Console.3DSandboxDemo` (Box3D.NET 0.3.0 referenced, `PublishAot`, `Program.cs`
-still the template hello-world).
+### Open questions the next session should decide
 
-## Where things stand
+1. **Should the wireframe renderer draw a convex hull for mesh bodies?** Right now it draws a thinned sample of
+   the mesh's edges, capped at 64, and a dense model reads as a sparse cloud rather than a shape. The principled
+   fix is hull edges (~30–60 edges, a real silhouette) but Box3D does not expose its hull's geometry, so it means
+   writing a hull ourselves. Documented as a known limitation; nobody has asked for it yet.
+2. **Vendor a model, or keep pointing at `reference/`?** The demo currently ships only a generated torus knot, so
+   the mesh path works with no third-party asset. voxcii's *code* is MIT but its *model files* have their own
+   provenance (the Stanford bunny in particular). If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
+3. **Promote the parked harness into a real test project.** 63 checks; it caught two shipped bugs (dead arrow
+   keys, a clipped footer) plus several wrong assumptions of mine. Parked at
+   [`scratch/`](scratch/README.md) — sources only, not wired into the solution, so it will rot unless adopted.
+   M5 already lists this; it is worth doing sooner.
+
+## Where things stand — the 3D sandbox
+
+Milestones M0 through M2.5 are done. `examples/Jumbee.Console.3DSandboxDemo` has a README with the full key map.
+
+**Three renderers over one scene**, cycled with `v`, sharing a rasteriser through `MeshRenderer`:
+`WireframeRenderer` (braille edges on a `Canvas`), `SolidRenderer` (flat per-triangle, directional),
+`ShadedRenderer` (per-pixel point light + specular, silhouettes, contact darkening). Plus an `obj` verb opening a
+model-viewer scene with shear and non-uniform scale.
+
+**The perf picture, in bytes rather than microseconds** (this desktop swings 2.3× on timings; byte counts reproduce
+exactly). At 200×50 with an orbiting camera, everything sits between 10% and 18% of a 60 fps frame. The single
+biggest lever is **quantising the shade ramp**: coherent content emits ~7× fewer ANSI bytes than content where
+every neighbour differs. Two results worth remembering because they invert the intuition:
+
+- the **solid** renderer emits *fewer* bytes than the wireframe, despite covering every cell — a wireframe's lit
+  cells are scattered singletons, each needing its own cursor move and SGR;
+- **half-lambert wrapping** emits **16% fewer** bytes than clamping, because compressing the lit range into fewer
+  distinct levels coalesces better.
+
+**Five findings that cost real time**, all written up in the plan doc:
+
+1. `CompositeControl` with no focusable children never receives `OnInput` from the layout route — handle keys in
+   `InterceptInput`. Worse, `UI.SendInput` takes a *different* path, so the obvious test is green while the app is
+   dead. This shipped, and the user found it, not a test.
+2. `FillsFrameViewport` has a silent failure mode: without it a framed viewport balloons to the 1000-row clamp and
+   renders *empty*, which reads as broken projection maths.
+3. Backface culling sign: inverting Y for screen rows reverses handedness, so an outward-facing triangle arrives
+   with a **negative** signed area. Culling `<= 0` discards every visible face.
+4. `Body.AddMesh` requires a **static** body, so a mesh body must collide as a convex hull.
+5. **Judge renders from a PNG, never an ASCII dump.** See below.
 
 **0.1.10 is packed and committed** (`artifacts/`, three packages, not published). The session was documentation-led
 and produced one breaking change:
@@ -64,8 +101,8 @@ Still open from the vtop eval loop. Evidence for each is in `eval-findings.md`.
 2. **V-28 — `DataTable` has no per-row update.** `Live Data.md` no longer claims otherwise (it now documents the
    rebuild-and-restore-by-key pattern), so this is a missing feature rather than a contradiction. Adding
    `UpdateRow(int, params string[])` still beats every live table rebuilding itself each tick.
-3. **V-21 — no proportional split and no layout-changed event.** The 3D sandbox will want the second one; that
-   would make three demos asking.
+3. **V-21 — no proportional split and no layout-changed event.** The 3D sandbox wanted the second one and worked
+   around it by reading `ActualWidth`/`ActualHeight` inside `Draw()`; that makes three demos asking.
 4. **Cheap doc cross-links** — V-24 (no stated way to turn *off* a control's mouse handling), V-26
    (`ConsoleSnapshot`'s mouse API isn't mentioned in "Testing without a terminal", where everyone starts), V-19
    (`TitleBorderStyle` has no `None`, and the default adds a divider under the title). V-16 is closed.
@@ -84,6 +121,18 @@ bespoke delegate types while everything else is now `EventHandler`.
 
 ## Operational notes
 
+- **Judge anything visual from a PNG, not an ASCII dump.** `ConsoleSnapshot.SavePng` needs one setting —
+  `SnapshotImageOptions.FontFamily = "Cascadia Mono"`, because the default Consolas has no braille and poor
+  geometric-shape coverage. Printing a text dump through the Bash tool mangles `▀`, braille and `◆◇◈◊` into `?`,
+  and it is very easy to read your own encoding damage as the renderer's output. The first real PNG this session
+  exposed three defects that every passing test had missed — a renderer that was visibly *darker* than the one it
+  replaced, edge detection outlining the horizon, and outlines invisible on dimmed bodies. **Tests verify the claim
+  you thought to make; an image shows the ones you didn't.**
+- **`Task.Wait(timeout)` rethrows a faulted task exactly like `.Result` does.** `VtInputSource.ReaderLoop` caught
+  around `.Result` but waited with `Wait`, so a failed console read escaped and killed the reader thread — the app
+  lost all keyboard input to an unhandled `AggregateException`. Fixed, with three regression tests and an internal
+  test-seam constructor taking a `Stream`. Triggered by a window resize under the VS debugger; never reproduced
+  standalone in Windows Terminal, so the root cause is still unconfirmed (the fix is defensive either way).
 - **Don't trust a near-empty compiler error list.** A single bad `using` (CS0234/CS9229) suppresses semantic
   analysis for the whole compilation — 288 diagnostics vanished this session and the run looked clean. Same class
   of trap as parse errors hiding semantic ones.
