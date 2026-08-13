@@ -339,7 +339,7 @@ public sealed class SceneView : CompositeControl
 
     /// <inheritdoc/>
     protected override HelpInfo? GetHelpInfo() => new HelpInfo("3D viewport")
-        .WithKey("Arrows", "Orbit the camera (hold Shift for fine steps)")
+        .WithKey("Arrows", "Orbit the camera (hold Shift for fine steps; the sidebar's Camera pad does it by mouse)")
         .WithKey("PgUp/PgDn", "Zoom in / out")
         .WithKey("Home", "Reset the camera")
         .WithKey("Drag", "On a body: grab and throw it. On empty space: orbit. Wheel zooms")

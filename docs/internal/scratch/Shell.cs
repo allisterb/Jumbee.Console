@@ -148,6 +148,42 @@ internal static class ShellChecks
         app.Sidebar.Refresh();
         Check("refreshing the panel does not write back to the state", refreshes == 0, $"{refreshes} writes");
 
+        Console.WriteLine("\ncamera pad:");
+        Draw();
+        var padBuffer = ConsoleSnapshot.Render(root, width, height);
+        var padRows = ConsoleSnapshot.ToLines(padBuffer);
+        var padRow = Array.FindIndex(padRows, l => l.Contains('◄') && l.Contains('►'));
+        Check("the pad is drawn under the other panels", padRow > 0 && padRows.Take(padRow).Any(l => l.Contains("Inspector")),
+            padRow < 0 ? "not found" : $"row {padRow}");
+
+        if (padRow > 0)
+        {
+            var theta = view.Camera.Theta;
+            UI.SetFocus(view);
+            Check("clicking an orbit button turns the camera",
+                ConsoleSnapshot.Click(padBuffer, padRows[padRow].IndexOf('►'), padRow) &&
+                Math.Abs(view.Camera.Theta - theta) > 0.1f,
+                $"theta {theta:F3} -> {view.Camera.Theta:F3}");
+
+            // The whole point of handing focus back: the arrow keys must still orbit after a mouse nudge.
+            var afterClick = view.Camera.Theta;
+            SendKey(ConsoleKey.LeftArrow);
+            Check("and the arrow keys still work afterwards", Math.Abs(view.Camera.Theta - afterClick) > 1e-4f,
+                $"theta {afterClick:F3} -> {view.Camera.Theta:F3}");
+
+            var distance = view.Camera.Distance;
+            padBuffer = ConsoleSnapshot.Render(root, width, height);
+            padRows = ConsoleSnapshot.ToLines(padBuffer);
+            var zoomRow = Array.FindIndex(padRows, l => l.Contains("Reset") && l.Contains('+'));
+            ConsoleSnapshot.Click(padBuffer, padRows[zoomRow].IndexOf('+'), zoomRow);
+            Check("clicking + zooms in", view.Camera.Distance < distance,
+                $"{distance:F1} -> {view.Camera.Distance:F1}");
+
+            ConsoleSnapshot.Click(padBuffer, padRows[zoomRow].IndexOf("Reset", StringComparison.Ordinal), zoomRow);
+            Check("and Reset restores the camera", Math.Abs(view.Camera.Distance - 20f) < 0.01f,
+                $"{view.Camera.Distance:F1}");
+        }
+
         Console.WriteLine("\nsidebar toggle:");
         SandboxShell.ToggleSidebar(app.Sidebar);
         _ = ConsoleSnapshot.ToText(root, width, height);
@@ -165,6 +201,20 @@ internal static class ShellChecks
         var withMenu = UI.Overlay is null ? "" : ConsoleSnapshot.ToText(root, width, height);
         Check("the menu opens over the viewport (needs an overlay)", UI.Overlay is null || withMenu.Contains("Pause"),
             UI.Overlay is null ? "no ambient overlay headlessly - skipped" : "shown");
+
+        if (args.Contains("--sidebar"))
+        {
+            var rows = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(root, width, height));
+            for (var y = 0; y < rows.Length; y++)
+            {
+                var col = rows[y].Length > width - SidebarPanel.Columns ? rows[y][(width - SidebarPanel.Columns)..] : "";
+                Console.WriteLine($"{y,3} |{col}|");
+            }
+
+            Console.WriteLine($"sidebar ActualHeight={app.Sidebar.ActualHeight} width={app.Sidebar.ActualWidth}");
+            app.Runner.Dispose();
+            return 0;
+        }
 
         if (args.Contains("--perf"))
         {

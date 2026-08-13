@@ -37,6 +37,10 @@ public sealed class ModelSidebarPanel : CompositeControl
         next.Activated += (_, _) => model.Step(+1);
         resetTransform.Activated += (_, _) => model.ResetTransform();
 
+        // The same pad the sandbox sidebar carries — it is the same camera, and having it in one scene and not the
+        // other would be the odd choice.
+        camera = new CameraPad(view.Camera, () => UI.SetFocus(view));
+
         view.RendererChanged += Report;
 
         // A blank row under every interactive control, as in SidebarPanel and for the same reason; the model's two
@@ -45,7 +49,8 @@ public sealed class ModelSidebarPanel : CompositeControl
             new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), Row(previous, next)), 4),
             new Section("Render", Spaced(renderer, edges, spin), 5),
             new Section("Scale", Spaced(scaleX, scaleY, scaleZ), 5),
-            new Section("Shear", Spaced(shearX, shearZ, Row(resetTransform, null)), 5)));
+            new Section("Shear", Spaced(shearX, shearZ, Row(resetTransform, null)), 5),
+            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows)));
 
         Report();
     }
@@ -121,6 +126,7 @@ public sealed class ModelSidebarPanel : CompositeControl
     private static Button Action(string text) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Half - 1 } };
 
+
     private static Slider Axis(string label, float min, float max, float value) =>
         new Slider(min, max, value, label) { LabelWidth = 8 };
     #endregion
@@ -147,6 +153,8 @@ public sealed class ModelSidebarPanel : CompositeControl
     private readonly Slider shearX = Axis("Shear X", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
     private readonly Slider shearZ = Axis("Shear Z", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
     private readonly Button resetTransform = Action("Reset");
+
+    private readonly CameraPad camera;
 
     private bool syncing;
 

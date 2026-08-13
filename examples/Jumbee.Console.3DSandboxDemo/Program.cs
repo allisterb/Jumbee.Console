@@ -120,7 +120,7 @@ static async Task<int> RunSandbox()
     app = SandboxShell.BuildSandbox(Populate, () => LoadMeshDialog(app));
     UI.Post(() => UI.SetFocus(app.View));
 
-    await UI.Start(app.Root, width: 120, height: 47, fps: 60);
+    await UI.Start(app.Root, width: 120, height: 48, fps: 60);
     app.Runner.Dispose();
     return 0;
 }
@@ -176,7 +176,7 @@ static async Task<int> RunModelViewer(int startIndex)
     app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app));
     UI.Post(() => UI.SetFocus(app.View));
 
-    await UI.Start(app.Root, width: 120, height: 47, fps: 60);
+    await UI.Start(app.Root, width: 120, height: 48, fps: 60);
     return 0;
 }
 

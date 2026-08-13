@@ -53,13 +53,7 @@ public sealed class SidebarPanel : CompositeControl
         delete.Activated += (_, _) => view.DeleteSelected();
         clear.Activated += (_, _) => view.ClearScene();
 
-        orbitLeft.Activated += (_, _) => MoveCamera(() => view.Camera.Orbit(-ButtonOrbit, 0));
-        orbitRight.Activated += (_, _) => MoveCamera(() => view.Camera.Orbit(ButtonOrbit, 0));
-        orbitUp.Activated += (_, _) => MoveCamera(() => view.Camera.Orbit(0, -ButtonOrbit));
-        orbitDown.Activated += (_, _) => MoveCamera(() => view.Camera.Orbit(0, ButtonOrbit));
-        zoomIn.Activated += (_, _) => MoveCamera(() => view.Camera.Zoom(1f - ButtonZoom));
-        zoomOut.Activated += (_, _) => MoveCamera(() => view.Camera.Zoom(1f + ButtonZoom));
-        resetCamera.Activated += (_, _) => MoveCamera(view.Camera.Reset);
+        camera = new CameraPad(view.Camera, () => UI.SetFocus(view));
 
         // State -> widget. Three sources, one refresh: whatever moved, the whole panel re-reads the state, which is
         // cheaper to reason about than tracking which widget a given change should touch.
@@ -78,7 +72,7 @@ public sealed class SidebarPanel : CompositeControl
     public const int Columns = 32;
 
     /// <summary>The rows the spaced layout needs. Below this the sidebar drops to the compact one.</summary>
-    public const int SpacedRows = 44;
+    public const int SpacedRows = 45;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -230,14 +224,9 @@ public sealed class SidebarPanel : CompositeControl
             new Section("Inspector", spaced
                 ? new VerticalStackPanel(selection, motion, Spacer(), Row(delete, clear))
                 : new VerticalStackPanel(selection, motion, Row(delete, clear)), 3 + gap),
-            new Section("Camera", CameraPad(), 2));
+            // Never spaced: the pad's buttons are one control, and a gap through the middle of a D-pad reads as two.
+            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows));
     }
-
-    // A D-pad and a zoom row: the same camera moves the arrow keys and a drag make, for someone working the mouse.
-    // Never spaced — the seven buttons are one control, and a gap through the middle of a pad reads as two.
-    private ILayout CameraPad() => new VerticalStackPanel(
-        new Grid([1], [Quarter, Quarter, Quarter, Quarter], [[orbitLeft, orbitUp, orbitDown, orbitRight]]),
-        new Grid([1], [Third, Third, Third], [[zoomOut, resetCamera, zoomIn]]));
 
     // The items stacked, with a blank row between each when spaced — one fewer spacer than items, so a section
     // never ends on a gap.
@@ -261,17 +250,6 @@ public sealed class SidebarPanel : CompositeControl
     private static Button Action(string text) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Columns / 2 - 3 } };
 
-    private static Button Nudge(string text, int width) =>
-        new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = width } };
-
-    // Move the camera, then hand focus back to the viewport. These are a mouse affordance for a viewport action,
-    // and the viewport is where the camera keys live — leaving focus on the button would mean the arrow keys stop
-    // orbiting the moment you nudge it once with the mouse, which is a nasty little dead end.
-    private void MoveCamera(Action move)
-    {
-        move();
-        UI.SetFocus(view);
-    }
 
     private static Slider Param(string label, float min, float max, float value, string format = "F2") =>
         new Slider(min, max, value, label) { LabelWidth = 8, ValueFormat = format };
@@ -307,24 +285,7 @@ public sealed class SidebarPanel : CompositeControl
     private readonly Button delete = Action("Delete");
     private readonly Button clear = Action("Clear");
 
-    // U+25C4/U+25BA rather than the ◀/▶ at U+25C0/U+25B6: those carry an emoji presentation that tofus in some
-    // terminal fonts, and the tree's disclosure glyphs already avoid them for the same reason.
-    private readonly Button orbitLeft = Nudge("◄", Quarter - 1);
-    private readonly Button orbitUp = Nudge("▲", Quarter - 1);
-    private readonly Button orbitDown = Nudge("▼", Quarter - 1);
-    private readonly Button orbitRight = Nudge("►", Quarter - 1);
-    private readonly Button zoomOut = Nudge("−", Third - 1);
-    private readonly Button resetCamera = Nudge("Reset", Third - 1);
-    private readonly Button zoomIn = Nudge("+", Third - 1);
-
-    // One click of a pad button. Bigger than the arrow keys' step (0.08 rad): a key is held or tapped repeatedly,
-    // a button is clicked, so ~15° a press turns the scene in a couple of dozen clicks rather than eighty.
-    private const float ButtonOrbit = 0.26f;
-    private const float ButtonZoom = 0.12f;
-
-    // The pad's two rows split the panel interior (Columns minus its border) four and three ways.
-    private const int Quarter = (Columns - 2) / 4;
-    private const int Third = (Columns - 2) / 3;
+    private readonly CameraPad camera;
 
     private SceneSnapshot? drawn;
     private bool syncing;

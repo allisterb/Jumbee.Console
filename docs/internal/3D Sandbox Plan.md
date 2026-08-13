@@ -768,6 +768,12 @@ changing, not on the height**, since that override runs on every re-layout and c
 that changed nothing is how a layout starts chasing its own tail. The demo now asks for 44 rows so a fresh window
 gets the spaced form. Verified both ways from PNGs at 120×44 and 100×36.
 
+**A Camera pad** closes the last thing the mouse could not reach: a four-way orbit pad, zoom, and reset, in a panel
+under the others in both sidebars. One click is ~15° rather than the arrow keys' 4.6° — a key is held or tapped
+repeatedly, a button is clicked, and eighty clicks for a turn is not a control. **Each button hands focus back to
+the viewport**, which is the part that matters: leaving focus on the button means the arrow keys stop orbiting the
+moment you nudge it once with the mouse, a dead end the harness now checks for explicitly.
+
 **A fifth library gap, from the same look:** `Select` computed a preferred width from its options and used it for
 the **pop-up**, while the closed control padded to whatever width the layout offered — so the two never matched,
 and a three-word choice was a full-width block of colour next to a slider. Filling the column is right for a form
