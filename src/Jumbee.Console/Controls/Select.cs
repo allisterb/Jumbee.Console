@@ -63,6 +63,18 @@ public class Select : RenderableControl
     /// <summary>Whether the dropdown opens below or above the control. Defaults to <see cref="SelectPopupPosition.Auto"/>.</summary>
     public SelectPopupPosition PopupPosition { get; set; } = SelectPopupPosition.Auto;
 
+    /// <summary>
+    /// Whether the collapsed control is drawn only as wide as its widest option — the same width as the dropdown —
+    /// instead of filling whatever width its layout offers. Default <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default suits a form, where a field filling its column is the convention and the <c>▼</c> sits at the
+    /// right edge under the ones above it. Set this in a narrow panel of mixed controls, where a full-width block
+    /// of colour for a three-word choice reads as far heavier than the choice is — and where the collapsed control
+    /// not matching the list it opens is itself a little jarring.
+    /// </remarks>
+    public bool FitContent { get => _fitContent; set => SetAtomicProperty(ref _fitContent, value); }
+
     /// <summary>The index of the selected option, or -1 when none is selected. Setting it raises <see cref="SelectionChanged"/>.</summary>
     public int SelectedIndex
     {
@@ -85,6 +97,28 @@ public class Select : RenderableControl
     #endregion
 
     #region Methods
+    /// <summary>Replaces the options, keeping the current value selected if it is still among them (otherwise the
+    /// first, or nothing when the list is empty). Re-sizes the control to the new widest option.</summary>
+    /// <remarks>For a drop-down over a list that changes at runtime — files that have been loaded, devices that
+    /// have appeared. Raises <see cref="SelectionChanged"/> only if the selected <em>value</em> actually changes,
+    /// so a rebuild that keeps the current choice is silent.</remarks>
+    public void SetOptions(params IEnumerable<string> options)
+    {
+        var previous = SelectedValue;
+        _options = [.. options];
+
+        var index = previous is null ? -1 : _options.FindIndex(o => o == previous);
+        if (index < 0) index = _options.Count > 0 ? 0 : -1;
+
+        // Assigned directly rather than through SelectedIndex: the property short-circuits when the index is
+        // unchanged, which is exactly the case where the value underneath it may have changed.
+        _selectedIndex = index;
+        Width = PreferredWidth();
+        Invalidate();
+
+        if (SelectedValue is { } current && current != previous) SelectionChanged?.Invoke(this, current);
+    }
+
     /// <summary>Opens the dropdown into the ambient <see cref="UI.Overlay"/> (no-op before <see cref="UI.Start"/>
     /// or with no options).</summary>
     public void Open()
@@ -135,9 +169,13 @@ public class Select : RenderableControl
         var style = new Spectre.Console.Style(Foreground, Background);
         var label = SelectedValue ?? Placeholder;
 
+        // Fitting leaves the rest of the row untouched (transparent), so the control ends where the dropdown it
+        // opens would — never wider than the room actually offered.
+        var width = _fitContent ? Math.Min(maxWidth, PreferredWidth()) : maxWidth;
+
         var inner = $" {label}";
-        if (inner.Length > maxWidth - 2) inner = inner[..Math.Max(0, maxWidth - 2)];
-        var text = inner.PadRight(Math.Max(0, maxWidth - 1)) + "▼";   // value left, arrow at the right edge
+        if (inner.Length > width - 2) inner = inner[..Math.Max(0, width - 2)];
+        var text = inner.PadRight(Math.Max(0, width - 1)) + "▼";   // value left, arrow at the right edge
 
         yield return new Segment(text, style);
     }
@@ -186,7 +224,8 @@ public class Select : RenderableControl
 
     #region Fields
     private const int MaxDropdownRows = 8;
-    private readonly List<string> _options;
+    private bool _fitContent;
+    private List<string> _options;
     private int _selectedIndex = -1;
     private int _controlLeft = -1;
     private int _controlTop = -1;

@@ -55,8 +55,10 @@ public sealed class SceneView : CompositeControl
         get => selected;
         set
         {
+            var changed = selected != value;
             selected = value;
             renderer.Selected = value;
+            if (changed) SelectionChanged?.Invoke(value);
         }
     }
 
@@ -66,6 +68,17 @@ public sealed class SceneView : CompositeControl
 
     /// <summary>Raised on the UI thread after each frame is drawn, carrying the snapshot that was drawn.</summary>
     public event Action<SceneSnapshot>? Drew;
+
+    /// <summary>Raised when the active renderer or its edge style changes — however it was changed.</summary>
+    /// <remarks>The sidebar's drop-downs and the <c>v</c>/<c>e</c> keys both go through here, which is what keeps
+    /// the widget and the key agreeing without either knowing about the other.</remarks>
+    public event Action? RendererChanged;
+
+    /// <summary>Raised when the selection moves, carrying the new body id (or <see langword="null"/>).</summary>
+    public event Action<int?>? SelectionChanged;
+
+    /// <summary>The renderers <c>v</c> cycles, in order — what the sidebar's drop-down lists.</summary>
+    public IReadOnlyList<ISceneRenderer> Renderers => renderers;
     #endregion
 
     #region Methods
@@ -77,6 +90,7 @@ public sealed class SceneView : CompositeControl
         next.Selected = selected;
         SetContent(new Boundary(next.Surface));
         Invalidate();
+        RendererChanged?.Invoke();
     }
 
     /// <summary>Adds a renderer to the set <c>v</c> cycles through. The first one added is the one in use.</summary>
@@ -98,16 +112,36 @@ public sealed class SceneView : CompositeControl
     public void NextEdgeStyle()
     {
         if (renderer is not ShadedRenderer shaded) return;
-        shaded.Edges = shaded.Edges switch
+        SetEdgeStyle(shaded.Edges switch
         {
             SilhouetteStyle.None => SilhouetteStyle.Ink,
             SilhouetteStyle.Ink => SilhouetteStyle.Glyph,
             _ => SilhouetteStyle.None,
-        };
+        });
+    }
+
+    /// <summary>Sets the silhouette treatment directly. A no-op under a renderer that has none.</summary>
+    public void SetEdgeStyle(SilhouetteStyle style)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.Edges == style) return;
+        shaded.Edges = style;
+        RendererChanged?.Invoke();
     }
 
     /// <summary>The active silhouette style, or <see langword="null"/> when the current renderer has none.</summary>
     public SilhouetteStyle? Edges => renderer is ShadedRenderer s ? s.Edges : null;
+
+    /// <summary>Whether the shaded renderer wraps its lighting, or <see langword="null"/> under a renderer that has
+    /// no lighting to wrap.</summary>
+    public bool? WrapLighting => renderer is ShadedRenderer s ? s.WrapLighting : null;
+
+    /// <summary>Turns half-lambert wrapping on or off. A no-op under a renderer that does not light per pixel.</summary>
+    public void SetWrapLighting(bool wrap)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.WrapLighting == wrap) return;
+        shaded.WrapLighting = wrap;
+        RendererChanged?.Invoke();
+    }
 
     /// <summary>Set when this view is showing a <see cref="ModelScene"/> rather than a simulation: enables the
     /// model-picking and transform keys, and turns the turntable.</summary>
@@ -319,6 +353,8 @@ public sealed class SceneView : CompositeControl
         .WithKey("c", "Clear every body")
         .WithKey("v", "Cycle renderer: wireframe (braille edges), solid (flat-shaded), shaded (point light + edges + AO)")
         .WithKey("e", "Shaded only: cycle silhouettes — off, ink outline, edge glyphs")
+        .WithKey("w", "Shaded only: half-lambert wrapping, which keeps the unlit side legible")
+        .WithKey("u", "Show or hide the sidebar")
         .WithKey("+ / -", "Grow / shrink what gets spawned")
         .WithKey("] / [", "Raise / lower the launch speed");
     #endregion
@@ -361,6 +397,7 @@ public sealed class SceneView : CompositeControl
             case 'c': ClearScene(); return true;
             case 'v': NextRenderer(); return true;
             case 'e': NextEdgeStyle(); return true;
+            case 'w': SetWrapLighting(!(WrapLighting ?? false)); return true;
             case 'm': Spawn.NextMesh(); return true;
             case '+' or '=': Spawn.StepScale(+1); return true;
             case '-' or '_': Spawn.StepScale(-1); return true;

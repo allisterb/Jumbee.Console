@@ -148,6 +148,12 @@ public interface IStyleTheme
     ProgressBarStyle ProgressBar => ProgressBarStyle.Default;
     #endregion
 
+    #region Slider
+    /// <summary>The part styles a <c>Slider</c> composes (label, track fill/empty, thumb, value readout). The thumb
+    /// glyph comes from <see cref="IGlyphTheme.SliderThumb"/>. Defaults to <see cref="SliderStyle.Default"/>.</summary>
+    SliderStyle Slider => SliderStyle.Default;
+    #endregion
+
     #region Frame
     /// <summary>The default border shape for a control frame when none is specified. Defaults to <see cref="BorderStyle.None"/>.</summary>
     BorderStyle FrameBorder => BorderStyle.None;

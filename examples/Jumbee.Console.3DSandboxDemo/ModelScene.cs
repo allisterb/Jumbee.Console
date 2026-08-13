@@ -62,6 +62,14 @@ public sealed class ModelScene : ISceneSource
     #endregion
 
     #region Methods
+    /// <summary>Shows the mesh at <paramref name="index"/>, resetting the transform — after models have been loaded
+    /// while the viewer is running.</summary>
+    public void Reload(int index)
+    {
+        MeshId = Meshes.RegisteredCount == 0 ? 0 : Math.Clamp(index, 0, Meshes.RegisteredCount - 1);
+        ResetTransform();
+    }
+
     /// <summary>Shows the next (or previous) registered mesh.</summary>
     public void Step(int direction)
     {
@@ -79,14 +87,29 @@ public sealed class ModelScene : ISceneSource
         else if (axis == 1) s.Y *= factor;
         else s.Z *= factor;
 
-        Scale = Vector3.Clamp(s, new Vector3(0.25f), new Vector3(4f));
-        Rebuild();
+        SetScale(s);
+    }
+
+    /// <summary>Sets one axis' scale outright — what a sidebar slider does, where the keys multiply.</summary>
+    public void SetScaleAxis(int axis, float value)
+    {
+        var s = Scale;
+        if (axis == 0) s.X = value;
+        else if (axis == 1) s.Y = value;
+        else s.Z = value;
+
+        SetScale(s);
     }
 
     /// <summary>Adjusts the shear of X (and Z) by height.</summary>
-    public void Nudge(float dx, float dz)
+    public void Nudge(float dx, float dz) => SetShear(Shear.X + dx, Shear.Y + dz);
+
+    /// <summary>Sets the shear outright — what a sidebar slider does, where the keys nudge.</summary>
+    public void SetShear(float x, float z)
     {
-        Shear = new Vector2(Math.Clamp(Shear.X + dx, -1.5f, 1.5f), Math.Clamp(Shear.Y + dz, -1.5f, 1.5f));
+        var next = new Vector2(Math.Clamp(x, -MaxShear, MaxShear), Math.Clamp(z, -MaxShear, MaxShear));
+        if (next == Shear) return;
+        Shear = next;
         Rebuild();
     }
 
@@ -96,6 +119,14 @@ public sealed class ModelScene : ISceneSource
         Scale = Vector3.One;
         Shear = Vector2.Zero;
         spin = 0f;
+        Rebuild();
+    }
+
+    private void SetScale(Vector3 scale)
+    {
+        var next = Vector3.Clamp(scale, new Vector3(MinScale), new Vector3(MaxScale));
+        if (next == Scale) return;
+        Scale = next;
         Rebuild();
     }
 
@@ -148,6 +179,13 @@ public sealed class ModelScene : ISceneSource
     /// <summary>World-space radius the model is scaled to. Sized against the camera's default distance so the model
     /// fills most of the viewport rather than sitting in it.</summary>
     public const float ViewRadius = 5.5f;
+
+    /// <summary>The per-axis scale range the keys and the sidebar sliders share.</summary>
+    public const float MinScale = 0.25f;
+    /// <summary>The upper end of <see cref="Scale"/>.</summary>
+    public const float MaxScale = 4f;
+    /// <summary>How far <see cref="Shear"/> may go in either direction on either axis.</summary>
+    public const float MaxShear = 1.5f;
 
     private readonly SceneSnapshot snapshot;
     private float spin;

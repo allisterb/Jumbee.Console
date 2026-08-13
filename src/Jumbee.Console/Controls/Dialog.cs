@@ -224,8 +224,19 @@ public class Dialog : CompositeControl
 
     private void OnDialogLostFocus()
     {
-        // Escape (the overlay's CloseKey) or any other dismissal drops focus; report the cancel result once.
-        if (!_completed) Complete(_cancelResult, hide: false);
+        if (_completed) return;
+
+        // Losing focus is NOT a dismissal, and assuming it was is a trap worth naming: clicking a field inside the
+        // dialog moves focus to that child — a nested composite is its own focus unit, so the dialog itself stops
+        // being the focused control — and this fired, completing the dialog with its cancel result on the FIRST
+        // click inside it. After that `_completed` swallowed every button, so the dialog sat there with OK and
+        // Cancel both dead. Content with no focusable children (the Message/Confirm helpers) never showed it.
+        //
+        // What this is really a backstop for is the overlay dropping the dialog without going through Close, so
+        // ask the overlay that directly instead of inferring it from focus.
+        if (_overlay is { } overlay && overlay.IsShowing && ReferenceEquals(overlay.Top, this)) return;
+
+        Complete(_cancelResult, hide: false);
     }
 
     private void Complete(DialogResult result, bool hide)

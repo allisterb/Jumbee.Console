@@ -34,6 +34,7 @@
     <None Remove="Examples\Viewers\**" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console\SpectreControl.cs" Link="ControlSource\SpectreControl.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Styles\ButtonStyle.cs" Link="ControlSource\ButtonStyle.cs" />
+    <EmbeddedResource Include="..\..\src\Jumbee.Console.Styles\ProgressBarStyle.cs" Link="ControlSource\ProgressBarStyle.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Documents\AsciiDoc\AsciiDocViewer.cs" Link="ControlSource\AsciiDocViewer.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Documents\AsciiDoc\InteractiveAsciiDocEditor.cs" Link="ControlSource\InteractiveAsciiDocEditor.cs" />
     <EmbeddedResource Include="..\..\src\Jumbee.Console.Documents\Markdown\InteractiveMarkdownExtendedEditor.cs" Link="ControlSource\InteractiveMarkdownExtendedEditor.cs" />

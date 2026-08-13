@@ -47,6 +47,32 @@ public interface IGlyphTheme
     ProgressBarGlyphs ProgressBar => ProgressBarGlyphs.Default;
     #endregion
 
+    #region Slider
+    /// <summary>The glyph a <c>Slider</c> draws its thumb with (colours come from <see cref="IStyleTheme.Slider"/>).
+    /// Defaults to <c>"█"</c>.</summary>
+    /// <remarks>Should be one cell wide: the thumb marks a single position on the track, and a wider glyph would
+    /// push the rest of the track out of alignment with the pointer.</remarks>
+    string SliderThumb => "█";
+    #endregion
+
+    #region Files
+    /// <summary>The marker a <c>FileBrowser</c> draws before a folder. Defaults to <c>"▸"</c>.</summary>
+    /// <remarks>Should share a cell width with <see cref="File"/> so names stay aligned down the listing.</remarks>
+    string FolderClosed => "▸";
+
+    /// <summary>The marker a <c>FileBrowser</c> draws before a file. Defaults to a blank of the same width as
+    /// <see cref="FolderClosed"/>, so only folders carry a marker.</summary>
+    string File => " ";
+    #endregion
+
+    #region Menu
+    /// <summary>The marker drawn against a checked <c>MenuItem</c>. Defaults to <c>"✓"</c> (override with
+    /// <c>"*"</c> for an ASCII terminal).</summary>
+    /// <remarks>Its width sets the marker column a menu level reserves once any of its items is checkable, so all
+    /// the labels in that level stay aligned.</remarks>
+    string MenuChecked => "✓";
+    #endregion
+
     #region Selection
     /// <summary>The glyph prefixed to the selected item when a control's <see cref="SelectionStyle"/> is
     /// <see cref="SelectionStyle.Caret"/> (includes its trailing spacing). Defaults to <c>"▶ "</c>.</summary>

@@ -15,6 +15,8 @@ public static class ExampleCatalog
         new ButtonExample(),
         new ProgressBarExample(),
         new FormControlsExample(),
+        new SliderExample(),
+        new FileBrowserExample(),
         new ListBoxExample(),
         new PlotExample(),
         new CanvasExample(),

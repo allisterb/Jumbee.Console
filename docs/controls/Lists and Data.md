@@ -33,12 +33,22 @@ list.SelectionChanged += (_, i) => detail.Markup = Describe(i);
 list.WithFrame();   // ListBox is content-tall; the frame gives it a border and a scrollbar
 ```
 
-Selection is `SelectedIndex` / `SelectedItem`, with `SelectionChanged` as you move and `Committed` on Enter or
-double-click (`Cancelled` on Escape). `AddItem` / `AddItems` / `RemoveItem` / `Clear` maintain the contents, and
-`Items` exposes them.
+Selection is `SelectedIndex` / `SelectedItem`, with `SelectionChanged` as you move and `Committed` when a row is
+acted on (`Cancelled` on Escape). `AddItem` / `AddItems` / `RemoveItem` / `Clear` maintain the contents, and `Items`
+exposes them.
 
-Two properties worth knowing: `HighlightFullWidth` extends the selection bar across the control rather than fitting
-the text, and `SelectionStyle` switches between highlight, underline and caret cues — see
+**A single click commits by default** — it selects the row *and* raises `Committed`, which suits a list whose rows
+are actions. For a list the user should be able to look through before acting on it — a chooser, or a list driving
+a preview pane — set `CommitOnClick = false` and committing then needs a double-click or Enter:
+
+```csharp
+var files = new ListBox(names) { CommitOnClick = false };
+files.SelectionChanged += (_, i) => preview.Show(names[i]);   // just looking
+files.Committed += (_, item) => Open(item.Text);              // double-click or Enter
+```
+
+Two more properties worth knowing: `HighlightFullWidth` extends the selection bar across the control rather than
+fitting the text, and `SelectionStyle` switches between highlight, underline and caret cues — see
 [Selection Controls](Selection%20Controls.md) for what those look like and when a caret gutter matters.
 
 Set `ContextMenu` to get a right-click menu; `ContextMenuOpening` fires first so you can rebuild the items for the

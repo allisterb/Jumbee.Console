@@ -26,6 +26,17 @@ public sealed class MenuItem
     /// <summary>Whether the item is a non-selectable divider row.</summary>
     public bool IsSeparator { get; init; }
 
+    /// <summary>The item's check state, or <see langword="null"/> (the default) for an item that is not
+    /// checkable.</summary>
+    /// <remarks>
+    /// A menu level containing any checkable item reserves a marker column across <em>all</em> its rows, so labels
+    /// stay aligned whether or not anything is currently checked — which is why this is nullable rather than a plain
+    /// <see langword="bool"/>: <see langword="false"/> means "checkable, currently off" and reserves the column,
+    /// <see langword="null"/> means "not that kind of item". Use it for a mode a menu both sets and reports (which
+    /// renderer is live, say). The glyph comes from <see cref="IGlyphTheme.MenuChecked"/>.
+    /// </remarks>
+    public bool? Checked { get; init; }
+
     /// <summary>Child items shown as a submenu to the right when this item is highlighted or chosen.</summary>
     /// <remarks>When set, the item opens the submenu instead of running its <see cref="Action"/>. Nest to any
     /// depth.</remarks>
@@ -132,6 +143,7 @@ public class ContextMenu : Control
         _mutedStyle = UI.StyleTheme.TextMuted;
         _selectedStyle = UI.StyleTheme.Selection;
         _borderStyle = UI.StyleTheme.BorderText;
+        _checkedGlyph = UI.GlyphTheme.MenuChecked;
     }
 
     /// <inheritdoc/>
@@ -355,20 +367,32 @@ public class ContextMenu : Control
                 continue;
             }
             var style = !item.Enabled ? _mutedStyle : (i == lvl.Highlighted ? _selectedStyle : _textStyle);
-            var row = FormatRow(item, cw);
+            var row = FormatRow(item, cw, CheckColumn(lvl.Items));
             for (var x = 0; x < cw; x++) Put(ox + 1 + x, ry, row[x], style);
         }
     }
 
-    // The interior text of a row, exactly <paramref name="cw"/> cells: " label" left, shortcut or a "►" submenu
+    // The interior text of a row, exactly <paramref name="cw"/> cells: " [✓ ]label" left, shortcut or a "►" submenu
     // marker right. Too narrow -> the label is truncated and the right part dropped.
-    private static string FormatRow(MenuItem item, int cw)
+    private string FormatRow(MenuItem item, int cw, int checkColumn)
     {
-        var left = " " + item.Text;
+        // The marker column is reserved for every row once any item in the level is checkable — including plain
+        // ones — so a menu that mixes modes with commands keeps one label column rather than two.
+        var mark = checkColumn == 0 ? "" : (item.Checked == true ? _checkedGlyph : "").PadRight(checkColumn);
+        var left = " " + mark + item.Text;
         var right = item.HasSubmenu ? "► " : (string.IsNullOrEmpty(item.Shortcut) ? "" : item.Shortcut + " ");
         if (left.Length + right.Length > cw)
             return left.Length > cw ? left[..cw] : left.PadRight(cw);
         return left + new string(' ', cw - left.Length - right.Length) + right;
+    }
+
+    // The cells the check marker reserves in a level: 0 when nothing in it is checkable, else the glyph's width
+    // plus a separating space.
+    private int CheckColumn(IReadOnlyList<MenuItem> items)
+    {
+        foreach (var item in items)
+            if (item.Checked.HasValue) return _checkedGlyph.Length + 1;
+        return 0;
     }
 
     private void Put(int x, int y, char c, Style style)
@@ -389,13 +413,14 @@ public class ContextMenu : Control
         return new Character(content, fg, bg, decoration);
     }
 
-    private static int ContentWidth(IReadOnlyList<MenuItem> items)
+    private int ContentWidth(IReadOnlyList<MenuItem> items)
     {
         var w = 0;
+        var check = CheckColumn(items);
         foreach (var item in items)
         {
             if (item.IsSeparator) continue;
-            var len = item.Text.Length
+            var len = item.Text.Length + check
                 + (item.HasSubmenu ? 2 : (string.IsNullOrEmpty(item.Shortcut) ? 0 : item.Shortcut!.Length + 2));
             w = Math.Max(w, len);
         }
@@ -438,5 +463,6 @@ public class ContextMenu : Control
     private Style _mutedStyle;
     private Style _selectedStyle;
     private Style _borderStyle;
+    private string _checkedGlyph = "✓";
     #endregion
 }

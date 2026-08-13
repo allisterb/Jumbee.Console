@@ -392,6 +392,56 @@ public static class ConsoleSnapshot
     }
 
     /// <summary>
+    /// Drags from (<paramref name="fromX"/>, <paramref name="fromY"/>) to (<paramref name="toX"/>,
+    /// <paramref name="toY"/>) in <paramref name="buffer"/>: press at the start, <paramref name="steps"/> moves
+    /// along the way, release at the end.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Honours mouse capture the way the live path does: if the control takes the capture on press (a splitter, a
+    /// scrollbar thumb, a <c>Slider</c>), every later move and the release go to <em>it</em>, in its own frame,
+    /// with no hit-test — so a drag that wanders off the control still steers it. Without that, a test drag would
+    /// silently retarget whatever cell it passed over, and pass for the wrong reason.
+    /// </para>
+    /// <para>
+    /// The capture origin is computed here from the press hit-test rather than read from <c>ConsoleManager</c>,
+    /// which latches its own from a pointer position this headless path never sets. Returns <see langword="false"/>
+    /// if nothing is under the start point.
+    /// </para>
+    /// </remarks>
+    public static bool Drag(ConsoleBuffer buffer, int fromX, int fromY, int toX, int toY, int steps = 4)
+    {
+        if (!MouseMove(buffer, fromX, fromY) || _mouseContext is not { } start) return false;
+
+        var origin = new Position(fromX - start.RelativePosition.X, fromY - start.RelativePosition.Y);
+        Position Captured(int x, int y) => new(x - origin.X, y - origin.Y);
+
+        start.MouseListener.OnMouseDown(start.RelativePosition);
+
+        for (var i = 1; i <= Math.Max(1, steps); i++)
+        {
+            var x = fromX + ((toX - fromX) * i / Math.Max(1, steps));
+            var y = fromY + ((toY - fromY) * i / Math.Max(1, steps));
+            if (ConsoleGUI.ConsoleManager.MouseCapture is { } holding) holding.OnMouseMove(Captured(x, y));
+            else MouseMove(buffer, x, y);
+        }
+
+        // Read the capture BEFORE the release: the handler that gets it is the one that gives it up.
+        var capture = ConsoleGUI.ConsoleManager.MouseCapture;
+        if (capture is not null)
+        {
+            capture.OnMouseUp(Captured(toX, toY));
+            MouseMove(buffer, toX, toY);   // settle hover where the pointer ended up, as it would be after a real drag
+        }
+        else if (_mouseContext is { } end)
+        {
+            end.MouseListener.OnMouseUp(end.RelativePosition);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Rotates the wheel by <paramref name="delta"/> notches over (<paramref name="x"/>, <paramref name="y"/>) —
     /// negative scrolls up, positive scrolls down.
     /// </summary>

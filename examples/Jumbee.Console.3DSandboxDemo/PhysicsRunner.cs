@@ -325,6 +325,34 @@ public sealed class PhysicsScene : IDisposable
         handle.LinearVelocity = velocity;
     }
 
+    /// <summary>
+    /// Applies the sidebar's world settings: the world's gravity vector, every existing shape's friction and
+    /// restitution, and every existing body's damping — and remembers them as the defaults for whatever is spawned
+    /// next.
+    /// </summary>
+    /// <remarks>
+    /// Box3D keeps friction and restitution on the <b>shape</b> and damping on the <b>body</b>, and neither is a
+    /// world-level default, so changing them means walking what already exists. That walk is why this is posted to
+    /// the physics thread rather than being set from the slider's own callback: a <c>Shape</c> handle resolves
+    /// against the native world, which only this thread may touch.
+    /// </remarks>
+    public void ApplyParameters(float gravity, float friction, float bounce, float drag)
+    {
+        world.Gravity = new Vector3(0, -gravity, 0);
+        (material, damping) = ((friction, bounce), drag);
+
+        foreach (var body in bodies)
+        {
+            var handle = body.Handle;
+            handle.LinearDamping = drag;
+            handle.AngularDamping = drag;
+            ApplyMaterial(handle);
+            // A change nobody feels is a change that looks broken: a sleeping body would sit there with its new
+            // bounce until something else woke it.
+            if (drag > 0 || !handle.IsAwake) handle.IsAwake = true;
+        }
+    }
+
     /// <summary>Advances the world one fixed step, first steering any held body toward its target.</summary>
     public void Step(float dt)
     {
@@ -351,8 +379,27 @@ public sealed class PhysicsScene : IDisposable
         var id = ++nextId;
         handle.UserData = (ulong)id;
         if (velocity != Vector3.Zero) handle.LinearVelocity = velocity;
+        handle.LinearDamping = damping;
+        handle.AngularDamping = damping;
+        ApplyMaterial(handle);
         bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey, meshId));
         return id;
+    }
+
+    // Every shape on one body takes the current material. A body normally has exactly one shape here, so the span
+    // is stack-allocated rather than pooled; ShapeCount is what sizes it.
+    private void ApplyMaterial(Body handle)
+    {
+        var count = handle.ShapeCount;
+        if (count <= 0) return;
+
+        Span<Shape> shapes = count <= 8 ? stackalloc Shape[count] : new Shape[count];
+        var written = handle.GetShapes(shapes);
+        for (var i = 0; i < written; i++)
+        {
+            shapes[i].Friction = material.Friction;
+            shapes[i].Restitution = material.Bounce;
+        }
     }
 
     private int IndexOf(int id)
@@ -376,6 +423,11 @@ public sealed class PhysicsScene : IDisposable
     private int nextId;
     private int? grabbed;
     private Vector3 grabTarget;
+
+    // The material and damping newly spawned bodies inherit, kept in step with the sidebar by ApplyParameters.
+    // Defaults match SandboxParameters so the two agree before the first slider is touched.
+    private (float Friction, float Bounce) material = (0.6f, 0.3f);
+    private float damping;
     #endregion
 }
 

@@ -10,6 +10,7 @@ The selection family lets users pick and toggle values. It comes in two groups:
 | `RadioSet` | one option from a list | a column of `(●)`/`( )` rows | single-select |
 | `SelectionList` | any options from a list | a column of `[X]`/`[ ]` rows | multi-select |
 | `Select` | one option from a list | one row: the value plus `▼`, options in a pop-up | single-select |
+| `Slider` | a number in a range | one row: a track with a draggable thumb | continuous |
 
 `RadioSet` and `Select` both pick one option from a list; the difference is space. `RadioSet` shows every option
 all the time, which is right for a handful of choices the user should be able to compare. `Select` costs one row
@@ -158,6 +159,63 @@ Because the pop-up uses `UI.Overlay`, which `UI.Start` sets up, there's no overl
 the list is drawn above everything else, so don't rely on the control's own bounds when reasoning about what's on
 screen.
 
+**Width.** By default the closed control fills whatever width its layout offers, with the `▼` at the right edge —
+the form convention, and what lines a column of fields up. The pop-up is always sized to the widest option, so in a
+narrow panel of mixed controls the two don't match and a three-word choice becomes a full-width block of colour.
+`FitContent` closes that gap:
+
+```csharp
+var shape = new Select("box", "sphere", "mesh") { FitContent = true };   // as wide as its list, no wider
+```
+
+Options can change at runtime — `SetOptions` replaces them, keeps the current value selected if it survives, and
+re-sizes the control:
+
+```csharp
+models.SetOptions(LoadedModelNames());
+```
+
+## A number in a range: `Slider`
+
+Everything above picks from a fixed set. `Slider` picks a number: an optional label, a track filled to the current
+value, a thumb at the fill's edge, and an optional readout.
+
+```csharp
+var gravity = new Slider(minimum: 0, maximum: 30, value: 9.8, label: "Gravity");
+gravity.ValueChanged += (_, value) => world.Gravity = value;
+```
+
+Drag the thumb, click anywhere on the track, or use the keyboard: Left/Right (and Up/Down) move by `Step`, Page
+Up/Down by ten of them, Home/End jump to the ends, and the wheel steps while the pointer is over the control. Hold
+Shift with an arrow for a fifth of a step. `Step` defaults to a hundredth of the range.
+
+`ValueChanged` fires only when the value actually moves, and `Value` is always clamped into the range — so setting
+it out of bounds is safe rather than something to guard.
+
+```csharp
+var servings = new Slider(0, 12, 4, "Servings")
+{
+    Step = 1,
+    SnapToStep = true,     // every path quantises, including a drag
+    ValueFormat = "F0",    // "4" rather than "4.00"
+};
+```
+
+**Aligning a stack of them.** Set `LabelWidth` to a common value and every track starts in the same column,
+whatever the labels are:
+
+```csharp
+foreach (var s in new[] { gravity, friction, bounce })
+    s.LabelWidth = 10;
+```
+
+The readout is right-aligned in a field wide enough for either end of the range, so the track keeps its width as
+the digits change — `9.99` and `10.00` do not shift it.
+
+The thumb occupies one whole cell, so a column of sliders reads as a row of controls rather than as a bar chart.
+Only the thumb's *position* rounds to a cell; the value itself stays continuous, so a drag still reports the
+fraction it landed on.
+
 ## Layout, focus, and frames
 
 **Placement.** Add controls to a layout such as `Grid` and pass it to `UI.Start`:
@@ -208,6 +266,7 @@ var cb = new Checkbox("Custom")
 |------------|------------------|
 | `Checkbox` / `RadioButton` / `Switch` | `LabelStyle`, `AccentStyle` (checked), `MutedStyle` (unchecked), `HoverStyle` |
 | `RadioSet` / `SelectionList` | `TextStyle`, `AccentStyle` (selected/checked mark), `MutedStyle`, `SelectionStyle` (highlighted row) |
+| `Slider` | `Style` (a `SliderStyle` of label/fill/track/thumb/value), `ThumbGlyph`, `HoverStyle`, `FocusedStyle` |
 
 Explicit values like these survive a runtime theme switch; everything you leave unset keeps following the theme.
 
@@ -219,6 +278,7 @@ Explicit values like these survive a runtime theme switch; everything you leave 
 | `RadioSet` | click a row | Up / Down move, Enter / Space select |
 | `SelectionList` | click a row | Up / Down move, Enter / Space toggle |
 | `Select` | click to open, click an option | Enter / Space opens, Up / Down move, Enter selects, Esc cancels |
+| `Slider` | drag the thumb, click the track, wheel | Arrows step (Shift = fine), PgUp / PgDn by ten, Home / End to the ends |
 
 Double-clicking a toggle counts as two activations (e.g. a checkbox ends where it started), so rapid clicks
 behave predictably.

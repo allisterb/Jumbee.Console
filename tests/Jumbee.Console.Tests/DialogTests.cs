@@ -1,5 +1,8 @@
 namespace Jumbee.Console.Tests;
 
+using System;
+using System.Collections.Generic;
+
 using ConsoleGUI.Input;
 
 using Jumbee.Console;
@@ -185,6 +188,52 @@ public class DialogTests
         Send(overlay, K(ConsoleKey.Enter));   // activate the focused (OK) button
 
         Assert.Equal(DialogResult.Ok, result);
+    }
+
+    // Regression: the dialog used to treat ANY loss of focus as a dismissal. Clicking a field inside it moves focus
+    // to that field — a nested composite is its own focus unit — so the dialog silently completed with its cancel
+    // result on the first click, and every button afterwards was a no-op with the dialog still on screen.
+    [Fact]
+    public void ClickingInsideTheContent_DoesNotDismissTheDialog()
+    {
+        ConsoleSnapshot.ResetMouse();
+        var overlay = Host();
+
+        var list = new ListBox("alpha", "beta");
+        var content = new FormContent(list);
+        var results = new List<DialogResult>();
+        var d = new Dialog("Pick", content, DialogButtons.OkCancel);
+        d.Completed += (_, r) => results.Add(r);
+        d.Show();
+
+        var buffer = ConsoleSnapshot.Render(overlay, 60, 20);
+        var lines = ConsoleSnapshot.ToLines(buffer);
+        var row = Array.FindIndex(lines, l => l.Contains("beta"));
+        Assert.True(row >= 0, "the list content did not render");
+        Assert.True(ConsoleSnapshot.Click(buffer, lines[row].IndexOf("beta", StringComparison.Ordinal), row));
+
+        Assert.Empty(results);              // still open, nothing reported
+        Assert.True(overlay.IsShowing);
+
+        // And the buttons still work afterwards, which is the part that was actually dead.
+        buffer = ConsoleSnapshot.Render(overlay, 60, 20);
+        lines = ConsoleSnapshot.ToLines(buffer);
+        var okRow = Array.FindIndex(lines, l => l.Contains("OK"));
+        Assert.True(ConsoleSnapshot.Click(buffer, lines[okRow].IndexOf("OK", StringComparison.Ordinal), okRow));
+
+        Assert.Equal([DialogResult.Ok], results);
+        Assert.False(overlay.IsShowing);
+    }
+
+    // A composite wrapping one focusable child — the shape the docs recommend for dialog content, and the shape
+    // that exposed the bug.
+    private sealed class FormContent : CompositeControl
+    {
+        public FormContent(Control child)
+        {
+            Height = 4;
+            SetContent(new VerticalStackPanel(child));
+        }
     }
     #endregion
 }

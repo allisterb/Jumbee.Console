@@ -84,4 +84,70 @@ public class MenuBarTests
 
         Assert.False(overlay.IsShowing);
     }
+
+    // MenuItem is immutable, so a menu that reports state has to be rebuilt; the Func overload is what makes that
+    // possible without recreating the bar.
+    [Fact]
+    public void DynamicMenu_RebuildsItsItemsEachTimeItOpens()
+    {
+        var mode = "wireframe";
+        var bar = new MenuBar().Add("Render", () =>
+            [
+                new MenuItem("wireframe") { Checked = mode == "wireframe" },
+                new MenuItem("solid") { Checked = mode == "solid" },
+            ]);
+        var overlay = new Overlay(new Grid([1], [40], [[bar]]));
+        UI.Overlay = overlay;
+        ConsoleSnapshot.Render(overlay, 40, 12);
+
+        bar.OpenActive();
+        var first = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(overlay, 40, 12));
+        Assert.Contains(first, l => l.Contains('✓') && l.Contains("wireframe"));
+        Assert.DoesNotContain(first, l => l.Contains('✓') && l.Contains("solid"));
+
+        overlay.Hide();
+        mode = "solid";
+        bar.OpenActive();
+        var second = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(overlay, 40, 12));
+        Assert.Contains(second, l => l.Contains('✓') && l.Contains("solid"));
+        Assert.DoesNotContain(second, l => l.Contains('✓') && l.Contains("wireframe"));
+    }
+
+    // A level that has any checkable item reserves the marker column on every row, so the labels of plain commands
+    // in the same menu line up with the checkable ones rather than sitting a column to their left.
+    [Fact]
+    public void CheckColumn_AlignsEveryRowInTheLevel()
+    {
+        var bar = new MenuBar().Add("View",
+            new MenuItem("Zoom in"),
+            new MenuItem("Show grid") { Checked = true },
+            new MenuItem("Show axes") { Checked = false });
+        var overlay = new Overlay(new Grid([1], [40], [[bar]]));
+        UI.Overlay = overlay;
+        ConsoleSnapshot.Render(overlay, 40, 12);
+        bar.OpenActive();
+
+        var lines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(overlay, 40, 12));
+        var zoom = lines.Single(l => l.Contains("Zoom in"));
+        var grid = lines.Single(l => l.Contains("Show grid"));
+        var axes = lines.Single(l => l.Contains("Show axes"));
+
+        Assert.Equal(grid.IndexOf("Show grid", StringComparison.Ordinal), axes.IndexOf("Show axes", StringComparison.Ordinal));
+        Assert.Equal(grid.IndexOf("Show grid", StringComparison.Ordinal), zoom.IndexOf("Zoom in", StringComparison.Ordinal));
+        Assert.Contains('✓', grid);
+        Assert.DoesNotContain('✓', axes);
+    }
+
+    // Nothing checkable: no column reserved, so an ordinary menu is not silently widened by the feature.
+    [Fact]
+    public void CheckColumn_IsAbsentWhenNothingIsCheckable()
+    {
+        var (bar, overlay) = Build();
+        ConsoleSnapshot.Render(overlay, 40, 12);
+        bar.OpenActive();
+
+        var lines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(overlay, 40, 12));
+        var open = lines.Single(l => l.Contains("Open"));
+        Assert.Equal(2, open.IndexOf("Open", StringComparison.Ordinal));   // border + the single leading space
+    }
 }

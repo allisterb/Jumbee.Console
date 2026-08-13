@@ -97,6 +97,19 @@ public partial class ListBox : RenderableControl
     /// right-clicked row.</remarks>
     public ContextMenu? ContextMenu { get; set; }
 
+    /// <summary>Whether a single click <see cref="Committed">commits</see> the row it selects. Default
+    /// <see langword="true"/>.</summary>
+    /// <remarks>
+    /// Set <see langword="false"/> for a list the user should be able to look through before acting on it — a file
+    /// chooser, a picker with a preview pane — where a click should only <em>select</em>. Committing then needs a
+    /// double-click or Enter, which is the usual desktop split.
+    /// </remarks>
+    public bool CommitOnClick
+    {
+        get => _commitOnClick;
+        set => SetAtomicProperty(ref _commitOnClick, value);
+    }
+
     /// <summary>Always <see langword="true"/>: the list handles its own selection keys. No opt-in needed — unlike
     /// the base default, this is on.</summary>
     public override bool HandlesInput => true;
@@ -352,14 +365,22 @@ public partial class ListBox : RenderableControl
         var index = ItemIndexAtRow(position.Y);
         if (index < 0) return;
         SelectedIndex = index;
-        Commit();
+        if (_commitOnClick) Commit();
     }
 
     // A fast double right-click still just (re)opens the menu rather than committing underneath it.
     /// <inheritdoc/>
     protected override void OnDoubleClick(Position position)
     {
-        if (UI.MouseButton == TerminalMouseButton.Right) OpenContextMenu(position.Y);
+        if (UI.MouseButton == TerminalMouseButton.Right) { OpenContextMenu(position.Y); return; }
+
+        // Only when a single click doesn't already commit — otherwise the first click of the pair has committed and
+        // doing it again here would fire twice for one gesture.
+        if (_commitOnClick) return;
+        var index = ItemIndexAtRow(position.Y);
+        if (index < 0) return;
+        SelectedIndex = index;
+        Commit();
     }
 
     private void Commit()
@@ -554,6 +575,7 @@ public partial class ListBox : RenderableControl
     private SelectionStyle _selectionStyle;
     private string _selectionCaret = "";
     private bool _highlightFullWidth;
+    private bool _commitOnClick = true;
     // Cached per-item row layout (see EnsureLayout): cumulative row offsets, recomputed when the item set/content
     // (_itemsVersion) changes. Item heights are width-independent, so the layout doesn't depend on the control width.
     private int[] _offsets = [0];

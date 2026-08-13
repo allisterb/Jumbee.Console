@@ -44,22 +44,20 @@ public sealed class SceneFooter : Control
         }
 
         var s = snapshot;
-        var spawn = view.Spawn;
 
-        // Line 1 is the run and the spawn settings -- everything that changes. Kept under ~90 columns so it survives
-        // a narrow terminal: an earlier version ran to ~110 and silently clipped the selection readout off the end,
-        // which looked exactly like selection not working.
+        // Line 1 is the run state and the selection. The sidebar carries the same numbers in more detail, but the
+        // sidebar can be hidden (`u`) and this cannot, so it stays the one readout that is always on screen -- which
+        // is also why the spawn settings moved out of it, since those have nowhere else to be shown but there.
         var edges = view.Edges is { } e and not SilhouetteStyle.None ? $"/{e.ToString().ToLowerInvariant()}" : "";
         var status = $" {(paused ? "PAUSED" : "RUN   ")} {view.Renderer.Name}{edges}  " +
                      $"{s?.Count ?? 0} bodies · {s?.AwakeCount ?? 0} awake  t={s?.SimTime ?? 0:F1}s  " +
-                     $"step {s?.StepMilliseconds ?? 0:F2}ms  " +
-                     $"spawn {spawn.ShapeName} x{spawn.Scale:F2}  " +
-                     $"launch {spawn.LaunchSpeed:F1}";
+                     $"step {s?.StepMilliseconds ?? 0:F2}ms  │ {Selection(s)}";
 
-        // Line 2 leads with the selection so it is never the thing that gets clipped, then fills the rest with key
-        // reminders in falling order of usefulness. F1 has the full list, so losing the tail of this is survivable.
-        var line2 = $" {Selection(s)}  │ drag orbit · click select · n drop · f fire · b shape · v render · " +
-                    "e edge · m mesh · +- size · [] speed · x del · c clear · space pause · . step · r reset · F1 · q quit";
+        // Line 2 is the short list, not the full one: the menu bar now carries every command by name and F1 has the
+        // complete key list, so this is down to what a user should not have to go looking for. An earlier version
+        // ran past 120 columns and clipped mid-word, which reads as a rendering bug rather than as a long line.
+        const string line2 = " drag orbit · click select · n drop · f fire · x del · space pause · " +
+                             "u sidebar · F1 keys · q quit";
 
         WriteRow(0, status, new Color(200, 205, 215), new Color(28, 30, 38));
         WriteRow(1, line2, new Color(140, 146, 160), new Color(22, 24, 30));
@@ -78,8 +76,8 @@ public sealed class SceneFooter : Control
                      $"scale {model.Scale.X:F2},{model.Scale.Y:F2},{model.Scale.Z:F2}  " +
                      $"shear {model.Shear.X:+0.00;-0.00;0.00},{model.Shear.Y:+0.00;-0.00;0.00}";
 
-        const string Keys = " drag orbit · wheel zoom · [] model · xyz shrink · XYZ stretch · ,. ;' shear · " +
-                            "0 reset · p spin · v render · e edge · F1 help · q quit";
+        const string Keys = " drag orbit · wheel zoom · [] model · xyz/XYZ scale · ,. ;' shear · 0 reset · " +
+                            "u sidebar · F1 keys · q quit";
 
         WriteRow(0, status, new Color(200, 205, 215), new Color(28, 30, 38));
         WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));

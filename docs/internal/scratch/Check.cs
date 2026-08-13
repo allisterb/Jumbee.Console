@@ -28,6 +28,11 @@ var W = sizeArg is null ? 100 : int.Parse(sizeArg[0]);
 var H = sizeArg is null ? 34 : int.Parse(sizeArg[1]);
 var failures = 0;
 
+// --- M3: the shell -------------------------------------------------------------------------------------------
+// Drives SandboxShell -- the REAL assembly Program.cs uses, not a rebuild of it -- and checks the claim the
+// sidebar exists to make: that a key and its widget always agree, in both directions.
+if (args.Contains("--shell")) return Render3d.ShellChecks.Run(W, H, args);
+
 void Check(string what, bool ok, string? detail = null)
 {
     Console.WriteLine($"  {(ok ? "PASS" : "FAIL")}  {what}{(detail is null ? "" : $"  [{detail}]")}");

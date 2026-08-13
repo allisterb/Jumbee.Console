@@ -652,6 +652,128 @@ the worse place for it — a startup pause reads as loading, a mid-interaction s
 **M3 — UI.** Sidebar panels (mode, params, spawn, inspector showing the selected body's mass/velocity/sleep
 state), footer key hints, F1 help via `HelpInfo`.
 
+### M3 result — the UI, and what it demanded from the library (2026-08-10)
+
+**The scope grew, deliberately, and the reason is the point of the milestone.** Inertia's sidebar is a readout;
+this one is a control surface. Every action that had a key binding now also has a mouse route, because the argument
+the demo is making is not "a terminal can draw 3D" — it is that a 60 fps z-buffered viewport is **not a special
+case**: ordinary controls sit beside it, on the same UI thread, in the same layout, and neither gives anything up.
+A sidebar you can only read does not make that argument.
+
+Shipped: `SandboxShell` (assembles both scenes), `SidebarPanel` and `ModelSidebarPanel`, `SceneMenu`,
+`SandboxParameters`, plus `PhysicsScene.ApplyParameters`. The shell is
+`DockPanel(Top, menu, DockPanel(Bottom, footer, DockPanel(Right, sidebar, view)))` — nested docks, never a `Grid`.
+
+**Cost, and the result that matters** (200×50, 11 bodies, orbiting camera; bytes exact, times median of 120):
+
+| | scene | paint | emit | total | ANSI, with shell | ANSI, viewport alone (M2.5) |
+|---|---|---|---|---|---|---|
+| wireframe | 18 µs | 363 µs | 898 µs | 1.28 ms (8%) | **11,598 B** | 12,929 B |
+| solid | 305 µs | 117 µs | 846 µs | 1.27 ms (8%) | **11,818 B** | 12,028 B |
+| shaded | 1199 µs | 132 µs | 957 µs | 2.29 ms (14%) | **14,738 B** | 17,452 B |
+
+**A menu bar, a 32-column sidebar of live widgets and a two-line footer make the frame *cheaper*, not dearer.**
+Every renderer emits fewer bytes than the bare viewport did. The reason is M0.1's model playing out again: the
+sidebar replaces 32 columns of continuously-changing 3D with static, high-coherence text that mostly does not
+change between frames, and the compositor emits nothing for it. The widgets cost real paint time only when a value
+moves. Whatever the objection to putting UI beside a 3D viewport is, it is not the frame budget.
+
+**Keys and widgets agree because neither knows about the other.** The state objects own the truth and raise a
+change event; a widget writes to the state, and the panel reads it back. A `syncing` flag makes a widget's own
+change handler inert while the panel is writing into it, which is what stops the round trip looping. Both
+directions are asserted headlessly, and the second one against *what is on screen* rather than the object: set a
+parameter, then parse the value back out of the slider's rendered readout.
+
+**Four library gaps, all closed, all found by building this:**
+
+1. **No draggable value control.** `Gauge` and `ProgressBar` are display-only. Added `Slider` (+ `SliderStyle`,
+   `IStyleTheme.Slider`, `IGlyphTheme.SliderThumb`), with docs, an example and 16 tests.
+2. **`MenuBar` items were fixed at `Add`.** `MenuItem` is immutable, so a checkmark against the active renderer
+   could never update. Added `MenuBar.Add(title, Func<MenuItem[]>)`, rebuilt at open time, and
+   `MenuItem.Checked` (a `bool?` — `null` means "not that kind of item", which is what lets a level reserve the
+   marker column only when it has one).
+3. **`Tree` could not be populated lazily** — no expand event, so `IdeDemo` walks whole directories eagerly and a
+   drive-rooted tree was not viable. Added `Tree.NodeExpanding` and made `Tree.SelectNode` public.
+4. **`Select` options were fixed for life.** A drop-down over a list that changes at runtime (models loaded from
+   the new file browser) had no way to update. Added `Select.SetOptions`.
+
+And one addition to the test surface: **`ConsoleSnapshot.Drag`**, which honours mouse capture the way the live path
+does. Without it a drag test silently retargets whatever cell it passes over and passes for the wrong reason.
+
+**Two traps worth recording.**
+
+*Judging from a PNG changed the Slider's design.* The first implementation drew the thumb with the eighth-block
+sub-cell ramp, exactly as `ProgressBar` draws its fill edge, and every test passed. The image showed why that is
+wrong: a sub-cell marker is one eighth of a cell wide at some values and a full cell at others, so a stack of
+sliders reads as a ragged bar chart rather than a row of controls you can grab. The thumb is now a whole cell.
+Nothing is lost — only the *drawing* quantises; the value stays continuous.
+
+*A control cannot scroll to a row it has just made reachable.* The file browser first rooted its tree at the
+machine's drives and revealed the current path. Expanding the chain is what makes the tree tall enough to scroll,
+but a frame clamps its scroll offset against the content height it last **measured** — so a scroll issued in the
+same layout pass is dropped to zero, and the next pass computes the row from the layout before the expansion. Two
+wrong answers, both silent. (A self-inflicted variant came first: an explicit `Height` on the tree pins the control
+to that many rows, so the frame's content can never exceed its viewport and the pane will not scroll at all.) The
+fix was to stop needing it — see below.
+
+### M3.5 — `FileBrowser`, and the tree that roots itself where you are
+
+The demo chose its models with a command-line argument and could not change them once running, which is the wrong
+shape for a browser. `FileBrowser` (library) is a two-pane modal chooser: a lazily-populated directory `Tree`, the
+listing in a `ListBox`, a path field and a filter drop-down, with `OpenFile`/`OpenDirectory` helpers that wrap it in
+a `Dialog`. `Scene ▸ Load model…` registers an `.obj` at runtime and points the spawn keys at it; `Model ▸ Open…`
+re-resolves a whole directory through the existing `ModelLibrary.Resolve`.
+
+**The tree is rooted at the directory being listed, not at the machine's drives**, and that is a design decision
+rather than a retreat from the scrolling problem above. A drive-rooted tree spends its 26 columns on forty sibling
+folders you did not ask about, needs deep-path reveal machinery to be useful at all, and puts unreadable truncated
+names in a narrow pane. Rooted at the current directory it is a drill-down of where you are, always in view, and
+the `..` row and the path field are what "somewhere else" means. Re-rooting on every navigation also removes the
+reveal, the scroll-to and the layout race in one go.
+
+Enumeration is guarded everywhere: `Directory.GetDirectories(@"C:\")` throws on `System Volume Information`, so an
+unreadable directory shows a message in the pane instead of throwing out of a paint.
+
+#### The bug the first real run found, which was in `Dialog` all along
+
+Reported as "clicking OK does nothing, and neither does Cancel". It was **two** faults stacked, and the first one
+hid the second.
+
+1. **`Dialog` treated any loss of focus as a dismissal.** Clicking a field inside a dialog moves focus to that
+   child — a nested composite is its own focus unit, so the dialog itself stops being the focused control — and the
+   lost-focus handler completed the dialog with its cancel result on the **first click inside it**. `_completed`
+   then swallowed every button, so the dialog sat on screen with OK and Cancel both dead. It had never shown up
+   because `Dialog.Message`/`Confirm` have no focusable content, and the existing tests drive the buttons by
+   keyboard. The handler now asks the overlay whether it still holds this dialog, which is what it actually wanted
+   to know.
+2. **`ListBox` commits on a single click.** With (1) fixed, clicking a file in the browser immediately closed the
+   dialog and loaded it — you could not look at a listing without opening something. That is right for a list of
+   actions and wrong for a chooser, so `ListBox.CommitOnClick` (default `true`, preserving every existing consumer)
+   opts out and the browser sets it: a click selects, a double-click or Enter commits.
+
+Worth noting the shape of this: **every test passed, and a headless click test passed too.** What found it was
+running the app. The regression tests now cover both — a click inside dialog content, and select-versus-activate in
+the browser.
+
+#### The sidebar spaces itself, or doesn't
+
+Also from running it: the panels stacked flush read as one undifferentiated slab, and it is genuinely hard to tell
+which slider track belongs to which label. Every interactive control now has a blank row under it (readout text
+stays flush — it is one block, not a set of things to aim at), which costs 10 rows and takes the sidebar to 40.
+
+That does not fit a 40-row terminal, and the failure mode is bad: the Inspector, with Delete and Clear, is clipped
+off the bottom and reads as not existing. So `SidebarPanel` switches layout on its own — spaced at
+`ActualHeight >= 40`, compact below it — rebuilt from `Control_OnInitialization` and **guarded on the mode
+changing, not on the height**, since that override runs on every re-layout and calling `SetContent` from inside one
+that changed nothing is how a layout starts chasing its own tail. The demo now asks for 44 rows so a fresh window
+gets the spaced form. Verified both ways from PNGs at 120×44 and 100×36.
+
+**A fifth library gap, from the same look:** `Select` computed a preferred width from its options and used it for
+the **pop-up**, while the closed control padded to whatever width the layout offered — so the two never matched,
+and a three-word choice was a full-width block of colour next to a slider. Filling the column is right for a form
+and wrong for a narrow panel of mixed controls, so it is now `Select.FitContent` (default `false`, so no existing
+consumer moves) and the sidebars opt in.
+
 **M4 — polish.** Colour modes (velocity / mass / sleep), motion trails, scene presets: stack, tower, pyramid,
 domino run, wrecking ball.
 
@@ -659,7 +781,9 @@ domino run, wrecking ball.
 
 ## Expected library gaps
 
-Predicted, so they can be recognised rather than worked around silently:
+Predicted, so they can be recognised rather than worked around silently. **M3 found four the list did not
+predict** — no draggable value control, fixed `MenuBar` items, no `Tree` expand event, fixed `Select` options —
+all now closed; see the M3 result above.
 
 1. **`Canvas` batch API** — confirmed and approved for a proper fix, but an optimisation rather than a blocker;
    see above for the corrected cost model.

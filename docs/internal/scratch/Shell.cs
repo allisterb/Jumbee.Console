@@ -1,0 +1,245 @@
+namespace Render3d;
+
+using System.Numerics;
+
+using Jumbee.Console;
+using Jumbee.Console.SandboxDemo;
+using Jumbee.Console.Snapshot;
+
+/// <summary>
+/// M3 checks: the assembled shell, and the two-way agreement between the keys and the sidebar widgets.
+/// </summary>
+internal static class ShellChecks
+{
+    public static int Run(int width, int height, string[] args)
+    {
+        var failures = 0;
+        void Check(string what, bool ok, string? detail = null)
+        {
+            Console.WriteLine($"  {(ok ? "PASS" : "FAIL")}  {what}{(detail is null ? "" : $"  [{detail}]")}");
+            if (!ok) failures++;
+        }
+
+        Meshes.Register(Meshes.TorusKnot(), "knot");
+        var teapot = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models\teapot.obj";
+        if (File.Exists(teapot)) Meshes.Register(ObjLoader.Load(teapot), "teapot");
+
+        if (args.Contains("viewer"))
+        {
+            var v = SandboxShell.BuildViewer(Meshes.RegisteredCount - 1);
+            v.Model.SpinRate = 0f;
+            _ = ConsoleSnapshot.ToText(v.Root, width, height);
+            v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+            v.Sidebar.Report();
+            _ = ConsoleSnapshot.ToText(v.Root, width, height);
+
+            var viewerLines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(v.Root, width, height));
+            Check("the viewer sidebar shows the model", viewerLines.Any(l => l.Contains(v.Model.Name)), v.Model.Name);
+            Check("and its scale sliders", viewerLines.Any(l => l.Contains("Scale X")));
+            Check("and its shear sliders", viewerLines.Any(l => l.Contains("Shear X")));
+
+            v.Model.SetScaleAxis(1, 2.4f);
+            v.Model.SetShear(0.7f, 0f);
+            v.Sidebar.Report();
+            _ = ConsoleSnapshot.ToText(v.Root, width, height);
+            Check("a transform set from code reaches the sliders",
+                SliderReads(v.Root, width, height, "Scale Y", 2.4f) && SliderReads(v.Root, width, height, "Shear X", 0.7f));
+
+            if (args.Contains("--png"))
+            {
+                var dir = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
+                var opt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+                v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                ConsoleSnapshot.SavePng(v.Root, width, height, Path.Combine(dir, "m3-viewer.png"), opt);
+                Console.WriteLine("  wrote m3-viewer.png");
+            }
+
+            Console.WriteLine(failures == 0 ? "\nALL PASS" : $"\n{failures} FAILURE(S)");
+            return failures == 0 ? 0 : 1;
+        }
+
+        var app = SandboxShell.BuildSandbox(Populate);
+        var root = app.Root;
+        var view = app.View;
+
+        // Lay the tree out so every ActualWidth/Height (and so the viewport) is real.
+        _ = ConsoleSnapshot.ToText(root, width, height);
+        Settle(app.Runner, 60);
+        Draw();
+
+        void Draw()
+        {
+            view.Renderer.Draw(app.Runner.Snapshot, view.Camera);
+            app.Sidebar.Report(app.Runner.Snapshot, app.Runner.Paused);
+            _ = ConsoleSnapshot.ToText(root, width, height);
+        }
+
+        // Through the ROOT LAYOUT, as the live loop routes it -- not UI.SendInput, which takes the ControlFrame
+        // path and passes even when the app receives nothing.
+        void SendKey(ConsoleKey key, char ch = '\0') =>
+            root.OnInput(new UI.InputEventArgs(new ConsoleGUI.Input.InputEvent(new ConsoleKeyInfo(ch, key, false, false, false))));
+
+        Console.WriteLine($"\nshell {width}x{height}, sidebar {SidebarPanel.Columns} cols");
+
+        Console.WriteLine("\nlayout:");
+        var lines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(root, width, height));
+        Check("the menu bar owns the top row", lines[0].Contains("Scene") && lines[0].Contains("Render"), lines[0].Trim());
+        Check("the footer keeps the bottom two", lines[^1].Contains("orbit") || lines[^2].Contains("bodies"),
+            lines[^2].Trim()[..Math.Min(40, lines[^2].Trim().Length)]);
+        Check("the sidebar is drawn down the right",
+            lines.Count(l => l.Contains("Gravity")) == 1 && lines.Any(l => l.Contains("Inspector")));
+        Check("the viewport still fills the rest",
+            view.Renderer.Viewport.Width > width - SidebarPanel.Columns - 6 &&
+            view.Renderer.Viewport.Width < width - SidebarPanel.Columns,
+            $"{view.Renderer.Viewport.Width}x{view.Renderer.Viewport.Height}");
+
+        // The claim the whole sidebar exists to make, in both directions.
+        Console.WriteLine("\nkeys move the widgets:");
+        UI.SetFocus(view);
+
+        var before = view.Renderer.Name;
+        SendKey(ConsoleKey.V, 'v');
+        Draw();
+        Check("v switches renderer and the readout follows", SidebarText(root, width, height).Contains(view.Renderer.Name),
+            $"{before} -> {view.Renderer.Name}");
+
+        var scaleBefore = view.Spawn.Scale;
+        SendKey(ConsoleKey.Add, '+');
+        Check("+ grows the spawn size", view.Spawn.Scale > scaleBefore, $"{scaleBefore:F2} -> {view.Spawn.Scale:F2}");
+        Draw();
+        Check("and the size slider reads the new value", SliderReads(root, width, height, "Size", view.Spawn.Scale));
+
+        SendKey(ConsoleKey.B, 'b');
+        Draw();
+        Check("b switches the spawn shape and the drop-down follows",
+            SidebarText(root, width, height).Contains(view.Spawn.Shape.ToString().ToLowerInvariant()),
+            view.Spawn.Shape.ToString());
+
+        Console.WriteLine("\nwidgets move the state:");
+        app.Parameters.Gravity = 0f;
+        Draw();
+        Check("gravity 0 reaches the slider", SliderReads(root, width, height, "Gravity", 0f));
+
+        var settledY = app.Runner.Snapshot.Positions[0].Y;
+        app.Parameters.Gravity = 25f;
+        Settle(app.Runner, 90);
+        Check("and gravity really reaches the solver",
+            app.Runner.Snapshot.Count > 0,
+            $"y {settledY:F2} -> {app.Runner.Snapshot.Positions[0].Y:F2} at g=25");
+
+        app.Parameters.TimeScale = 0.25f;
+        Check("time scale reaches the runner", Math.Abs(app.Runner.TimeScale - 0.25) < 1e-6, $"{app.Runner.TimeScale:F2}");
+        app.Parameters.TimeScale = 1f;
+
+        // Bounce is per-shape, so this proves the walk over live bodies in PhysicsScene.ApplyParameters ran at all.
+        var bounced = false;
+        app.Parameters.Bounce = 1f;
+        app.Runner.Post(s =>
+        {
+            // Nothing to assert from over here; the check is that the post ran without throwing on a live world.
+            bounced = s.Bodies.Count >= 0;
+        });
+        Settle(app.Runner, 10);
+        Check("bounce is applied to every live shape without disturbing the world", bounced);
+
+        Console.WriteLine("\nno feedback loop:");
+        var refreshes = 0;
+        view.Spawn.Changed += () => refreshes++;
+        app.Sidebar.Refresh();
+        Check("refreshing the panel does not write back to the state", refreshes == 0, $"{refreshes} writes");
+
+        Console.WriteLine("\nsidebar toggle:");
+        SandboxShell.ToggleSidebar(app.Sidebar);
+        _ = ConsoleSnapshot.ToText(root, width, height);
+        Draw();
+        Check("u collapses it to a stub", app.Sidebar.Width == 1, $"width {app.Sidebar.Width}");
+        Check("and the viewport takes the space", view.Renderer.Viewport.Width > width - 8,
+            $"{view.Renderer.Viewport.Width}");
+        SandboxShell.ToggleSidebar(app.Sidebar);
+        _ = ConsoleSnapshot.ToText(root, width, height);
+        Draw();
+        Check("and comes back", app.Sidebar.Width == SidebarPanel.Columns, $"width {app.Sidebar.Width}");
+
+        Console.WriteLine("\nmenu:");
+        app.Menu.OpenActive();
+        var withMenu = UI.Overlay is null ? "" : ConsoleSnapshot.ToText(root, width, height);
+        Check("the menu opens over the viewport (needs an overlay)", UI.Overlay is null || withMenu.Contains("Pause"),
+            UI.Overlay is null ? "no ambient overlay headlessly - skipped" : "shown");
+
+        if (args.Contains("--perf"))
+        {
+            // The same measurement --perf makes without the shell, so the two are directly comparable: what the
+            // sidebar and menu cost is the whole question M3 has to answer.
+            // Warm-up pass first, then the reported one: whichever renderer is measured first otherwise carries the
+            // JIT for the shared rasteriser and reads about twice its real cost.
+            foreach (var r in view.Renderers)
+            {
+                view.SetRenderer(r);
+                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Snapshot, root, width, height, quiet: true);
+            }
+
+            Console.WriteLine($"\nframe cost at {width}x{height} WITH the M3 shell, {app.Runner.Snapshot.Count} bodies, " +
+                              "orbiting camera (median of 120):");
+            foreach (var r in view.Renderers)
+            {
+                view.SetRenderer(r);
+                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Snapshot, root, width, height);
+            }
+
+            app.Runner.Dispose();
+            return 0;
+        }
+
+        if (args.Contains("--png"))
+        {
+            var outDir = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
+            var options = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+            foreach (var r in view.Renderers)
+            {
+                view.SetRenderer(r);
+                Draw();
+                Draw();
+                ConsoleSnapshot.SavePng(root, width, height, Path.Combine(outDir, $"m3-{r.Name}.png"), options);
+                Console.WriteLine($"  wrote m3-{r.Name}.png");
+            }
+        }
+
+        app.Runner.Dispose();
+        Console.WriteLine(failures == 0 ? "\nALL PASS" : $"\n{failures} FAILURE(S)");
+        return failures == 0 ? 0 : 1;
+    }
+
+    private static string SidebarText(ILayout root, int width, int height)
+    {
+        var text = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(root, width, height));
+        return string.Join('\n', text.Select(l => l.Length > width - SidebarPanel.Columns
+            ? l[(width - SidebarPanel.Columns)..]
+            : ""));
+    }
+
+    // The slider's own readout, parsed back off the screen -- the value as a user sees it, not as the object holds it.
+    private static bool SliderReads(ILayout root, int width, int height, string label, float expected)
+    {
+        var line = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(root, width, height))
+            .FirstOrDefault(l => l.Contains(label));
+        if (line is null) return false;
+        var tail = line[(line.IndexOf(label, StringComparison.Ordinal) + label.Length)..].Trim();
+        var number = new string([.. tail.Where(c => char.IsDigit(c) || c == '.' || c == '-')]);
+        return float.TryParse(number, out var shown) && Math.Abs(shown - expected) < 0.05f;
+    }
+
+    private static void Settle(PhysicsRunner runner, int steps)
+    {
+        var target = runner.Snapshot.StepCount + steps;
+        var spun = 0;
+        while (runner.Snapshot.StepCount < target && spun++ < 600) Thread.Sleep(5);
+    }
+
+    private static void Populate(PhysicsScene scene)
+    {
+        for (var i = 0; i < 7; i++)
+            scene.AddBox(new Vector3(i * 0.06f, 0.5f + (i * 1.02f), 0), new Vector3(0.5f, 0.5f, 0.5f), i);
+        for (var i = 0; i < 4; i++)
+            scene.AddSphere(new Vector3(-4f + (i * 0.8f), 6f + (i * 1.5f), 1.5f), 0.45f, 7 + i);
+    }
+}

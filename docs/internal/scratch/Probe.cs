@@ -50,7 +50,7 @@ public static class SolidProbe
 public static class PerfProbe
 {
     public static void Measure(string label, ISceneRenderer renderer, OrbitCamera camera, SceneSnapshot snapshot,
-                               Jumbee.Console.ILayout root, int w, int h)
+                               Jumbee.Console.ILayout root, int w, int h, bool quiet = false)
     {
         long frameBytes = 0;
         ConsoleGUI.ConsoleManager.AnsiEnabled = true;
@@ -84,6 +84,7 @@ public static class PerfProbe
 
         draws.Sort(); paints.Sort(); emits.Sort(); bytes.Sort();
         var total = draws[N / 2] + paints[N / 2] + emits[N / 2];
+        if (quiet) return;
         Console.WriteLine($"  {label,-10}  scene {draws[N / 2],7:F0}us  paint {paints[N / 2],7:F0}us  " +
                           $"emit {emits[N / 2],7:F0}us  TOTAL {total,7:F0}us  " +
                           $"({total / 16666.0 * 100,4:F0}% of a 60fps frame)  ANSI {bytes[N / 2],7} B/frame");

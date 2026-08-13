@@ -195,6 +195,18 @@ public partial class Tree : RenderableControl
     /// to <see cref="NodeActivated"/> (which fires only on leaf Enter/double-click).</summary>
     public event EventHandler<TreeNode>? SelectionChanged;
 
+    /// <summary>
+    /// Raised just before a node with children is expanded — by the keyboard, by a click on its disclosure glyph,
+    /// or by a double-click on its label.
+    /// </summary>
+    /// <remarks>
+    /// This is the hook for a tree too large to build up front (a file system, a remote hierarchy): populate the
+    /// node's real children here. Give the unexpanded node one placeholder child so it renders as a parent and can
+    /// be opened at all — a node with no children is a leaf, and nothing will ever ask it to expand — then replace
+    /// that placeholder when this fires.
+    /// </remarks>
+    public event EventHandler<TreeNode>? NodeExpanding;
+
     /// <summary>Raised just before <see cref="ContextMenu"/> is shown for a right-clicked node, with that node (now
     /// the selected one). Only fires when <see cref="ContextMenu"/> is set.</summary>
     /// <remarks>Use it to tailor the menu to the node, or read <see cref="SelectedNode"/> from the menu's own item
@@ -281,7 +293,7 @@ public partial class Tree : RenderableControl
             case ConsoleKey.RightArrow:
                 if (SelectedNode is { Nodes.Count: > 0 } r)
                 {
-                    if (!r.Expanded) r.Expanded = true;
+                    if (!r.Expanded) SetExpanded(r, true);
                     else SelectNode(r.Nodes.OrderBy(n => n.Index).First());
                 }
                 inputEvent.Handled = true;
@@ -289,7 +301,7 @@ public partial class Tree : RenderableControl
             case ConsoleKey.LeftArrow:
                 if (SelectedNode is { } l)
                 {
-                    if (l.Nodes.Count > 0 && l.Expanded) l.Expanded = false;
+                    if (l.Nodes.Count > 0 && l.Expanded) SetExpanded(l, false);
                     else if (l.Parent is { } parent) SelectNode(parent);
                 }
                 inputEvent.Handled = true;
@@ -299,7 +311,7 @@ public partial class Tree : RenderableControl
                 // A parent toggles; a leaf activates.
                 if (SelectedNode is { } t)
                 {
-                    if (t.Nodes.Count > 0) t.Expanded = !t.Expanded;
+                    if (t.Nodes.Count > 0) SetExpanded(t, !t.Expanded);
                     else NodeActivated?.Invoke(this, t);
                 }
                 inputEvent.Handled = true;
@@ -319,8 +331,22 @@ public partial class Tree : RenderableControl
     {
         if (UI.MouseButton == TerminalMouseButton.Right) { OpenContextMenu(position); return; }
         if (NodeAt(position.Y) is not { } node) return;
-        if (node.Nodes.Count > 0 && OnGlyph(node, position)) node.Expanded = !node.Expanded;
+        if (node.Nodes.Count > 0 && OnGlyph(node, position)) SetExpanded(node, !node.Expanded);
         SelectNode(node);
+    }
+
+    /// <summary>
+    /// Expands or collapses <paramref name="node"/> the way the keyboard and mouse do — raising
+    /// <see cref="NodeExpanding"/> first when it is about to open.
+    /// </summary>
+    /// <remarks>Prefer this over setting <see cref="TreeNode.Expanded"/> directly whenever a
+    /// <see cref="NodeExpanding"/> handler is attached; the property is the raw state and does not announce
+    /// itself.</remarks>
+    public void SetExpanded(TreeNode node, bool expanded)
+    {
+        if (node.Expanded == expanded) return;
+        if (expanded) NodeExpanding?.Invoke(this, node);
+        node.Expanded = expanded;
     }
 
     /// <inheritdoc/>
@@ -334,7 +360,7 @@ public partial class Tree : RenderableControl
             // A glyph click was already toggled by the preceding single-click; only toggle here for a label double-click.
             // OnGlyph is now row-aware, so a wrapped continuation row (which has no glyph) counts as a label click and
             // toggles here as expected.
-            if (!OnGlyph(node, position)) node.Expanded = !node.Expanded;
+            if (!OnGlyph(node, position)) SetExpanded(node, !node.Expanded);
         }
         else
         {
@@ -661,8 +687,14 @@ public partial class Tree : RenderableControl
         RaiseSelectionChanged();
     }
 
-    // Move the selection to a specific (visible) node, clearing any previous selection and scrolling it into view.
-    private void SelectNode(TreeNode node)
+    /// <summary>
+    /// Moves the selection to <paramref name="node"/>, clearing the previous selection, scrolling it into view and
+    /// raising <see cref="SelectionChanged"/>.
+    /// </summary>
+    /// <remarks>Does nothing if the node is not currently visible — it is under a collapsed ancestor, or it has been
+    /// removed. Expand its ancestors first (see <see cref="SetExpanded"/>) when driving the tree from elsewhere,
+    /// such as a search field or a path.</remarks>
+    public void SelectNode(TreeNode node)
     {
         var nodes = Flatten(_root).ToList();
         var index = nodes.IndexOf(node);

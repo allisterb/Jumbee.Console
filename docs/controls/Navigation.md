@@ -73,6 +73,27 @@ runs its `Action` and raises `ItemActivated`.
 divider. `Enabled` greys an item out, and `Shortcut` displays a key hint beside it — display only, so register the
 actual key yourself with `UI.RegisterHotKey`.
 
+### Menus that report state
+
+`MenuItem` is immutable, so items handed to `Add` are fixed for the life of the bar. When a menu should *show*
+what the app is currently doing — which renderer is live, whether a panel is visible — pass a function instead and
+it is rebuilt each time the menu opens:
+
+```csharp
+menu.Add("Render", () =>
+[
+    new MenuItem("Wireframe", () => scene.Use(wireframe)) { Checked = scene.Renderer == wireframe },
+    new MenuItem("Solid",     () => scene.Use(solid))     { Checked = scene.Renderer == solid },
+]);
+```
+
+`Checked` is a `bool?`: `true` draws a ✓, `false` leaves the marker column blank, and `null` (the default) means
+the item isn't that kind of item at all. Any level containing a checkable item reserves the marker column across
+**every** row, so plain commands in the same menu keep their labels aligned with the checkable ones.
+
+Because the menu is rebuilt from live state, a keyboard shortcut and a menu click stay in agreement with no
+synchronising code — the menu is a view of the state, not a second copy of it.
+
 Dock it to the top of your shell:
 
 ```csharp
@@ -136,6 +157,52 @@ The dialog shrinks to fit its content, and dims the layer behind it.
 > `new Overlay(root)` is the pattern, and the full recipe is in
 > [GETTING-STARTED](../../GETTING-STARTED.md). Snapshotting the root captures the app without the dialog, which
 > looks like the dialog never rendered.
+
+## `FileBrowser`
+
+A two-pane file chooser — folders on the left, the current directory's contents on the right, a path field above
+and a filter drop-down below. Two static helpers cover the common cases:
+
+```csharp
+FileBrowser.OpenFile("Load a model", start: null, filters: ["*.obj"], path =>
+{
+    if (path is not null) Load(path);        // null means the user cancelled
+});
+
+FileBrowser.OpenDirectory("Choose a folder", start: null, directory =>
+{
+    if (directory is not null) Scan(directory);
+});
+```
+
+Both wrap the browser in a `Dialog` with OK/Cancel and report the choice exactly once. `start` may be a directory,
+or a **file** — in which case its directory opens with the file already highlighted. A `start` that no longer
+exists falls back to the working directory rather than refusing to open.
+
+Filters are glob patterns; several in one string (`"*.jpg;*.png"`) list as one group, which is how a user thinks of
+"images". `FileBrowser.AllFiles` (`*.*`) is always offered as the last option, so a filter can never leave someone
+unable to see that they are in the wrong folder.
+
+A single click only **selects**, so you can look through a listing without acting on it. Enter or a double-click
+**opens a folder and chooses a file** — the same gesture doing the obvious thing on either kind of row. The `..`
+row goes up, and Tab moves between the three panes.
+
+Place it directly for a browser embedded in a pane rather than floating over one:
+
+```csharp
+var browser = new FileBrowser(startPath, FileBrowserMode.OpenFile, ["*.csv"]);
+browser.SelectionChanged += (_, path) => preview.Load(path);
+browser.PathActivated += (_, path) => Open(path);
+```
+
+`SelectedPath` is the current answer — the highlighted file, or in `OpenDirectory` mode the listed directory while
+nothing else is highlighted, so OK always has something to return. `CurrentDirectory` reads and sets where it is
+looking, and `ShowHidden` lists hidden and system entries.
+
+The tree shows the directory being listed and what is under it, re-rooting whenever the listing moves; going up or
+elsewhere is what the `..` row and the path field are for. Directories are read on demand, so a folder with a large
+tree under it costs nothing until you open it, and an unreadable directory shows a message in the pane rather than
+throwing.
 
 ## `TabPanel`
 

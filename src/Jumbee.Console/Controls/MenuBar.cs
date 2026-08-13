@@ -45,6 +45,22 @@ public class MenuBar : RenderableControl
     /// <summary>Adds a top-level menu with the given title and items. Returns this for chaining.</summary>
     public MenuBar Add(string title, params MenuItem[] items)
     {
+        _menus.Add((title, () => items));
+        Invalidate();
+        return this;
+    }
+
+    /// <summary>Adds a top-level menu whose items are built by <paramref name="items"/> each time it opens. Returns
+    /// this for chaining.</summary>
+    /// <remarks>
+    /// Use this whenever the menu reflects state that changes: <see cref="MenuItem"/> is immutable, so items passed
+    /// to the other overload are fixed for the life of the bar and a <see cref="MenuItem.Checked"/> marker or an
+    /// <see cref="MenuItem.Enabled"/> flag on one of them could never update. Building at open time costs a few
+    /// allocations per click and keeps the menu honest with no extra state to synchronise.
+    /// </remarks>
+    public MenuBar Add(string title, Func<MenuItem[]> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
         _menus.Add((title, items));
         Invalidate();
         return this;
@@ -100,9 +116,9 @@ public class MenuBar : RenderableControl
     public void OpenActive()
     {
         if (UI.Overlay is null || _menus.Count == 0) return;
-        var (_, items) = _menus[_active];
+        var (_, build) = _menus[_active];
 
-        var menu = new ContextMenu(items);
+        var menu = new ContextMenu(build());
         menu.ItemActivated += (_, item) => ItemActivated?.Invoke(this, item);
         menu.Closed += (_, _) => { _openIndex = -1; Invalidate(); };
 
@@ -172,7 +188,7 @@ public class MenuBar : RenderableControl
     #endregion
 
     #region Fields
-    private readonly List<(string Title, MenuItem[] Items)> _menus = new();
+    private readonly List<(string Title, Func<MenuItem[]> Build)> _menus = new();
     private int _active;
     private int _openIndex = -1;
     private int _originX;

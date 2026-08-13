@@ -4,7 +4,7 @@ The headless harness the 3D sandbox was built against. Parked here rather than l
 because it has caught two shipped bugs and several wrong assumptions, and **M5 should promote it into a real test
 project** (`tests/Jumbee.Console.SandboxDemo.Tests` or similar).
 
-It is not wired into the solution. To run it, drop these three files in a folder and `dotnet run -c Release`; the
+It is not wired into the solution. To run it, drop these files in a folder and `dotnet run -c Release`; the
 `.csproj` compiles the demo's own sources (minus `Program.cs`) against `Jumbee.Console` and `Jumbee.Console.Snapshot`,
 with a `$(Repo)` property at the top pointing at the repo root.
 
@@ -13,11 +13,14 @@ with a `$(Repo)` property at the top pointing at the repo root.
 | | |
 |---|---|
 | *(none)* | 63 behaviour checks — the default |
+| `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
 | `--probe` | on-screen size of a launched body, frame by frame |
 | `--load` | OBJ parse time per model in the reference directory |
+
+`--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
 ## What it covers that a normal test would not
 
@@ -33,6 +36,10 @@ with a `$(Repo)` property at the top pointing at the repo root.
 - **Colour read back from emitted ANSI** (`AnsiConsoleSnapshot`), so a selection highlight is verified as pixels
   rather than as internal state.
 - **The `obj` path-resolution rules**, all of which are edge cases, via `ModelLibrary.Resolve`.
+- **The real shell, not a rebuild of it.** `--shell` drives `SandboxShell`, the same assembly `Program.cs` uses —
+  which matters precisely because keyboard routing differs between the root-layout path and a hand-built container.
+  It also asserts the sidebar's central claim in both directions: press `v` and the drop-down follows; set a
+  parameter and the slider's *on-screen readout* follows.
 
 ## Caveat carried forward
 

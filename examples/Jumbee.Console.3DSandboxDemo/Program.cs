@@ -88,7 +88,10 @@ static int LoadModelDirectory(string? path)
         return -1;
     }
 
-    return set.Files.All(LoadModel) ? set.StartIndex : -1;
+    // Offset by what is already registered: ModelSet.StartIndex counts within the directory, and after a runtime
+    // reload the registry already holds the previous folder's models (plus the generated knot) ahead of these.
+    var offset = Meshes.RegisteredCount;
+    return set.Files.All(LoadModel) ? offset + set.StartIndex : -1;
 }
 
 static bool LoadModel(string path)
@@ -111,48 +114,52 @@ static bool LoadModels(string[]? paths) => (paths ?? []).All(LoadModel);
 // The default scene: physics, a floor, and everything you can do to a pile of bodies.
 static async Task<int> RunSandbox()
 {
-    var runner = new PhysicsRunner(BuildScene);
+    // The whole shell — viewport, sidebar, menu, footer, keys — is assembled by SandboxShell so the headless
+    // harness can drive the real one rather than a rebuild of it.
+    SandboxShell.Sandbox app = default;
+    app = SandboxShell.BuildSandbox(Populate, () => LoadMeshDialog(app));
+    UI.Post(() => UI.SetFocus(app.View));
 
-    // They reach the screen by genuinely different routes (a Canvas versus half-block cells with a private
-    // z-buffer), which is why each brings its own surface and SceneView swaps the child rather than the drawing
-    // code. The two solid ones share their rasteriser through MeshRenderer and differ only in shading.
-    var view = new SceneView(runner, new ShadedRenderer());
-    view.AddRenderer(new WireframeRenderer());
-    view.AddRenderer(new SolidRenderer());
-    var footer = new SceneFooter(view);
-
-    // The footer reports the snapshot that was actually DRAWN, not the newest one, so its body count and clock
-    // always agree with the picture above it.
-    view.Drew += snapshot =>
-    {
-        footer.Snapshot = snapshot;
-        footer.Paused = runner.Paused;
-    };
-
-    _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
-
-    // DockPanel, never a Grid at the root: the footer takes its two lines and the viewport fills whatever is left,
-    // at every terminal size, with no split positions to recompute.
-    var root = new DockPanel(DockedControlPlacement.Bottom, footer, view);
-
-    // App-level keys are global hotkeys; everything that acts on the SCENE lives in SceneView.OnInput instead, so it
-    // only fires while the viewport has focus and travels with the control.
-    UI.RegisterHotKey(UI.HotKeys.Char(' '), () => runner.Paused = !runner.Paused);
-    UI.RegisterHotKey(UI.HotKeys.Char('.'), runner.StepOnce);
-    UI.RegisterHotKey(UI.HotKeys.Char('r'), () =>
-    {
-        view.Selected = null;
-        runner.Post(scene => { scene.ClearBodies(); Populate(scene); });
-    });
-
-    UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
-    UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
-    UI.Post(() => UI.SetFocus(view));
-
-    await UI.Start(root, width: 120, height: 40, fps: 60);
-    runner.Dispose();
+    await UI.Start(app.Root, width: 120, height: 44, fps: 60);
+    app.Runner.Dispose();
     return 0;
 }
+
+// Load a model while the app is running, which is what --model used to be the only way to do. The chosen mesh
+// becomes what the spawn keys produce, so the very next `n` or `f` throws it into the scene.
+static void LoadMeshDialog(SandboxShell.Sandbox app) =>
+    FileBrowser.OpenFile("Load a model", null, ["*.obj"], path =>
+    {
+        if (path is null) return;
+        try
+        {
+            var id = Meshes.Register(ObjLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+            app.Sidebar.RefreshMeshes();
+            app.View.Spawn.MeshId = id;
+            app.View.Spawn.Shape = BodyShape.Mesh;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            Dialog.Message("Could not load", $"{Path.GetFileName(path)}: {ex.Message}");
+        }
+    });
+
+// The viewer browses by DIRECTORY: '[' and ']' cycle everything in it, so opening a folder of models is the useful
+// unit — the same rule ModelLibrary.Resolve applies to the command line.
+static void OpenModelsDialog(SandboxShell.Viewer app) =>
+    FileBrowser.OpenDirectory("Open a model folder", null, directory =>
+    {
+        if (directory is null) return;
+        var start = LoadModelDirectory(directory);
+        if (start < 0)
+        {
+            Dialog.Message("Nothing to show", $"No .obj files in {directory}.");
+            return;
+        }
+
+        app.Model.Reload(start);
+        app.Sidebar.Report();
+    });
 
 // The `obj` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
 // ground stays — it costs nothing and it earns its place, giving the model a sense of scale and somewhere for the
@@ -165,37 +172,12 @@ static async Task<int> RunModelViewer(int startIndex)
         return 1;
     }
 
-    var model = new ModelScene(startIndex);
-    var viewer = new SceneView(model, new ShadedRenderer()) { Model = model };
-    viewer.AddRenderer(new WireframeRenderer());
-    viewer.AddRenderer(new SolidRenderer());
+    SandboxShell.Viewer app = default;
+    app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app));
+    UI.Post(() => UI.SetFocus(app.View));
 
-    var footer = new SceneFooter(viewer);
-    viewer.Drew += s => footer.Snapshot = s;
-    _ = new ControlFrame(viewer, borderStyle: BorderStyle.Rounded);
-    var root = new DockPanel(DockedControlPlacement.Bottom, footer, viewer);
-
-    // Only the app-level keys are global here; everything acting on the MODEL lives in SceneView so it travels with
-    // the control. Deliberately no pause/step/reset -- there is no simulation to pause.
-    UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
-    UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
-    UI.Post(() => UI.SetFocus(viewer));
-
-    // Framed on the model rather than on a floor: it is scaled to ModelScene.ViewRadius and centred at the origin.
-    viewer.Camera.Distance = 16f;
-    viewer.Camera.Target = Vector3.Zero;
-
-    await UI.Start(root, width: 120, height: 40, fps: 60);
+    await UI.Start(app.Root, width: 120, height: 44, fps: 60);
     return 0;
-}
-
-// Runs on the physics thread before the first step.
-static void BuildScene(PhysicsScene scene)
-{
-    // A wide, thin static slab centred under the origin, its top face at y = 0 so the floor grid the renderer draws
-    // at y = 0 sits exactly on it.
-    scene.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
-    Populate(scene);
 }
 
 // A tower of boxes with a slight lean, plus a few spheres dropped alongside -- enough motion to show the camera,
