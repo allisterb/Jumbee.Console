@@ -145,4 +145,70 @@ public class SelectTests
         Assert.Null(select.SelectedValue);
     }
     #endregion
+
+    #region Width
+    private static int PaintedCells(ConsoleBuffer buffer, int width)
+    {
+        var n = 0;
+        for (var x = 0; x < width; x++)
+            if (ConsoleSnapshot.BackgroundAt(buffer, x, 0) is not null) n++;
+        return n;
+    }
+
+    [Fact]
+    public void ByDefault_TheClosedControlFillsTheWidthOffered()
+    {
+        UiTestHarness.EnsureStopped();
+        var select = new Select("wireframe", "solid", "shaded") { SelectedIndex = 0 };
+        var buffer = ConsoleSnapshot.Render(new Grid([1], [30], [[select]]), 30, 1);
+
+        Assert.Equal(30, PaintedCells(buffer, 30));
+    }
+
+    [Fact]
+    public void FitContent_SizesTheClosedControlToItsWidestOption()
+    {
+        UiTestHarness.EnsureStopped();
+        var select = new Select("wireframe", "solid", "shaded") { SelectedIndex = 0, FitContent = true };
+        var buffer = ConsoleSnapshot.Render(new Grid([1], [30], [[select]]), 30, 1);
+
+        var painted = PaintedCells(buffer, 30);
+        Assert.InRange(painted, 10, 14);            // "wireframe" + a space + the arrow
+        Assert.Contains("wireframe", ConsoleSnapshot.ToText(buffer));
+    }
+
+    // Regression: the themed focus cue fills every UNPAINTED cell of a control, which for a fitted Select is the
+    // whole rest of the row — so choosing an option, which hands focus back to the control, made it look like it
+    // had sprung back to full width. It now draws focus inside its own box.
+    [Fact]
+    public void FitContent_KeepsItsWidthWhenFocused()
+    {
+        UiTestHarness.EnsureStopped();
+        var select = new Select("wireframe", "solid", "shaded") { SelectedIndex = 0, FitContent = true };
+        var grid = new Grid([1], [30], [[select]]);
+
+        var unfocused = PaintedCells(ConsoleSnapshot.Render(grid, 30, 1), 30);
+        UI.SetFocus(select);
+        var focused = ConsoleSnapshot.Render(grid, 30, 1);
+
+        Assert.True(select.IsFocused);
+        Assert.Equal(unfocused, PaintedCells(focused, 30));
+
+        // Still visibly focused, just inside the box: the fill is lifted toward white.
+        Assert.True(ConsoleSnapshot.BackgroundAt(focused, 0, 0)?.R > select.Background.R,
+            "focus is no longer visible on a fitted Select");
+    }
+
+    [Fact]
+    public void ADefaultSelect_StillTintsTheWholeRowOnFocus()
+    {
+        UiTestHarness.EnsureStopped();
+        var select = new Select("wireframe", "solid") { SelectedIndex = 0 };
+        var grid = new Grid([1], [30], [[select]]);
+        ConsoleSnapshot.Render(grid, 30, 1);
+
+        UI.SetFocus(select);
+        Assert.Equal(30, PaintedCells(ConsoleSnapshot.Render(grid, 30, 1), 30));
+    }
+    #endregion
 }

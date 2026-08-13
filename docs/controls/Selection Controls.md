@@ -168,6 +168,10 @@ narrow panel of mixed controls the two don't match and a three-word choice becom
 var shape = new Select("box", "sphere", "mesh") { FitContent = true };   // as wide as its list, no wider
 ```
 
+A fitted `Select` also draws its own focus cue, inside the box. The themed default fills a control's *unpainted*
+cells, which for a fitted one is the whole rest of the row — so without this, choosing an option (which hands
+focus back) would make it spring out to full width again.
+
 Options can change at runtime — `SetOptions` replaces them, keeps the current value selected if it survives, and
 re-sizes the control:
 

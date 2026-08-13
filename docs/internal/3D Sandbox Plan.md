@@ -774,6 +774,12 @@ and a three-word choice was a full-width block of colour next to a slider. Filli
 and wrong for a narrow panel of mixed controls, so it is now `Select.FitContent` (default `false`, so no existing
 consumer moves) and the sidebars opt in.
 
+That immediately surfaced a second, more general trap, again only visible by using it: after choosing an option the
+control sprang back to full width. Not a width bug — **the themed focus cue fills a control's *unpainted* cells**,
+and for a fitted `Select` that is the whole rest of the row, so handing focus back on a choice repainted it edge to
+edge. Any control that deliberately paints less than the width it is offered has to set `RendersOwnFocus` and draw
+its own cue. Measured before and after: 30 painted cells of a 30-wide row when focused, 12 either way now.
+
 **M4 — polish.** Colour modes (velocity / mass / sleep), motion trails, scene presets: stack, tower, pyramid,
 domino run, wrecking ball.
 

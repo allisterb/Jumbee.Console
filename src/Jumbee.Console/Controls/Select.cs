@@ -94,6 +94,11 @@ public class Select : RenderableControl
 
     /// <summary>Reports <see langword="true"/> so input routing delivers keys to the control.</summary>
     public override bool HandlesInput => true;
+
+    // Only while fitting: the themed cue fills the control's unpainted cells, which is right for a Select that
+    // fills its column and wrong for one that doesn't. See Render.
+    /// <inheritdoc/>
+    protected override bool RendersOwnFocus => _fitContent;
     #endregion
 
     #region Methods
@@ -166,12 +171,17 @@ public class Select : RenderableControl
     /// <inheritdoc/>
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth)
     {
-        var style = new Spectre.Console.Style(Foreground, Background);
         var label = SelectedValue ?? Placeholder;
 
         // Fitting leaves the rest of the row untouched (transparent), so the control ends where the dropdown it
         // opens would — never wider than the room actually offered.
         var width = _fitContent ? Math.Min(maxWidth, PreferredWidth()) : maxWidth;
+
+        // Focus is drawn into the box itself when fitting. The themed default cue fills every UNPAINTED cell of the
+        // control, which for a fitted Select is the whole rest of the row — so choosing an option, which hands
+        // focus back, made the control look like it had sprung back to full width.
+        var background = _fitContent && IsFocused ? Background.Mix(Color.White, FocusLift) : Background;
+        var style = new Spectre.Console.Style(Foreground, background);
 
         var inner = $" {label}";
         if (inner.Length > width - 2) inner = inner[..Math.Max(0, width - 2)];
@@ -224,6 +234,11 @@ public class Select : RenderableControl
 
     #region Fields
     private const int MaxDropdownRows = 8;
+
+    // How far the focused fill is lifted toward white. Derived from the control's own Background rather than taken
+    // from the theme so it stays visible whatever colour the caller set.
+    private const double FocusLift = 0.22;
+
     private bool _fitContent;
     private List<string> _options;
     private int _selectedIndex = -1;
