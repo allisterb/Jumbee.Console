@@ -48,7 +48,7 @@ public sealed class ModelSidebarPanel : CompositeControl
         // readout lines stay flush.
         SetContent(new VerticalStackPanel(
             new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
-            new Section("Render", Spaced(renderer, edges, spin), 5),
+            new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Edges", edges), spin), 5),
             new Section("Scale", Spaced(scaleX, scaleY, scaleZ), 5),
             new Section("Shear", Spaced(shearX, shearZ, Row(resetTransform, null)), 5),
             new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows)));
@@ -120,6 +120,16 @@ public sealed class ModelSidebarPanel : CompositeControl
         return new VerticalStackPanel([.. rows]);
     }
 
+    // A caption beside a control, in the same column the sliders put theirs.
+    //
+    // A Grid, NOT a HorizontalStackPanel, and the difference is a trap worth knowing: a stack asks each child in
+    // turn how wide it wants to be and offers it everything still unclaimed. A TextLabel's answer is "all of it"
+    // (IntrinsicWidth 0 means fill), so it takes the whole row and every later child is laid out at zero width and
+    // never appears. Columns of fixed width are a Grid's job.
+    private static ILayout Labelled(string caption, Control control) =>
+        new Grid([1], [LabelColumn, SidebarPanel.Columns - 2 - LabelColumn],
+            [[Line(caption, MutedColor), control]]);
+
     // A single button still gets the two-column grid so it keeps the width of a paired one; the second cell is a
     // blank spacer rather than a stretched button.
     private static ILayout Row(Button left, Button? right) =>
@@ -135,6 +145,9 @@ public sealed class ModelSidebarPanel : CompositeControl
 
     #region Fields
     private const int Half = SidebarPanel.Columns / 2 - 2;
+
+    // Matches the sliders' LabelWidth plus their gap, so captions line up down the whole sidebar.
+    private const int LabelColumn = 9;
     private const float DefaultSpin = 0.35f;
 
     private readonly SceneView view;
@@ -149,7 +162,7 @@ public sealed class ModelSidebarPanel : CompositeControl
     private readonly Button next = Action("Next ▶");
 
     private readonly Select renderer;
-    private readonly Select edges = new Select("none", "ink", "glyph") { FitContent = true };
+    private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
     private readonly Switch spin = new Switch("Turntable", isOn: true);
 
     private readonly Slider scaleX = Axis("Scale X", ModelScene.MinScale, ModelScene.MaxScale, 1f);

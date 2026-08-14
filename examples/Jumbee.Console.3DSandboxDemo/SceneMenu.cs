@@ -130,7 +130,7 @@ public static class SceneMenu
 
     #region Private methods
     private static IEnumerable<MenuItem> EdgeItems(SceneView view) =>
-        new[] { SilhouetteStyle.None, SilhouetteStyle.Ink, SilhouetteStyle.Glyph }.Select(style =>
+        new[] { SilhouetteStyle.None, SilhouetteStyle.Line, SilhouetteStyle.Glyph }.Select(style =>
             new MenuItem("Edges: " + style.ToString().ToLowerInvariant(), () => view.SetEdgeStyle(style))
             {
                 Checked = view.Edges == style,

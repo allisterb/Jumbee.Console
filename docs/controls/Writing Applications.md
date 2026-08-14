@@ -86,7 +86,9 @@ Four phases, in order. Everything after `UI.Start` is event-driven.
 
 ```csharp
 // 1. Construct the controls. They persist — keep references to any you'll update later.
-var label  = new TextLabel(TextLabelOrientation.Horizontal, "Count: 0", Color.Cyan1);
+//    The label gets an explicit width because it is about to go in a HORIZONTAL stack: a control that sizes to
+//    fill would claim the whole row and leave the button at zero width. See "What happens when…".
+var label  = new TextLabel(TextLabelOrientation.Horizontal, "Count: 0", Color.Cyan1) { Width = 12 };
 var button = new Button("Increment");
 
 // 2. Compose them into a layout — children go to the constructor. This is where sizing is decided.

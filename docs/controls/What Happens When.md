@@ -68,6 +68,28 @@ Build size-dependent geometry in your `Render()` override instead, which runs af
 you want for a toolbar or button row, and usually *not* what you want for a docked region, so wrap it in a
 `Boundary` to pin the axis you care about.
 
+### …I put a label beside a control in a `HorizontalStackPanel`?
+
+**The label takes the whole row and the control never appears.** The panel offers each child in turn everything
+still unclaimed, then advances by the width that child reports. Most controls report *fill* — `TextLabel`,
+`TextInput`, `Slider`, `ProgressBar`, `Gauge`, `MenuBar` — so the first one claims the row and every later child is
+laid out at zero width. Nothing is logged and no exception is thrown; the control is simply not on screen.
+
+```csharp
+// "Edges" fills the row; the Select is 0 cells wide and invisible.
+new HorizontalStackPanel(new TextLabel(TextLabelOrientation.Horizontal, "Edges"), edges);
+
+// Fix 1 — give the earlier children an explicit width.
+new HorizontalStackPanel(new TextLabel(TextLabelOrientation.Horizontal, "Edges") { Width = 8 }, edges);
+
+// Fix 2 — use a Grid. Fixed-width columns are what it is for, and captions then line up down the panel.
+new Grid(rowHeights: [1], columnWidths: [8, 22], controls: [[label, edges]]);
+```
+
+The panel has no way to divide "fill" between two children — there is no weighting — so this is behaviour to design
+around rather than a bug to wait out. **A caption beside a control is a `Grid`.** A `VerticalStackPanel` has no such
+problem, because filling *across* its axis is exactly what every child wants.
+
 ## Threading and updates
 
 ### …I mutate a control from a background thread?

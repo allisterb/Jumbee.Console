@@ -12,9 +12,16 @@ public enum SilhouetteStyle
     None,
 
     /// <summary>
-    /// Darken the edge sub-pixels — an ink outline. Keeps the surface's doubled vertical resolution.
+    /// Brighten the edge sub-pixels in place. Keeps the surface's doubled vertical resolution.
     /// </summary>
-    Ink,
+    /// <remarks>
+    /// Brightens rather than darkens, and matching <see cref="Glyph"/>'s direction is the point: the two styles are
+    /// meant to differ in <em>resolution</em>, not colour. This one darkened for a while, purely because it was
+    /// written before the glyph path learned to boost, and the resulting colour inversion between the two swamped
+    /// the difference they exist to show — they read as unrelated features rather than two ways of drawing one
+    /// outline.
+    /// </remarks>
+    Line,
 
     /// <summary>
     /// Replace the cell with a shaped glyph (<c>◆◇◈◊◌</c>), the technique in
@@ -24,7 +31,7 @@ public enum SilhouetteStyle
     /// A glyph carries one foreground and one background, so a cell drawn this way <b>gives up its two independent
     /// sub-pixels</b> — the edge lands on a half-resolution cell boundary rather than a half-cell one. That is free
     /// for a renderer sampling once per cell, as theirs does; here it is a genuine trade, which is why
-    /// <see cref="Ink"/> exists alongside it.
+    /// <see cref="Line"/> exists alongside it.
     /// </remarks>
     Glyph,
 }
@@ -69,7 +76,7 @@ public sealed class HalfBlockSurface : Control
     public CColor Background { get; set; } = new(12, 12, 18);
 
     /// <summary>How <see cref="DetectEdges"/>'s findings are drawn.</summary>
-    public SilhouetteStyle EdgeStyle { get; set; } = SilhouetteStyle.Glyph;
+    public SilhouetteStyle EdgeStyle { get; set; } = SilhouetteStyle.None;
     #endregion
 
     #region Methods
@@ -169,11 +176,10 @@ public sealed class HalfBlockSurface : Control
                 if (MathF.Max(bendX, bendY) <= threshold * d) continue;
 
                 edge[i] = true;
-                if (EdgeStyle == SilhouetteStyle.Ink)
-                {
-                    var c = color[i];
-                    color[i] = new CColor((byte)(c.Red * InkFactor), (byte)(c.Green * InkFactor), (byte)(c.Blue * InkFactor));
-                }
+                // Same boost the glyph path applies, for the same reason: an outline that merely follows its
+                // surface disappears exactly where it is most needed — a sleeping body is drawn at a third
+                // brightness, so a darkened outline on it is dark on dark.
+                if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);
             }
         }
     }
@@ -302,7 +308,7 @@ public sealed class HalfBlockSurface : Control
         (byte)Math.Clamp((c.Blue * factor) + EdgeFloor, 0, 255));
 
     #region Fields
-    private const float InkFactor = 0.35f;
+    
     private const float EdgeBoost = 1.8f;
     private const int EdgeFloor = 60;
 

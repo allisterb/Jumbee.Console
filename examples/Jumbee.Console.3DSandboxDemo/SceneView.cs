@@ -114,8 +114,8 @@ public sealed class SceneView : CompositeControl
         if (renderer is not ShadedRenderer shaded) return;
         SetEdgeStyle(shaded.Edges switch
         {
-            SilhouetteStyle.None => SilhouetteStyle.Ink,
-            SilhouetteStyle.Ink => SilhouetteStyle.Glyph,
+            SilhouetteStyle.None => SilhouetteStyle.Line,
+            SilhouetteStyle.Line => SilhouetteStyle.Glyph,
             _ => SilhouetteStyle.None,
         });
     }

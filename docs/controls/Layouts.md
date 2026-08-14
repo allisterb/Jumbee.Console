@@ -16,7 +16,7 @@ sizing model is proportional — and one of them, `Grid`, is deliberately absolu
 |---|---|---|
 | `DockPanel` | docked child fixed on one axis, other child takes the rest | **Yes**, both axes |
 | `SplitPanel` | first pane = `SplitPosition` (absolute cells), second takes the rest | **Yes**, both axes — see the caveat below |
-| `VerticalStackPanel` / `HorizontalStackPanel` | fills across the stack axis, sums along it | **Width yes**, height = content |
+| `VerticalStackPanel` / `HorizontalStackPanel` | fills across the stack axis, sums along it — children keep the width/height they ask for, so in a *horizontal* stack a fill-width child takes the whole row (see the traps) | **Width yes**, height = content |
 | `Grid` | every row height and column width is an absolute cell count | **No** — stays the size you gave it |
 | `Boundary` | pins one or both of its child's extents | No, by design |
 | `TabPanel` | follows the active page | — |
@@ -154,6 +154,25 @@ the overlay, not in your root layout, so a snapshot of the root shows no dialog 
   things, and it's the most common source of an app that renders blank or takes the whole screen.
 - **Stack panels expand across their axis.** A `HorizontalStackPanel` is full-height by default, so docking one as
   a toolbar without a `Boundary(height: 1)` collapses the region below it.
+- **A fill-width control in a `HorizontalStackPanel` swallows the row.** The panel offers each child in turn
+  everything still unclaimed and takes whatever width it reports back. Most controls report *fill* —
+  `TextLabel`, `TextInput`, `Slider`, `ProgressBar`, `Gauge`, `MenuBar` — so the first one takes the whole row and
+  every later child is laid out at **zero width and never appears**. Nothing is logged; the control is simply
+  absent.
+
+  ```csharp
+  // "Edges" fills the row; the Select is 0 wide and invisible.
+  new HorizontalStackPanel(new TextLabel(TextLabelOrientation.Horizontal, "Edges"), edges);
+
+  // Either give the earlier children an explicit width...
+  new HorizontalStackPanel(new TextLabel(TextLabelOrientation.Horizontal, "Edges") { Width = 8 }, edges);
+
+  // ...or use a Grid, which is what fixed-width columns are for.
+  new Grid(rowHeights: [1], columnWidths: [8, 22], controls: [[label, edges]]);
+  ```
+
+  There is no way for the panel to split "fill" between two children — it has no weighting — so this is behaviour
+  to design around rather than a bug to wait out. A caption beside a control is a `Grid`.
 - **Nesting a scroll inside a scroll.** A control that scrolls itself shouldn't sit inside a scrolling
   `ControlFrame` — both will try.
 

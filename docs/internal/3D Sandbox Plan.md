@@ -542,6 +542,7 @@ Two presentations, cycled with `e` (`SilhouetteStyle`):
   on a full-cell boundary instead of a half-cell one. Free for a renderer sampling once per cell; a real cost at
   double vertical resolution.
 - **`Ink`** — darken the edge sub-pixels instead, keeping full resolution.
+  *(Renamed `Line` and inverted on 2026-08-10 — see "The two edge styles pointed opposite ways" below.)*
 
 **Measured cost**, 200×50, point lighting, orbiting camera — the detection pass is a single linear scan of the
 depth buffer and does not move the scene-draw time at all (1176 → 1179 µs):
@@ -794,6 +795,30 @@ per-axis fit fails for a subtler reason: it solves for where the model's **centr
 closer than that, so it projects larger than the arithmetic says. Adding the depth the model reaches toward the
 camera fits the near face instead of the middle. Both constraints are otherwise exact for a turntable — height
 never changes as it spins, and the worst horizontal case is the XZ diagonal.
+
+#### The two edge styles pointed opposite ways (2026-08-10)
+
+Spotted by using the viewer: `ink` drew a dark outline, `glyph` a bright one, and they looked like unrelated
+features. They were — accidentally. `ink` multiplied the edge sub-pixels by **0.35**; `glyph` brightened by
+**1.8**. A ~5× swing, and neither side was wrong on its own terms: `glyph` boosts because of the sleeping-body fix
+recorded above, and `ink` darkened because that is what ink means. Nobody re-examined `ink` after the boost landed.
+
+The point of having two is a **resolution** trade — a glyph gives up the cell's two independent sub-pixels, ink
+keeps them — and the colour inversion was swamping it. `Ink` is now `Line` and brightens by the same factor, so
+switching between them shows the trade they exist to demonstrate. It also inherits the reason for the boost: a
+sleeping body is drawn at a third brightness, and a darkened outline on one is dark on dark.
+
+Cheaper too, which was not the motivation but is worth recording, since the earlier table measured the darkening
+version (200×50, 7 bodies, orbiting camera):
+
+| | ANSI | vs no edges |
+|---|---|---|
+| shaded + AO | 17,148 B | — |
+| + line (was ink: 15,937 B, +7%) | **15,357 B** | **−10%** |
+| + glyph | 17,492 B | +2% |
+
+Brightening lands more edge cells on the same quantised level than darkening did, so runs coalesce better — the
+M0.1 model again.
 
 #### Up axis, and a footer that had quietly stopped repainting (2026-08-10)
 

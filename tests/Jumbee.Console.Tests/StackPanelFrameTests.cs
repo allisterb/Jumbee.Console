@@ -60,4 +60,52 @@ public class StackPanelFrameTests
         Assert.True(buf[0, 0].Background is { } b0 && b0.Equals(fill));
         Assert.True(buf[19, 0].Background is { } b19 && b19.Equals(fill));   // reaches the far edge
     }
+
+    #region Fill-width children in a horizontal stack
+    // A HorizontalStackPanel offers each child in turn everything still unclaimed and takes whatever width the
+    // child reports. A control whose intrinsic width is 0 — TextLabel, TextInput, Slider, ProgressBar, Gauge,
+    // MenuBar — reads that as "fill", so the FIRST one swallows the row and every later child is laid out at zero
+    // width and never appears. There is nothing to distribute "fill" between two children with, so this is the
+    // documented behaviour rather than a bug; the tests pin it, and pin the two ways out.
+    [Fact]
+    public void AFillWidthChild_TakesTheWholeRow_AndHidesWhatFollows()
+    {
+        UiTestHarness.EnsureStopped();
+        var label = new TextLabel(TextLabelOrientation.Horizontal, "Edges", Color.White);
+        var after = new TextLabel(TextLabelOrientation.Horizontal, "HIDDEN", Color.White);
+
+        var text = ConsoleSnapshot.ToText(new HorizontalStackPanel(label, after), 30, 1);
+
+        Assert.Equal(30, label.ActualWidth);
+        Assert.Equal(0, after.ActualWidth);
+        Assert.DoesNotContain("HIDDEN", text);
+    }
+
+    [Fact]
+    public void AnExplicitWidth_LetsTheRestOfTheRowThrough()
+    {
+        UiTestHarness.EnsureStopped();
+        var label = new TextLabel(TextLabelOrientation.Horizontal, "Edges", Color.White) { Width = 8 };
+        var after = new TextLabel(TextLabelOrientation.Horizontal, "SHOWN", Color.White);
+
+        var text = ConsoleSnapshot.ToText(new HorizontalStackPanel(label, after), 30, 1);
+
+        Assert.Equal(8, label.ActualWidth);
+        Assert.Contains("SHOWN", text);
+    }
+
+    [Fact]
+    public void AGrid_GivesColumnsWithoutTheProblem()
+    {
+        UiTestHarness.EnsureStopped();
+        var label = new TextLabel(TextLabelOrientation.Horizontal, "Edges", Color.White);
+        var after = new TextLabel(TextLabelOrientation.Horizontal, "SHOWN", Color.White);
+
+        var text = ConsoleSnapshot.ToText(new Grid([1], [9, 21], [[label, after]]), 30, 1);
+
+        Assert.Equal(9, label.ActualWidth);
+        Assert.Contains("Edges", text);
+        Assert.Contains("SHOWN", text);
+    }
+    #endregion
 }

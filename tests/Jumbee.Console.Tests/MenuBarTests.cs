@@ -9,6 +9,10 @@ using Xunit;
 /// <summary>Headless tests for <see cref="MenuBar"/>: title rendering, opening a menu, and relaying activation.</summary>
 public class MenuBarTests
 {
+    // These drive the ambient UI.Overlay, which is global: a UI loop still winding down from another test class can
+    // leave it pointing elsewhere, so start from a stopped state. (xUnit builds a fresh instance per test.)
+    public MenuBarTests() => UiTestHarness.EnsureStopped();
+
     private static void SendKey(Control c, ConsoleKey k)
         => ((Control)c).OnInput(new UI.InputEventArgs(new InputEvent(new ConsoleKeyInfo('\0', k, false, false, false))));
 

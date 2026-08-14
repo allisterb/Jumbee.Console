@@ -543,7 +543,7 @@ if (args.Contains("--png"))
     Shot(new WireframeRenderer(), "1-wireframe");
     Shot(new SolidRenderer(), "2-solid");
     Shot(new ShadedRenderer { Edges = SilhouetteStyle.None }, "3-shaded-no-edges");
-    Shot(new ShadedRenderer { Edges = SilhouetteStyle.Ink }, "4-shaded-ink");
+    Shot(new ShadedRenderer { Edges = SilhouetteStyle.Line }, "4-shaded-line");
     Shot(new ShadedRenderer { Edges = SilhouetteStyle.Glyph }, "5-shaded-glyph");
     Shot(new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = false }, "7-clamped-lambert");
     Shot(new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = true }, "8-half-lambert");
@@ -571,7 +571,7 @@ if (args.Contains("--perf"))
     Time("solid", new SolidRenderer());
     Time("shaded", new ShadedRenderer { Edges = SilhouetteStyle.None, ContactStrength = 0f });
     Time("shaded+ao", new ShadedRenderer { Edges = SilhouetteStyle.None });
-    Time("shaded+ao+ink", new ShadedRenderer { Edges = SilhouetteStyle.Ink });
+    Time("shaded+ao+line", new ShadedRenderer { Edges = SilhouetteStyle.Line });
     Time("shaded+ao+glyph", new ShadedRenderer { Edges = SilhouetteStyle.Glyph });
     Time("  ..clamped", new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = false });
     Time("  ..wrapped", new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = true });

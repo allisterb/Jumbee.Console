@@ -216,8 +216,10 @@ public sealed class SidebarPanel : CompositeControl
         var gap = spaced ? 1 : 0;
         return new VerticalStackPanel(
             new Section("Scene", new VerticalStackPanel(status, counts, clock), 3),
-            new Section("Render", Stack(spaced, renderer, edges, wrapLighting), 3 + (2 * gap)),
-            new Section("Spawn", Stack(spaced, shape, mesh, size, speed, Row(drop, fire)), 5 + (4 * gap)),
+            new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
+                wrapLighting), 3 + (2 * gap)),
+            new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
+                Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale), 5 + (4 * gap)),
             // Hand-built rather than Stack'd: its first two rows are one readout, so the gap belongs only before
             // the buttons.
@@ -244,6 +246,15 @@ public sealed class SidebarPanel : CompositeControl
         return new VerticalStackPanel([.. rows]);
     }
 
+    // A caption beside a control, in the same column the sliders put theirs.
+    //
+    // A Grid, NOT a HorizontalStackPanel, and the difference is a trap worth knowing: a stack asks each child in
+    // turn how wide it wants to be and offers it everything still unclaimed. A TextLabel's answer is "all of it"
+    // (IntrinsicWidth 0 means fill), so it takes the whole row and every later child is laid out at zero width and
+    // never appears. Columns of fixed width are a Grid's job.
+    private static ILayout Labelled(string caption, Control control) =>
+        new Grid([1], [LabelColumn, Columns - 2 - LabelColumn], [[Line(caption, MutedColor), control]]);
+
     private static ILayout Row(Button left, Button right) =>
         new Grid([1], [Columns / 2 - 2, Columns / 2 - 2], [[left, right]]);
 
@@ -264,7 +275,7 @@ public sealed class SidebarPanel : CompositeControl
     private readonly TextLabel clock = Line("", MutedColor);
 
     private readonly Select renderer;
-    private readonly Select edges = new Select("none", "ink", "glyph") { FitContent = true };
+    private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
     private readonly Switch wrapLighting = new Switch("Wrap lighting", isOn: true);
 
     private readonly Select shape = new Select("box", "sphere", "mesh") { FitContent = true };
@@ -286,6 +297,9 @@ public sealed class SidebarPanel : CompositeControl
     private readonly Button clear = Action("Clear");
 
     private readonly CameraPad camera;
+
+    // Matches the sliders' LabelWidth plus their gap, so captions line up down the whole sidebar.
+    private const int LabelColumn = 9;
 
     private SceneSnapshot? drawn;
     private bool syncing;
