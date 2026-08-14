@@ -26,6 +26,7 @@ public sealed class ModelSidebarPanel : CompositeControl
         renderer.SelectionChanged += (_, _) => Push(() => view.SetRenderer(view.Renderers[renderer.SelectedIndex]));
         edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
         spin.Changed += (_, on) => Push(() => model.SpinRate = on ? DefaultSpin : 0f);
+        zUp.Changed += (_, on) => Push(() => model.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
 
         scaleX.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(0, (float)v));
         scaleY.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(1, (float)v));
@@ -46,7 +47,7 @@ public sealed class ModelSidebarPanel : CompositeControl
         // A blank row under every interactive control, as in SidebarPanel and for the same reason; the model's two
         // readout lines stay flush.
         SetContent(new VerticalStackPanel(
-            new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), Row(previous, next)), 4),
+            new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
             new Section("Render", Spaced(renderer, edges, spin), 5),
             new Section("Scale", Spaced(scaleX, scaleY, scaleZ), 5),
             new Section("Shear", Spaced(shearX, shearZ, Row(resetTransform, null)), 5),
@@ -75,6 +76,7 @@ public sealed class ModelSidebarPanel : CompositeControl
             renderer.SelectedIndex = IndexOfRenderer();
             edges.SelectedIndex = (int)(view.Edges ?? SilhouetteStyle.None);
             spin.IsChecked = model.SpinRate != 0f;
+            zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
             (shearX.Value, shearZ.Value) = (model.Shear.X, model.Shear.Y);
         }
@@ -140,6 +142,9 @@ public sealed class ModelSidebarPanel : CompositeControl
 
     private readonly TextLabel name = Line("", HeadingColor);
     private readonly TextLabel geometry = Line("", MutedColor);
+    // OBJ does not record which way is up, so it has to be told: a model exported from 3ds Max or CAD is Z-up and
+    // stands on its nose until this is flipped.
+    private readonly Switch zUp = new Switch("Z-up file");
     private readonly Button previous = Action("◀ Prev");
     private readonly Button next = Action("Next ▶");
 

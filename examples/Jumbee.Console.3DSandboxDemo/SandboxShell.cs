@@ -106,10 +106,21 @@ public static class SandboxShell
         UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
 
-        // Framed on the model rather than on a floor: it is scaled to ModelScene.ViewRadius and centred at the
-        // origin.
-        view.Camera.Distance = 16f;
-        view.Camera.Target = System.Numerics.Vector3.Zero;
+        // Framed on the model rather than on the floor. The model STANDS on the ground rather than being centred on
+        // the origin (see ModelScene.Elevation), so the camera looks at the height its middle actually sits at —
+        // which differs per model, since a tall one is lifted further than a flat one.
+        void AimAtModel()
+        {
+            // The viewport is only real once the tree has laid out, and this runs before the first one — fall back
+            // to the aspect of a typical wide terminal so the opening shot is framed rather than arbitrary.
+            var halfSpan = view.Renderer.Viewport.CellAspect is > 0 and var aspect ? aspect : DefaultCellAspect;
+            view.Camera.HomeTarget = new System.Numerics.Vector3(0, model.Elevation, 0);
+            view.Camera.HomeDistance = model.FramingDistance(view.Renderer.Projection.Focal, halfSpan);
+            view.Camera.Reset();
+        }
+
+        model.MeshChanged += AimAtModel;
+        AimAtModel();
 
         return new Viewer(root, model, view, sidebar, menu);
     }
@@ -124,6 +135,9 @@ public static class SandboxShell
     #endregion
 
     #region Private methods
+    // The NDC half-span of a viewport on a wide terminal, used only before the first layout. See AimAtModel.
+    private const double DefaultCellAspect = 0.6;
+
     // Nested DockPanels, never a Grid at the root: the menu takes its row, the footer its two lines, the sidebar its
     // fixed column, and the viewport fills whatever is left — at every terminal size, with no split positions to
     // recompute.

@@ -380,6 +380,7 @@ public sealed class SceneView : CompositeControl
             case ';': model.Nudge(0, -0.08f); return true;
             case '\'': model.Nudge(0, +0.08f); return true;
             case '0': model.ResetTransform(); return true;
+            case 'a': model.UpAxis = model.UpAxis == ModelUpAxis.Z ? ModelUpAxis.Y : ModelUpAxis.Z; return true;
             case 'p': model.SpinRate = model.SpinRate == 0f ? 0.35f : 0f; return true;
             default: return false;
         }

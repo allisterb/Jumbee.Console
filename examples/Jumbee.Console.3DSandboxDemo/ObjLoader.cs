@@ -34,11 +34,20 @@ public static class ObjLoader
     {
         var vertices = new List<Vector3>();
         var indices = new List<int>();
+        ModelUpAxis? authoredUpAxis = null;
 
         foreach (var line in lines)
         {
             var span = line.AsSpan().Trim();
             if (span.Length < 2) continue;
+
+            // The exporter banner, which OBJ writers put in the first few comment lines. Only comments before any
+            // geometry are considered, so a stray mention deeper in the file cannot flip a model over.
+            if (span[0] == '#')
+            {
+                if (vertices.Count == 0 && authoredUpAxis is null && IsZUpExporter(span)) authoredUpAxis = ModelUpAxis.Z;
+                continue;
+            }
 
             if (span[0] == 'v' && span[1] == ' ')
             {
@@ -79,11 +88,27 @@ public static class ObjLoader
         if (clean.Count < 3) throw new InvalidDataException("every face in the OBJ referenced a missing vertex");
 
         Normalise(vertices, radius);
-        return new Mesh([.. vertices], [.. clean]);
+        return new Mesh([.. vertices], [.. clean]) { AuthoredUpAxis = authoredUpAxis };
     }
     #endregion
 
     #region Private methods
+    // Exporters whose OBJ output is conventionally Z-up, recognised by the banner they write into the first
+    // comment lines.
+    //
+    // A DEFAULT, not a fact, and worth being honest about the difference: the banner names the exporter, and both
+    // of these have a Y/Z-up option that writes the same header either way. It is right often enough to be worth
+    // applying, and the viewer applies it somewhere VISIBLE — the sidebar's Z-up switch — so a wrong guess reads as
+    // a setting to flip rather than as a broken loader. A silent rotation would not be worth the risk.
+    //
+    // The geometric alternative is worse, not better. "The up axis is the smallest extent" misfires on the
+    // reference cow, whose extents are (0.500, 0.306, 0.163): Z is smallest and the model is Y-up.
+    private static bool IsZUpExporter(ReadOnlySpan<char> comment)
+    {
+        foreach (var banner in ZUpExporters)
+            if (comment.Contains(banner, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
     // Centre on the bounding box and scale so the largest half-extent matches `radius`. Uniform, so the model is
     // not distorted; using the box rather than the centroid keeps a lopsided model inside its own bounds.
     private static void Normalise(List<Vector3> vertices, float radius)
@@ -128,5 +153,9 @@ public static class ObjLoader
 
     private static float Number(string text) =>
         float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : 0f;
+    #endregion
+
+    #region Fields
+    private static readonly string[] ZUpExporters = ["3ds Max Wavefront OBJ Exporter", "SolidWorks", "AutoCAD"];
     #endregion
 }

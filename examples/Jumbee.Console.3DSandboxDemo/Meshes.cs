@@ -16,12 +16,44 @@ public sealed class Mesh
     {
         Vertices = vertices;
         Indices = indices;
+
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        foreach (var v in vertices)
+        {
+            min = Vector3.Min(min, v);
+            max = Vector3.Max(max, v);
+        }
+
+        Min = vertices.Length == 0 ? Vector3.Zero : min;
+        Extents = vertices.Length == 0 ? Vector3.Zero : (max - min) * 0.5f;
     }
     #endregion
 
     #region Properties
     /// <summary>Vertex positions, in a unit-sized local space.</summary>
     public Vector3[] Vertices { get; }
+
+    /// <summary>
+    /// The low corner of the mesh's bounding box, in local space.
+    /// </summary>
+    /// <remarks>
+    /// Negative on every axis, because a loaded mesh is centred on its bounding box (see <c>ObjLoader</c>). Negate
+    /// the up axis' component to stand a model on a surface rather than burying half of it — which axis that is
+    /// depends on how the file was authored, so it is taken per component rather than assumed to be Y.
+    /// </remarks>
+    public Vector3 Min { get; }
+
+    /// <summary>Half-extents of the mesh's bounding box, in local space.</summary>
+    /// <remarks>The loader normalises the <em>largest</em> of the three to a fixed value, so these say how far from
+    /// a cube a model is — which is what decides how far back a camera has to sit to frame it.</remarks>
+    public Vector3 Extents { get; }
+
+    /// <summary>The up axis the file appears to have been authored with, or <see langword="null"/> when nothing in
+    /// it suggested one.</summary>
+    /// <remarks>A default for the viewer's Z-up switch, not a fact — see <c>ObjLoader.IsZUpExporter</c> for why the
+    /// distinction matters and why the guess is applied somewhere the user can see and undo it.</remarks>
+    public ModelUpAxis? AuthoredUpAxis { get; init; }
 
     /// <summary>Triangle corner indices, three per triangle.</summary>
     public int[] Indices { get; }

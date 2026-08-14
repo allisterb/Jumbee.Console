@@ -24,6 +24,13 @@ public sealed class OrbitCamera
     /// <summary>The point orbited and looked at.</summary>
     public Vector3 Target { get; set; } = new(0, 1, 0);
 
+    /// <summary>Where <see cref="Reset"/> puts the camera back to. Defaults to the sandbox's opening shot; the
+    /// model viewer moves it to whatever height the model it is showing sits at.</summary>
+    public Vector3 HomeTarget { get; set; } = new(0, 1, 0);
+
+    /// <summary>The distance <see cref="Reset"/> restores.</summary>
+    public float HomeDistance { get; set; } = 20f;
+
     /// <summary>Where the camera sits: spherical coordinates around <see cref="Target"/>.</summary>
     public Vector3 Eye => Target + (Distance * new Vector3(
         MathF.Sin(Phi) * MathF.Cos(Theta),
@@ -50,13 +57,14 @@ public sealed class OrbitCamera
         Target += (view.Right * dRight) + (view.Up * dUp);
     }
 
-    /// <summary>Restores the opening shot.</summary>
+    /// <summary>Restores the opening shot — the angles, and whatever <see cref="HomeTarget"/> and
+    /// <see cref="HomeDistance"/> currently are.</summary>
     public void Reset()
     {
         Theta = MathF.PI / 4;
         Phi = MathF.PI / 3;
-        Distance = 20f;
-        Target = new Vector3(0, 1, 0);
+        Distance = HomeDistance;
+        Target = HomeTarget;
     }
 
     /// <summary>Builds this frame's orthonormal view basis. Cheap — recompute it per frame rather than caching.</summary>
@@ -73,8 +81,11 @@ public sealed class OrbitCamera
     #region Fields
     private const float MinPhi = 0.05f;
     private const float MaxPhi = MathF.PI - 0.05f;
-    private const float MinDistance = 2f;
-    private const float MaxDistance = 60f;
+    /// <summary>The closest the camera may sit to its target — inside this it would be in the scene.</summary>
+    public const float MinDistance = 2f;
+
+    /// <summary>The furthest the camera may sit from its target.</summary>
+    public const float MaxDistance = 60f;
 
     private static readonly Vector3 WorldUp = new(0, 1, 0);
     #endregion

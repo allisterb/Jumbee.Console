@@ -768,6 +768,65 @@ changing, not on the height**, since that override runs on every re-layout and c
 that changed nothing is how a layout starts chasing its own tail. The demo now asks for 44 rows so a fresh window
 gets the spaced form. Verified both ways from PNGs at 120×44 and 100×36.
 
+**The viewer's model was buried to the waist**, and it took someone looking at it to notice. Two individually
+correct decisions collided: `ObjLoader` centres a mesh on its bounding box — right for a turntable, which should
+spin about the model's own middle — while the renderers draw their ground at `y = 0`. A centred model therefore
+straddles the floor. `Mesh.Floor` (the lowest vertex, computed once) and `ModelScene.Elevation` lift it to stand on
+the ground; only the vertical scale changes that lift, because the spin is about Y and the shear displaces X and Z
+*by* height without touching it.
+
+The camera then has to follow, or it frames the model's feet: `OrbitCamera` gained `HomeTarget`/`HomeDistance` so
+`Reset` restores a per-scene shot rather than a hardcoded one, and the viewer re-aims at the model's middle when
+the **mesh** changes — deliberately not on a transform tweak, so the camera stays where the user put it while they
+stretch one.
+
+`ModelScene.FramingDistance` then replaces the fixed distance of 16, and getting it right took three attempts that
+are worth recording because each failure looked like a tuning problem and was not:
+
+| | bunny | what it looked like |
+|---|---|---|
+| bounding **sphere**, `d = focal·r / fill` | 30.6 | model a quarter of the frame, surrounded by floor |
+| per-**axis**, height vs the XZ diagonal | 14.2 | an ear clipped off the top |
+| per-axis **+ depth** | 20.4 | framed, with a margin |
+
+The sphere fails because its radius is the box's *corner* — a large overestimate for anything rounded. The
+per-axis fit fails for a subtler reason: it solves for where the model's **centre** goes, and the near half is
+closer than that, so it projects larger than the arithmetic says. Adding the depth the model reaches toward the
+camera fits the near face instead of the middle. Both constraints are otherwise exact for a turntable — height
+never changes as it spins, and the worst horizontal case is the XZ diagonal.
+
+#### Up axis, and a footer that had quietly stopped repainting (2026-08-10)
+
+A `plane.obj` from `reference/projects/3d-engine-on-terminal-main/assets` loaded standing on its nose. Not our bug
+and worth measuring rather than eyeballing: every voxcii model has its largest half-extent in **X** (0.500), while
+the plane's is in **Y** with a thin 0.117 axis — and its header names the `3ds Max Wavefront OBJ Exporter`. **3ds
+Max is Z-up.** OBJ records no up axis at all, so a Z-up file loaded by a Y-up viewer is upright by luck or not.
+
+`ModelUpAxis` + `ModelScene.UpAxis` converts it with a quarter turn about X, applied **first** in the transform
+chain so everything after it works in the viewer's frame — which is what keeps "Scale Y" meaning "taller on screen"
+for a Z-up model too. The rotation maps `(x, y, z)` to `(x, z, -y)`, so the posed extents swap Y and Z and the
+elevation is taken from `Min.Z` instead of `Min.Y`; both feed the standing-on-the-floor and framing maths unchanged.
+Reachable three ways, as everything else in M3: a `Z-up file` switch in the sidebar, a checkable `Model` menu item,
+and `a`.
+
+**The switch is then defaulted from the file's exporter banner** — `3ds Max Wavefront OBJ Exporter`, `SolidWorks`,
+`AutoCAD`, read only from comments before any geometry. What makes that acceptable is *where the guess lands*: on a
+visible switch the user can flip, not silently in the geometry. A hidden auto-rotation would be worse than no
+detection, because a wrongly-rotated model reads as a broken loader; a switch that is on reads as a setting. Worth
+being precise that this is a **default, not a fact** — the banner names the exporter, and both of those have a
+Y/Z-up option that writes the same header either way.
+
+The tempting geometric alternative is *worse*, and there is a counter-example to hand: "the up axis is the smallest
+extent" misfires on the reference cow, whose extents are `(0.500, 0.306, 0.163)` — Z is smallest and the model is
+Y-up. Measured across the five reference models, the banner check fires on exactly one, the plane, and leaves the
+four Y-up models alone.
+
+**And the screenshot showed a second bug nobody had reported:** the footer read `bunny 4968 tris` while the sidebar
+read `plane 81204`. `SceneFooter.Snapshot` used `SetAtomicProperty`, which invalidates only when the value changes
+— correct for the simulation, which publishes a fresh snapshot per tick, and wrong for `ModelScene`, which mutates
+**one instance in place**. The reference never changed, so the footer painted once on the first frame and then
+froze for the life of the viewer. It now repaints on every assignment.
+
 **A Camera pad** closes the last thing the mouse could not reach: a four-way orbit pad, zoom, and reset, in a panel
 under the others in both sidebars. One click is ~15° rather than the arrow keys' 4.6° — a key is held or tapped
 repeatedly, a button is clicked, and eighty clicks for a turn is not a control. **Each button hands focus back to

@@ -21,8 +21,16 @@ internal static class ShellChecks
         }
 
         Meshes.Register(Meshes.TorusKnot(), "knot");
-        var teapot = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models\teapot.obj";
-        if (File.Exists(teapot)) Meshes.Register(ObjLoader.Load(teapot), "teapot");
+        var models = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
+        if (args.Contains("viewer") && Directory.Exists(models))
+        {
+            foreach (var f in Directory.GetFiles(models, "*.obj").OrderBy(x => x))
+                if (!f.Contains("dragon")) Meshes.Register(ObjLoader.Load(f), Path.GetFileNameWithoutExtension(f));
+        }
+        else if (File.Exists(Path.Combine(models, "teapot.obj")))
+        {
+            Meshes.Register(ObjLoader.Load(Path.Combine(models, "teapot.obj")), "teapot");
+        }
 
         if (args.Contains("viewer"))
         {
@@ -32,6 +40,34 @@ internal static class ShellChecks
             v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
             v.Sidebar.Report();
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
+
+            // Every registered model in its default pose: whether each stands on the ground, and whether the
+            // per-model framing distance actually frames it.
+            if (args.Contains("--png"))
+            {
+                var d = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
+                var o = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+                var plane = @"C:\Projects\Jumbee.Console\reference\projects\3d-engine-on-terminal-main\assets\plane.obj";
+                if (File.Exists(plane)) Meshes.Register(ObjLoader.Load(plane), "plane");
+
+                for (var i = 0; i < Meshes.RegisteredCount; i++)
+                {
+                    v.Model.Reload(i);
+                    Console.WriteLine($"  {v.Model.Name,-8} authored up-axis " +
+                                      $"{Meshes.Get(v.Model.MeshId).AuthoredUpAxis?.ToString() ?? "(none)",-6} " +
+                                      $"-> using {v.Model.UpAxis}");
+
+                    _ = ConsoleSnapshot.ToText(v.Root, width, height);
+                    v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                    v.Sidebar.Report();
+                    _ = ConsoleSnapshot.ToText(v.Root, width, height);
+                    ConsoleSnapshot.SavePng(v.Root, width, height, Path.Combine(d, $"frame-{v.Model.Name}.png"), o);
+                    Console.WriteLine($"  {v.Model.Name,-8} radius {v.Model.BoundingRadius,5:F2}  " +
+                                      $"elevation {v.Model.Elevation,5:F2}  distance {v.View.Camera.Distance,5:F1}");
+                }
+
+                v.Model.Reload(0);
+            }
 
             var viewerLines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(v.Root, width, height));
             Check("the viewer sidebar shows the model", viewerLines.Any(l => l.Contains(v.Model.Name)), v.Model.Name);

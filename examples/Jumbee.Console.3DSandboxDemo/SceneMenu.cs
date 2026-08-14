@@ -95,6 +95,14 @@ public static class SceneMenu
                 () => model.SpinRate = model.SpinRate == 0f ? 0.35f : 0f) { Shortcut = "p" },
             new MenuItem("Reset transform", model.ResetTransform) { Shortcut = "0" },
             MenuItem.Separator,
+            // OBJ records no up axis, so a file from a Z-up tool (3ds Max, CAD) has to be told.
+            new MenuItem("File is Z-up",
+                () => model.UpAxis = model.UpAxis == ModelUpAxis.Z ? ModelUpAxis.Y : ModelUpAxis.Z)
+            {
+                Checked = model.UpAxis == ModelUpAxis.Z,
+                Shortcut = "a",
+            },
+            MenuItem.Separator,
             new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
         ]);
 

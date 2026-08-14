@@ -19,10 +19,16 @@ public sealed class SceneFooter : Control
     #region Properties
     /// <summary>The snapshot to report. Set from <see cref="SceneView.Drew"/>, so the numbers describe the frame on
     /// screen rather than a tick that has not been drawn yet.</summary>
+    /// <remarks>
+    /// Repaints on every assignment rather than only when the reference changes. The simulation publishes a fresh
+    /// snapshot per tick, so a reference check would have been equivalent there — but <see cref="ModelScene"/>
+    /// mutates one instance in place, so the reference never changes and the footer froze on the first frame it
+    /// drew. It sat there naming the model you started with while the sidebar showed the one you had switched to.
+    /// </remarks>
     public SceneSnapshot? Snapshot
     {
         get => snapshot;
-        set => SetAtomicProperty(ref snapshot, value);
+        set { snapshot = value; Invalidate(); }
     }
 
     /// <summary>Whether the simulation is paused.</summary>
@@ -76,8 +82,8 @@ public sealed class SceneFooter : Control
                      $"scale {model.Scale.X:F2},{model.Scale.Y:F2},{model.Scale.Z:F2}  " +
                      $"shear {model.Shear.X:+0.00;-0.00;0.00},{model.Shear.Y:+0.00;-0.00;0.00}";
 
-        const string Keys = " drag orbit · wheel zoom · [] model · xyz/XYZ scale · ,. ;' shear · 0 reset · " +
-                            "u sidebar · F1 keys · q quit";
+        const string Keys = " drag orbit · wheel zoom · [] model · xyz/XYZ scale · ,. ;' shear · a up-axis · " +
+                            "0 reset · u sidebar · F1 keys · q quit";
 
         WriteRow(0, status, new Color(200, 205, 215), new Color(28, 30, 38));
         WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));

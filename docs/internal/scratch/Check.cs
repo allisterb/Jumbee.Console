@@ -10,14 +10,16 @@ if (args.Contains("--probe")) { Probe.LaunchProbe.Run(98, 30); return 0; }
 
 if (args.Contains("--load"))
 {
-    var dir = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
+    var dir = args.FirstOrDefault(a => a.Contains("dir="))?.Split('=')[1]
+              ?? @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
     foreach (var f in Directory.GetFiles(dir, "*.obj").OrderBy(x => x))
     {
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
         var m = ObjLoader.Load(f);
         var wire = m.WireEdges.Length;
         Console.WriteLine($"  {Path.GetFileName(f),-12} {m.TriangleCount,7} tris  parse {sw0.ElapsedMilliseconds,5} ms  " +
-                          $"{new FileInfo(f).Length / 1024,6} KB  wire {wire}");
+                          $"{new FileInfo(f).Length / 1024,6} KB  wire {wire}  " +
+                          $"extents {m.Extents.X:F3},{m.Extents.Y:F3},{m.Extents.Z:F3}");
     }
 
     return 0;
