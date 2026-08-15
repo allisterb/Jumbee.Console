@@ -141,11 +141,15 @@ public sealed class ModelScene : ISceneSource
         SetScale(s);
     }
 
-    /// <summary>Sets one axis' scale outright — what a sidebar slider does, where the keys multiply.</summary>
+    /// <summary>
+    /// Sets one axis' scale outright, or all three when <paramref name="axis"/> is -1 — what a sidebar slider does,
+    /// where the keys multiply.
+    /// </summary>
     public void SetScaleAxis(int axis, float value)
     {
         var s = Scale;
-        if (axis == 0) s.X = value;
+        if (axis < 0) s = new Vector3(value);
+        else if (axis == 0) s.X = value;
         else if (axis == 1) s.Y = value;
         else s.Z = value;
 

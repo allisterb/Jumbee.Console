@@ -334,8 +334,9 @@ public sealed class SceneView : CompositeControl
     }
 
     /// <inheritdoc/>
+    // A wheel notch reports delta < 0 for up, so up pulls the camera in and down pushes it out.
     protected override void OnMouseWheel(Position position, int delta) =>
-        Camera.Zoom(delta > 0 ? 1f - ZoomStep : 1f + ZoomStep);
+        Camera.Zoom(delta < 0 ? 1f - ZoomStep : 1f + ZoomStep);
 
     /// <inheritdoc/>
     protected override HelpInfo? GetHelpInfo() => new HelpInfo("3D viewport")

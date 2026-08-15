@@ -2,7 +2,7 @@
 
 A real-time **3D rigid-body sandbox** in the terminal, and an **OBJ model viewer**, built on `Jumbee.Console`.
 Physics comes from [Box3D](https://github.com/erincatto/box3d) (Erin Catto's engine, via the `Box3D.NET` binding);
-everything else — camera, projection, rasteriser — is about 900 lines of `System.Numerics` in this project. See [3D Rendering in a Terminal](../../docs/3D%20Rendering%20in%20a%20Terminal.md) for a deep dive into how it works.
+everything else — camera, projection, rasteriser — is about 900 lines using `System.Numerics` entirely. See [3D Rendering in a Terminal](../../docs/3D%20Rendering%20in%20a%20Terminal.md) for a deep dive into how it works.
 
 Three renderers draw the same scene, cycled live with `v`:
 

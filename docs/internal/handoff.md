@@ -1,39 +1,77 @@
-# Handoff — end of the 3D sandbox session (2026-08-10)
+# Handoff — end of the M3 UI session (2026-08-14)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
 
 ## Next session starts here
 
-**The 3D sandbox is through M2.5**, committed up to `3d79a59`. Read
-[`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md) first — it now carries a result section per milestone with the
-measured numbers and every finding, written as the work happened rather than recalled afterwards.
+**The 3D sandbox is through M3.5**, committed up to `159f8b9`. Read
+[`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md) first — it carries a result section per milestone with the measured
+numbers and every finding, written as the work happened rather than recalled afterwards.
 
-**Next: M3 — the sidebar UI.** Sidebar panels (mode, params, spawn, inspector showing the selected body's
-mass/velocity/sleep state), footer key hints, F1 help via `HelpInfo`. The footer already carries a live inspector
-line, so M3 is mostly moving that into a docked panel and adding the spawn/params blocks.
+**Next: M4 — polish.** Colour modes (velocity / mass / sleep), motion trails, scene presets (stack, tower, pyramid,
+domino run, wrecking ball). Then M5 — ship: promote the harness, README, gallery entry, Docker target.
 
-One library change also landed this session, outside the demo: `src/Jumbee.Console/Input/VtInputSource.cs` no
-longer dies when a console read fails, plus `tests/Jumbee.Console.Tests/VtInputSourceTests.cs`. See the operational
-note below for what it was.
+The demo now has a **complete mouse-driven UI**, which was the whole of M3 and more than the milestone originally
+scoped. Every keyboard action has a mouse route: a `MenuBar`, a 32-column sidebar (Scene / Render / Spawn / World /
+Inspector / Camera), a camera D-pad, and a runtime model loader. `SandboxShell` assembles both scenes so the
+headless harness drives the **real** shell rather than a rebuild of it.
+
+**Seven library changes landed**, all driven by something the demo could not otherwise express:
+
+| Change | Why |
+|---|---|
+| **`Slider`** (+ `SliderStyle`, theme tokens) | nothing in the library was a draggable value; `Gauge`/`ProgressBar` are display-only |
+| **`FileBrowser`** (+ `Dialog` helpers) | models were chosen by a CLI arg and unchangeable at runtime |
+| `MenuBar.Add(title, Func<MenuItem[]>)` + `MenuItem.Checked` | `MenuItem` is immutable, so a checkmark could never update |
+| `Tree.NodeExpanding`, public `Tree.SelectNode` | no way to populate a subtree on demand |
+| `Select.SetOptions`, `Select.FitContent` | options were fixed for life; the closed control never matched its pop-up |
+| `ListBox.CommitOnClick` | a single click committed, so a chooser opened whatever you glanced at |
+| `ConsoleSnapshot.Drag` | no capture-aware drag in the test API |
+
+**And one real library bug, found by using the app, not by a test:** `Dialog` treated *any* loss of focus as a
+dismissal. Clicking a field inside a dialog moves focus to that child, so the dialog silently completed with its
+cancel result on the **first click inside it**, after which every button was dead and it sat there un-closable.
+Only content with no focusable children (the `Message`/`Confirm` helpers) escaped it, which is why it survived.
+
+**New public doc:** [`docs/3D Rendering in a Terminal.md`](../3D%20Rendering%20in%20a%20Terminal.md) — a from-first-principles
+explainer of the whole 3D implementation for a C# developer who has never written a renderer. Linked from
+`docs/README.md` under a new "Deep dives" heading. **Not** in the doc-snippet scan set (its fences are demo
+excerpts, not library snippets), so it is not machine-checked — see the open question below.
 
 ### Open questions the next session should decide
 
-1. **Should the wireframe renderer draw a convex hull for mesh bodies?** Right now it draws a thinned sample of
-   the mesh's edges, capped at 64, and a dense model reads as a sparse cloud rather than a shape. The principled
-   fix is hull edges (~30–60 edges, a real silhouette) but Box3D does not expose its hull's geometry, so it means
-   writing a hull ourselves. Documented as a known limitation; nobody has asked for it yet.
-2. **Vendor a model, or keep pointing at `reference/`?** The demo currently ships only a generated torus knot, so
-   the mesh path works with no third-party asset. voxcii's *code* is MIT but its *model files* have their own
-   provenance (the Stanford bunny in particular). If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
-3. **Promote the parked harness into a real test project.** 63 checks; it caught two shipped bugs (dead arrow
-   keys, a clipped footer) plus several wrong assumptions of mine. Parked at
-   [`scratch/`](scratch/README.md) — sources only, not wired into the solution, so it will rot unless adopted.
-   M5 already lists this; it is worth doing sooner.
+1. **Should the doc-snippet harness *render* as well as compile?** The starter example in
+   `docs/controls/Writing Applications.md` — the first thing a new user copies — **did not render its button** for
+   an unknown length of time. It compiled perfectly; the label filled the row and the button laid out at zero
+   width. Compiling proves a fence is valid C#, not that it produces a UI. Fixed, but the class of bug is open.
+2. **Should `HorizontalStackPanel` get weighting / star sizing?** The above is the general trap: the panel offers
+   each child everything unclaimed and most controls report *fill*, so the first one swallows the row. Documented
+   in three places now, with `Grid` as the answer. A weighting policy would make the trap unnecessary, but it means
+   changing an `ext/` class.
+3. **Promote the parked harness into a real test project.** Now ~67 checks plus a `--shell` mode covering the M3
+   UI (layout, key↔widget agreement both ways, sidebar toggle, camera pad) and a `--sidebar` row dump. It has
+   caught four shipped bugs. Still sources only at [`scratch/`](scratch/README.md), not wired into the solution.
+   **This is the one that will rot.**
+4. **Should the wireframe renderer draw a convex hull for mesh bodies?** Unchanged from last session: it draws a
+   thinned sample capped at 64 edges and a dense model reads as a sparse cloud. The principled fix is hull edges,
+   but Box3D does not expose hull geometry, so it means writing a hull ourselves.
+5. **Vendor a model, or keep pointing at `reference/`?** Unchanged. The demo ships only a generated torus knot.
+   If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
 
 ## Where things stand — the 3D sandbox
 
-Milestones M0 through M2.5 are done. `examples/Jumbee.Console.3DSandboxDemo` has a README with the full key map.
+Milestones M0 through M3.5 are done. `examples/Jumbee.Console.3DSandboxDemo` has a README with the full key map.
+
+**The M3 result that matters:** a menu bar, a 32-column sidebar of live widgets and a two-line footer make every
+renderer emit **fewer** ANSI bytes than the bare viewport did (wireframe 12,929 → 11,598 B; shaded 17,452 →
+14,738 B). The sidebar replaces 32 columns of continuously-changing 3D with static text the compositor emits
+nothing for. Whatever the objection is to putting UI beside a 3D viewport, it is not the frame budget.
+
+**Keys and widgets agree** because neither talks to the other: the state objects own the truth and raise a change
+event; a widget writes to state, and the panel reads it back behind a `syncing` re-entrancy guard. Both directions
+are asserted headlessly, and the widget direction against *what is on screen* — parse the value back out of the
+slider's rendered readout, not off the object.
 
 **Three renderers over one scene**, cycled with `v`, sharing a rasteriser through `MeshRenderer`:
 `WireframeRenderer` (braille edges on a `Canvas`), `SolidRenderer` (flat per-triangle, directional),
@@ -50,7 +88,24 @@ every neighbour differs. Two results worth remembering because they invert the i
 - **half-lambert wrapping** emits **16% fewer** bytes than clamping, because compressing the lit range into fewer
   distinct levels coalesces better.
 
-**Five findings that cost real time**, all written up in the plan doc:
+**Five findings from M3**, all written up in the plan doc, and all of the "silent" kind:
+
+1. **A control cannot scroll to a row it has just made reachable.** Expanding a tree node is what makes it tall
+   enough to scroll, but a frame clamps its scroll offset against the content height it last *measured* — so a
+   scroll issued in the same pass is dropped to zero, and the next pass computes the row from the pre-expansion
+   layout. Two wrong answers, both silent. (Self-inflicted variant met first: an explicit `Height` pins a control
+   so its frame can never scroll it at all.)
+2. **`SetAtomicProperty` only invalidates when the *value* changes**, so a control fed a mutable object updated in
+   place paints once and then freezes. The demo footer sat naming the wrong model for the life of the viewer.
+3. **Any control that deliberately paints less than the width it is offered must set `RendersOwnFocus`.** The
+   themed focus cue fills a control's *unpainted* cells, so a content-sized `Select` sprang back to full width the
+   moment focus returned to it.
+4. **A fill-width control in a `HorizontalStackPanel` swallows the row.** See open question 2.
+5. **Judging a change from a PNG changed a design.** The `Slider`'s thumb was drawn with the eighth-block sub-cell
+   ramp, exactly as `ProgressBar` draws its fill edge, and every test passed. The image showed a marker one eighth
+   of a cell wide at some values and a full cell at others — a stack read as a ragged bar chart. Whole cell now.
+
+**Five findings from M0–M2.5**, still worth knowing:
 
 1. `CompositeControl` with no focusable children never receives `OnInput` from the layout route — handle keys in
    `InterceptInput`. Worse, `UI.SendInput` takes a *different* path, so the obvious test is green while the app is
@@ -62,8 +117,10 @@ every neighbour differs. Two results worth remembering because they invert the i
 4. `Body.AddMesh` requires a **static** body, so a mesh body must collide as a convex hull.
 5. **Judge renders from a PNG, never an ASCII dump.** See below.
 
-**0.1.10 is packed and committed** (`artifacts/`, three packages, not published). The session was documentation-led
-and produced one breaking change:
+### From the 0.1.10 documentation session, for context
+
+**0.1.10 was packed and committed** (`artifacts/` now holds 0.1.11; `ProjectAssemblyVersion` is `0.1.11`). That
+session was documentation-led and produced one breaking change:
 
 - **Breaking: eleven control events moved from `Action`/`Action<T>` to `EventHandler`/`EventHandler<T>`.** The same
   event name had different shapes on different controls (`TabPanel.SelectionChanged` was `Action<int>`,
@@ -79,7 +136,7 @@ and produced one breaking change:
 - **Embedded PDBs + SourceLink** on all ten bundled assemblies, each mapped to its own public repo and commit. No
   symbols package: a `.snupkg` only reaches people who enabled the NuGet.org symbol server.
 
-Full suite **929/929** in Debug and Release. `ProjectAssemblyVersion` is `0.1.10`.
+Full suite was **929/929** at that point; it is **976/976** now.
 
 **`CHANGELOG.md` is now `CHANGELOG.txt`** — plain text, because it is packed verbatim as `PackageReleaseNotes` and
 neither nuget.org nor the VS package manager renders Markdown there. Every reference was updated
@@ -121,6 +178,18 @@ bespoke delegate types while everything else is now `EventHandler`.
 
 ## Operational notes
 
+- **The full-suite flakiness improved, and the cause is now half-understood.** The suite used to fail a *different*
+  1–2 tests per run while all passed in isolation. `MenuBarTests` had no `UiTestHarness.EnsureStopped()` in its
+  constructor while most classes do, and it drives the ambient `UI.Overlay`, which is global; adding it gave three
+  consecutive clean 976/976 runs — the cleanest the suite has been. If a stray failure returns, **check whether the
+  class touches `UI.Overlay`, `UI.SetFocus` or `ConsoleSnapshot`'s static mouse state without resetting it** before
+  suspecting a regression.
+- **A doc example can be compile-clean and visibly broken.** See open question 1. When touching a doc snippet that
+  builds a layout, render it — the three-line check is `ConsoleSnapshot.ToText(layout, w, h)` plus reading
+  `ActualWidth` on each child.
+- **The demo holds its own output DLLs while running**, exactly as the examples browser does: a build fails with
+  `MSB3021`/`MSB3027` copy locks and zero `CS` diagnostics. The parked harness sidesteps this — it compiles the
+  demo's *sources* into its own output, so it can verify a change while the app is still open.
 - **Judge anything visual from a PNG, not an ASCII dump.** `ConsoleSnapshot.SavePng` needs one setting —
   `SnapshotImageOptions.FontFamily = "Cascadia Mono"`, because the default Consolas has no braille and poor
   geometric-shape coverage. Printing a text dump through the Bash tool mangles `▀`, braille and `◆◇◈◊` into `?`,

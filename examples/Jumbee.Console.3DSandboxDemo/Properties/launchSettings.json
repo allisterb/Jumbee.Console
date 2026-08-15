@@ -1,11 +1,11 @@
 {
   "profiles": {
-    "Jumbee.Console.3DSandboxDemo": {
-      "commandName": "Project"
-    },
-    "Teapots": {
+    "OBJ Viewer": {
       "commandName": "Project",
       "commandLineArgs": "obj C:\\Projects\\Jumbee.Console\\media\\models"
+    },
+    "Physics Sandbox": {
+      "commandName": "Project"
     }
   }
 }

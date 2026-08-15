@@ -28,6 +28,8 @@ public sealed class ModelSidebarPanel : CompositeControl
         spin.Changed += (_, on) => Push(() => model.SpinRate = on ? DefaultSpin : 0f);
         zUp.Changed += (_, on) => Push(() => model.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
 
+        // The master slider drives all three axes to its own value, so it also pulls apart a non-uniform scale.
+        scaleAll.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(-1, (float)v));
         scaleX.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(0, (float)v));
         scaleY.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(1, (float)v));
         scaleZ.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(2, (float)v));
@@ -36,7 +38,12 @@ public sealed class ModelSidebarPanel : CompositeControl
 
         previous.Activated += (_, _) => model.Step(-1);
         next.Activated += (_, _) => model.Step(+1);
-        resetTransform.Activated += (_, _) => model.ResetTransform();
+
+        // Each section's Reset undoes that section and nothing else, now that there are two of them — a button that
+        // also cleared the panel below it would be a trap. The whole-transform reset is still Model ▸ Reset transform
+        // and the 0 key.
+        resetScale.Activated += (_, _) => Push(() => model.SetScaleAxis(-1, 1f));
+        resetShear.Activated += (_, _) => Push(() => model.SetShear(0f, 0f));
 
         // The same pad the sandbox sidebar carries — it is the same camera, and having it in one scene and not the
         // other would be the odd choice.
@@ -49,8 +56,8 @@ public sealed class ModelSidebarPanel : CompositeControl
         SetContent(new VerticalStackPanel(
             new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
             new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Edges", edges), spin), 5),
-            new Section("Scale", Spaced(scaleX, scaleY, scaleZ), 5),
-            new Section("Shear", Spaced(shearX, shearZ, Row(resetTransform, null)), 5),
+            new Section("Scale", Spaced(scaleAll, scaleX, scaleY, scaleZ, Row(resetScale, null)), 9),
+            new Section("Shear", Spaced(shearX, shearZ, Row(resetShear, null)), 5),
             new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows)));
 
         Report();
@@ -78,6 +85,10 @@ public sealed class ModelSidebarPanel : CompositeControl
             spin.IsChecked = model.SpinRate != 0f;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
+            // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
+            // disagree there is no value it could honestly show, so it keeps the last one it was set to — which is
+            // what the next drag will flatten them all back to.
+            if (model.Scale.X == model.Scale.Y && model.Scale.Y == model.Scale.Z) scaleAll.Value = model.Scale.X;
             (shearX.Value, shearZ.Value) = (model.Shear.X, model.Shear.Y);
         }
         finally
@@ -139,15 +150,17 @@ public sealed class ModelSidebarPanel : CompositeControl
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Half - 1 } };
 
 
+    // 9 cells, the width of the longest caption ("Scale All"), so nothing is ellipsized and every track starts in
+    // the same column.
     private static Slider Axis(string label, float min, float max, float value) =>
-        new Slider(min, max, value, label) { LabelWidth = 8 };
+        new Slider(min, max, value, label) { LabelWidth = 9 };
     #endregion
 
     #region Fields
     private const int Half = SidebarPanel.Columns / 2 - 2;
 
     // Matches the sliders' LabelWidth plus their gap, so captions line up down the whole sidebar.
-    private const int LabelColumn = 9;
+    private const int LabelColumn = 10;
     private const float DefaultSpin = 0.35f;
 
     private readonly SceneView view;
@@ -165,12 +178,15 @@ public sealed class ModelSidebarPanel : CompositeControl
     private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
     private readonly Switch spin = new Switch("Turntable", isOn: true);
 
+    private readonly Slider scaleAll = Axis("Scale All", ModelScene.MinScale, ModelScene.MaxScale, 1f);
     private readonly Slider scaleX = Axis("Scale X", ModelScene.MinScale, ModelScene.MaxScale, 1f);
     private readonly Slider scaleY = Axis("Scale Y", ModelScene.MinScale, ModelScene.MaxScale, 1f);
     private readonly Slider scaleZ = Axis("Scale Z", ModelScene.MinScale, ModelScene.MaxScale, 1f);
+    private readonly Button resetScale = Action("Reset");
+
     private readonly Slider shearX = Axis("Shear X", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
     private readonly Slider shearZ = Axis("Shear Z", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
-    private readonly Button resetTransform = Action("Reset");
+    private readonly Button resetShear = Action("Reset");
 
     private readonly CameraPad camera;
 

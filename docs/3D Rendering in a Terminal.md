@@ -5,7 +5,7 @@ about 3D concepts or things like rasterisation or shading or physics engines.
 
 Everything here is implemented in [`examples/Jumbee.Console.3DSandboxDemo`](../examples/Jumbee.Console.3DSandboxDemo)
 — a real-time rigid-body sandbox and a model viewer, both drawn in a terminal at 60 fps. The code is about 3,500
-lines in total.
+lines in total with only the Box3D.NET physics engine external dependency.
 
 
 ## Preamble
