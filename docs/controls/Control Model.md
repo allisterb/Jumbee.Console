@@ -45,9 +45,9 @@ and no risk of adding the control while its frame stays behind.
 
 When a control is framed, the frame owns the border, the title, the margin, the scrollbar and — for scrollable
 content — the viewport. That's why `ListBox` and `Tree` need a frame to scroll: they size to their content and let
-the frame do the scrolling. `Log` doesn't, because it owns its viewport (`FillsFrameViewport`); `DataTable` doesn't
-either, because it draws its own scrollbar and tracks its own offset. Framing a control is most of what makes it
-scroll, but not all of it — see [Scrolling](#scrolling).
+the frame do the scrolling. `Log` and `DataTable` don't, because they own their viewports and draw their own
+scrollbars (`FillsFrameViewport`) — framing one gives it a border and a title without touching how it scrolls.
+Framing a control is most of what makes it scroll, but not all of it — see [Scrolling](#scrolling).
 
 ## What nests inside what
 
@@ -119,9 +119,11 @@ Two more things the frame won't do for you:
 When the content height *changes*, re-lay-out with `Initialize()`, not just `Invalidate()`. `Invalidate()` only
 repaints; the frame re-measures on layout, so without it the scrollbar keeps the old range.
 
-Finally, a control that manages its own viewport — `Log`, `TerminalEmulator`, `Plot`, `Canvas`, `Globe` — sets
-`FillsFrameViewport` and is given the bounded viewport height instead, so the frame never scrolls it. Don't put a
-self-scrolling control inside a scrolling frame; both will try to scroll it.
+Finally, a control that manages its own viewport — `Log`, `DataTable`, `TerminalEmulator`, `Plot`, `Canvas`,
+`Globe` — sets `FillsFrameViewport` and is given the bounded viewport height instead, so the frame never scrolls it.
+Don't put a self-scrolling control inside a scrolling frame; both will try to scroll it. If you're writing a control
+that handles its own scrolling, `FillsFrameViewport` is not optional: without it a frame will try to scroll it too,
+and you land in the 1000-row case above.
 
 ## Focus
 
