@@ -140,6 +140,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.DocSnippets"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.3DSandboxDemo", "..\examples\Jumbee.Console.3DSandboxDemo\Jumbee.Console.3DSandboxDemo.csproj", "{72164E99-D706-4580-B0AA-A6DEF58597C2}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3DSandboxDemo", "3DSandboxDemo", "{D8EB9B91-97F5-43B1-A8B4-65BE57718FDA}"
+	ProjectSection(SolutionItems) = preProject
+		..\docs\3D Rendering in a Terminal.md = ..\docs\3D Rendering in a Terminal.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -541,6 +546,7 @@ Global
 		{2F3C1694-19F8-498B-A726-42C06DAFF91D} = {C9B2828B-DAC4-4D99-B75E-890596A0B988}
 		{FE52B70A-CB1D-4B47-A0E6-98C1470363DB} = {6ED98344-E90A-44C5-8EB8-CBA5F48FF975}
 		{72164E99-D706-4580-B0AA-A6DEF58597C2} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
+		{D8EB9B91-97F5-43B1-A8B4-65BE57718FDA} = {A3DE0DB1-7DC9-444B-8EFC-AEB65C273F7F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}
