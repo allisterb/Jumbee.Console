@@ -210,12 +210,8 @@ public sealed class SceneView : CompositeControl
     /// <inheritdoc/>
     protected override bool WantsMouse => true;
 
-    // The viewport is a window onto the scene, not a document: it must be exactly as tall as the frame's visible
-    // area. Without this a wrapping ControlFrame offers an unbounded height so a scrollable child can grow, and a
-    // control with no intrinsic height fills to the 1000-row clamp instead -- which does not look like a bug, it
-    // looks like an empty viewport, because the camera's whole picture then lands off-screen.
-    /// <inheritdoc/>
-    protected override bool FillsFrameViewport => true;
+    // The viewport is a window onto the scene, not a document, so it is not IScrollable: a frame sizes it to the
+    // visible area rather than scrolling it.
 
     // Keys are handled in the TUNNEL, not in OnInput, and that distinction is load-bearing.
     //

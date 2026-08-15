@@ -17,7 +17,7 @@ using ColorCode;
 /// editor's caret is kept in view by <see cref="AutoScroll"/> driving that frame.
 /// </para>
 /// </remarks>
-public class CodeEditor : CompositeControl
+public class CodeEditor : CompositeControl, IScrollable
 {
     #region Constructors
     /// <summary>Creates a code editor highlighted for the given built-in <see cref="Language"/>.</summary>
@@ -81,7 +81,7 @@ public class CodeEditor : CompositeControl
     // Our content height is the editor's wrapped row count at the editor's width (our width minus the gutter), so a
     // surrounding frame sizes us to content and its scrollbar/scroll-range are accurate.
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width) =>
+    public virtual int MeasureHeight(int width) =>
         Math.Max(1, _editor.VisualRowCount(Math.Max(1, width - _gutter.Width)));
 
     // Named "Editor" so it shares the editor tab (and the focused composite opens it). Describes the code editor.

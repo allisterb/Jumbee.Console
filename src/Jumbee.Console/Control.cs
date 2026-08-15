@@ -737,15 +737,16 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
         var width = Math.Clamp(preferredWidth, minWidth, maxWidth);
 
         // An intrinsic height is likewise authoritative even under a finite parent (a horizontal TextLabel is one
-        // row tall and must stay one row when docked, not eat the whole panel). Distinct from MeasureHeight below,
-        // which is a content height honored only when the parent is unbounded (for scrolling).
+        // row tall and must stay one row when docked, not eat the whole panel). Distinct from IScrollable's content
+        // height, which is honored only when the parent is unbounded (for scrolling).
         var intrinsicHeight = IntrinsicHeight();
-        // When the parent leaves the height unbounded — a scrolling ControlFrame passes int.MaxValue so the child
-        // can grow and be scrolled — size to the control's intrinsic content height (MeasureHeight) instead of
-        // filling to the 1000 clamp. That makes the frame's scrollbar and scroll range reflect real content. A
-        // finite parent (e.g. a Grid cell) still fills, exactly as before.
+        // When the parent leaves the height unbounded — a scrolling ControlFrame passes int.MaxValue to an
+        // IScrollable child so it can grow and be scrolled — size to the reported content height instead of filling
+        // to the 1000 clamp. That makes the frame's scrollbar and scroll range reflect real content. A finite parent
+        // (e.g. a Grid cell) still fills, exactly as before. Only an IScrollable is asked: a control that never opted
+        // into scrolling has no content height to give, and a frame never leaves it unbounded in the first place.
         var unbounded = MaxSize.Height >= UnboundedHeight;
-        var contentHeight = unbounded ? MeasureHeight(width) : 0;
+        var contentHeight = unbounded && this is IScrollable scrollable ? scrollable.MeasureHeight(width) : 0;
         var preferredHeight = Height > 0 ? Height
             : intrinsicHeight > 0 ? intrinsicHeight
             : contentHeight > 0 ? contentHeight
@@ -755,30 +756,6 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
         var height = Math.Clamp(preferredHeight, minHeight, maxHeight);
         return (width, height);
     }
-
-    /// <summary>
-    /// The control's intrinsic content height in rows at the given <paramref name="width"/>, or 0 when it has no
-    /// intrinsic height and should fill the space its parent gives it (the default).
-    /// </summary>
-    /// <remarks>
-    /// Consulted by <see cref="CalculateSize"/> only when a parent leaves the height unbounded — i.e. inside a
-    /// scrolling <see cref="ControlFrame"/> — so the frame can size the control to its content and show an accurate
-    /// scrollbar instead of a tiny thumb over ~1000 empty rows. Override on content controls (lists, editors,
-    /// logs). A content change that alters the height must re-lay-out (<see cref="Initialize"/>, not merely
-    /// <see cref="Invalidate"/>) so the frame re-measures.
-    /// </remarks>
-    protected virtual int MeasureHeight(int width) => 0;
-
-    /// <summary>
-    /// When <see langword="true"/>, a wrapping <see cref="ControlFrame"/> sizes this control to its visible
-    /// viewport (a bounded height) instead of the frame's usual unbounded scroll height — so the control fills the
-    /// frame and the frame never scrolls it. Default <see langword="false"/> (normal frame-scrolling behavior).
-    /// </summary>
-    /// <remarks>
-    /// For controls that manage their own scrolling internally (e.g. a terminal emulator, which owns its
-    /// scrollback); ballooning them to the scroll height would oversize them and push live content out of view.
-    /// </remarks>
-    protected internal virtual bool FillsFrameViewport => false;
 
     /// <summary>
     /// An intrinsic, fixed width in cells this control always wants regardless of the space its parent offers, or

@@ -1,9 +1,15 @@
-# Scrolling: the frame/control contract, and a proposed `IScrollable`
+# Scrolling: the frame/control contract, and `IScrollable`
 
-This note records why "wrap a control in a `ControlFrame` and get a scrollbar" does not work by default, what the
-contract actually is today, and a proposal to make it explicit. It was written after the 3D sandbox demo's model
-sidebar outgrew its terminal and the obvious fix — frame it, let it scroll — turned out to need three pieces of
-knowledge that live in three different places.
+This note records why "wrap a control in a `ControlFrame` and get a scrollbar" did not work by default, what the
+contract used to be, and the interface that replaced it. It was written after the 3D sandbox demo's model sidebar
+outgrew its terminal and the obvious fix — frame it, let it scroll — turned out to need three pieces of knowledge
+that live in three different places.
+
+> **Status: Phase 1 landed.** `IScrollable` exists and carries `MeasureHeight`; `ControlFrame` keys off it;
+> `FillsFrameViewport` is gone. `FocusRow` / scroll-into-view (Phase 2) is **not** built — the "What is missing
+> entirely" section below still stands. Everything from "The default is the broken one" through "Blast radius"
+> describes the world *before* the change and is kept as the rationale; see **What actually landed** at the end for
+> the corrections reality forced.
 
 ## What the frame does today
 
@@ -143,3 +149,37 @@ against a minor version, because the value is entirely in flipping the default a
 breaks existing controls. Prototyping it behind the current behaviour is possible — `is IScrollable` first, fall
 back to `MeasureHeight`/`FillsFrameViewport` — but a compatibility shim preserves the silent failure it is meant to
 remove, so it is only worth it as a migration step with an end date.
+
+---
+
+## What actually landed
+
+Phase 1 shipped as designed — interface carries `MeasureHeight`, frame keys off `is IScrollable`,
+`FillsFrameViewport` deleted, no shim. Four things the plan above got wrong or did not anticipate.
+
+**The blast radius was 39 sites, not 16.** The estimate counted only `src/`. `examples/` held 20 more, and those are
+doc surface too — example source is displayed beside each example in the browser. All of it was mechanical, and
+every break was a compile error at the exact line.
+
+**`MeasureHeight` is public, not explicitly implemented.** The plan wanted `int IScrollable.MeasureHeight(int w)` to
+keep the surface clean. Explicit implementations are not virtual, so the first subclass wanting a different
+measurement would have had to re-declare the interface — a footgun of exactly the kind being removed. It is
+`public virtual` instead. Nothing derives-and-overrides today, but the trap was not worth setting.
+
+**`Dialog` overrode both, and needed neither.** It had `MeasureHeight` *and* `FillsFrameViewport => true`, which
+contradict each other under the new model. The measurement turned out to be dead code: `Dialog` always sets an
+explicit `Height` in its constructor, and `CalculateSize` honours that before any content height. It now implements
+nothing and behaves identically.
+
+**`Tree` was scrolling by accident, and the change caught it.** `Tree` overrode nothing at all — no `MeasureHeight`,
+no `IntrinsicHeight` — so the old default ballooned it to the 1000-row clamp and the frame windowed *that*. It
+scrolled, so nobody noticed; the snapshot test asserting "scrolled after navigating down" passed for the wrong
+reason. Flipping the default broke that test, which is how the latent defect surfaced. `Tree` now implements
+`IScrollable` and reports its real row count, measured at a fixed wide width like `ListBox` (a width-dependent
+height feeds the content-height↔width convergence loop and can fail to settle).
+
+That last one is the argument for the whole exercise, made concretely: the old default did not merely permit a
+silent failure, it was actively hiding one in a shipped control.
+
+Guarded by `tests/Jumbee.Console.Tests/ScrollableTests.cs` — the negative case (no interface → sized to viewport,
+never 1000) is the one that matters.

@@ -25,7 +25,7 @@ using Spectre.Console.Rendering;
 /// when the text/styles change or the width changes (it reflows to the control width).
 /// </para>
 /// </remarks>
-public class AsciiDocViewer : Control
+public class AsciiDocViewer : Control, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="AsciiDocViewer"/> showing <paramref name="asciiDoc"/>.</summary>
@@ -74,7 +74,7 @@ public class AsciiDocViewer : Control
     // this width is ready, report a rough estimate so a surrounding frame allocates a sensible height (replaced when
     // the render completes and re-lays-out). Consulted only when the parent leaves the height unbounded (scrolling).
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width)
+    public virtual int MeasureHeight(int width)
     {
         var w = Math.Max(1, width);
         EnsureRender(w);

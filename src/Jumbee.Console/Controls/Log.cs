@@ -19,8 +19,8 @@ using Spectre.Console.Rendering;
 /// <remarks>
 /// The log is <em>viewport-virtualized</em> and owns its own scrolling (like a terminal): each entry is rendered to
 /// visual lines <em>once</em>, on write, and only the visible window is blitted each paint — so writing and painting
-/// cost O(viewport), not O(total entries). It fills its framing viewport (<see cref="FillsFrameViewport"/>) rather
-/// than growing content-tall and being scrolled by the frame, and draws its own scrollbar in the rightmost column.
+/// cost O(viewport), not O(total entries). It is not <see cref="IScrollable"/> — it is sized to its framing viewport
+/// rather than grown content-tall for the frame to scroll — and draws its own scrollbar in the rightmost column.
 /// The mouse wheel scrolls it; when focused, Up/Down/PageUp/PageDown/Home/End do too. Writing while scrolled up keeps
 /// the view put (new lines accumulate below); scrolling back to the bottom re-engages tailing.
 /// </remarks>
@@ -70,10 +70,9 @@ public class Log : Control
     /// <summary>Scrolls the view to the newest entry and re-engages tailing.</summary>
     public void ScrollToBottom() => UI.Invoke(() => { if (!_follow) { _follow = true; Invalidate(); } });
 
-    /// <summary>Reports <see langword="true"/> so the log fills its framing viewport rather than growing content-tall (keeping writing/painting O(viewport)).</summary>
-    // The log manages its own scrolling, so it fills the framing viewport (a bounded height) rather than growing
-    // content-tall for the frame to window — that's what makes writing/painting O(viewport) instead of O(entries).
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: the log manages its own scrolling and is sized to its frame's viewport, which is
+    // what keeps writing and painting O(viewport) instead of O(entries). Making it scrollable would grow it
+    // content-tall for the frame to window over, and lose that.
 
     /// <summary>Reports <see langword="true"/> so the log receives mouse-wheel events for scrolling.</summary>
     // Output never depends on focus/hover, so a focus/mouse change shouldn't re-render (there's nothing to re-render

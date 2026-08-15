@@ -14,7 +14,6 @@ public sealed class LayoutGalleryExample : CompositeControl, IExample
             ("Split", SplitTab())));
 
     // Each tab's layout fills the tab area — except the Grid, which deliberately doesn't: its cells are fixed-size.
-    protected override bool FillsFrameViewport => true;
 
     #region Grid — fixed rows x columns
     // A KPI board: every tile is exactly the same size no matter how the pane resizes. That's the Grid trade-off —
@@ -72,7 +71,6 @@ public sealed class LayoutGalleryExample : CompositeControl, IExample
     private sealed class Group : CompositeControl
     {
         public Group(ILayout content) => SetContent(content);
-        protected override bool FillsFrameViewport => true;
     }
 
     private static IFocusable Chip(string label, Color color) =>

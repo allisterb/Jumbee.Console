@@ -15,7 +15,7 @@ using Spectre.Console.Rendering;
 /// <see cref="Markup"/>, so colours and styles work; literal <c>[</c>/<c>]</c> must be escaped as <c>[[</c>/<c>]]</c>
 /// (or via <see cref="Escape"/>).
 /// </remarks>
-public class TextPanel : RenderableControl
+public class TextPanel : RenderableControl, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="TextPanel"/> displaying the given Spectre <paramref name="markup"/>.</summary>
@@ -47,7 +47,7 @@ public class TextPanel : RenderableControl
     /// <inheritdoc/>
     // Report the rendered line count so a wrapping ControlFrame can size/scroll it; in a fixed cell it fills and
     // overflow clips. Consulted only when the parent leaves the height unbounded (see Control.CalculateSize).
-    protected override int MeasureHeight(int width)
+    public virtual int MeasureHeight(int width)
     {
         if (string.IsNullOrEmpty(_markup)) return 1;
         var w = Math.Max(1, width);

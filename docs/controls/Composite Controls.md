@@ -26,11 +26,11 @@ To scroll content taller than the viewport, **wrap the `CodeEditor` in a frame**
 caret visible, the scrollbar tracks position, and the gutter stays aligned with the scrolled text. `editor.Editor`
 and `editor.Gutter` expose the children.
 
-> **To make your own composite scroll, override `MeasureHeight`.** `CompositeControl` doesn't do it for you, and
-> the default reports no height at all — you get a 1000-row scrollbar over a mostly empty region, silently.
-> `CodeEditor` returns the editor's wrapped row count, which is what lets an enclosing frame scroll gutter and text
-> together; it also scrolls that frame itself (`AutoScroll`) to keep the caret in view, because focus doesn't scroll
-> into view on its own. Full rules, including the traps, are in
+> **To make your own composite scroll, implement `IScrollable`.** A composite is sized to its frame's viewport
+> unless it asks to be scrolled, so a framed composite that you expected to scroll simply won't until you add the
+> interface and its one method. `CodeEditor` returns the editor's wrapped row count, which is what lets an enclosing
+> frame scroll gutter and text together; it also scrolls that frame itself (`AutoScroll`) to keep the caret in view,
+> because focus doesn't scroll into view on its own. Full rules, including the traps, are in
 > [Control Model → Scrolling](Control%20Model.md#scrolling).
 
 ## Authoring a composite: subclass `CompositeControl`

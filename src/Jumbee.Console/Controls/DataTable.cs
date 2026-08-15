@@ -48,17 +48,10 @@ public class DataTable : Control
     /// <summary>Always <see langword="true"/>: rows receive hover and click, so a click selects a row and a
     /// double-click activates it. No opt-in needed — unlike the base default, this is on.</summary>
     protected override bool WantsMouse => true;
-    /// <summary>
-    /// Always <see langword="true"/>: the table owns its viewport, drawing its own scrollbar and tracking its own
-    /// row offset, so a surrounding frame sizes it to the visible area instead of scrolling it.
-    /// </summary>
-    /// <remarks>
-    /// Without this a framed table is given the frame's unbounded height, reports no content height, and resolves
-    /// to the 1000-row fallback — leaving the frame with an empty scroll track (the thumb is too small to draw) and
-    /// the table's own bottom border clipped off, unreachable because the wheel is consumed here rather than
-    /// bubbling to the frame. Framing a table for a border and title is the common case, so it has to work.
-    /// </remarks>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: the table owns its viewport, drawing its own scrollbar and tracking its own row
+    // offset. Framing one is normally about getting a border and a title, and that must not turn the frame into a
+    // second scroller — it would clip the table's own bottom border out of reach, since the wheel is consumed here
+    // rather than bubbling up.
 
     /// <summary>The column headers.</summary>
     public IReadOnlyList<string> Columns => _columns;

@@ -16,7 +16,7 @@ using Style = Jumbee.Console.Style;
 /// <summary>The top-right "task list" pane: an animated vertical checklist of agent steps with status glyphs
 /// (done / active-spinner / pending / failed). The <c>AgentSimulator</c> mutates a step's <see cref="AgentStep.Status"/>
 /// then calls <see cref="Refresh"/>.</summary>
-internal sealed class TaskListView : RenderableControl
+internal sealed class TaskListView : RenderableControl, IScrollable
 {
     #region Constructors
     public TaskListView(string title = "")
@@ -82,7 +82,7 @@ internal sealed class TaskListView : RenderableControl
 
     // Measure at the fixed wide LayoutWidth so heights are width-INDEPENDENT — long lines clip rather than wrap, which
     // avoids the layout convergence loop a width-dependent height causes in a scrolling frame (see ListBox).
-    protected override int MeasureHeight(int width)
+    public int MeasureHeight(int width)
     {
         var options = new RenderOptions(ansiConsole.Profile.Capabilities, new Spectre.Console.Size(LayoutWidth, 1));
         return Math.Max(1, Segment.SplitLines(((IRenderable)BuildRows()).Render(options, LayoutWidth)).Count);

@@ -26,7 +26,7 @@ using Jumbee.Console.Documents.Mermaid;
 /// short message. The diagram is drawn at its intrinsic size and clips horizontally if wider than the control.
 /// </para>
 /// </remarks>
-public class MermaidViewer : Control
+public class MermaidViewer : Control, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="MermaidViewer"/> showing <paramref name="mermaid"/>.</summary>
@@ -73,7 +73,7 @@ public class MermaidViewer : Control
         .WithKey("Home / End", "Top / bottom");
 
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width)
+    public virtual int MeasureHeight(int width)
     {
         EnsureRender();
         return _renderedVersion == _version ? Math.Max(1, _contentHeight) : EstimateHeight();

@@ -20,7 +20,7 @@ using NTokenizers.Extensions.Spectre.Console.Styles;
 /// or resizing never blocks the UI thread, and the view fills in when the render completes. Content is re-rendered
 /// only when the text/styles change or the width changes (it reflows to the control width).
 /// </remarks>
-public class MarkdownViewer : Control
+public class MarkdownViewer : Control, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a <see cref="MarkdownViewer"/> with the given Markdown source.</summary>
@@ -70,7 +70,7 @@ public class MarkdownViewer : Control
     // this width is ready, report a rough estimate so a surrounding frame allocates a sensible height (replaced when
     // the render completes and re-lays-out). Consulted only when the parent leaves the height unbounded (scrolling).
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width)
+    public virtual int MeasureHeight(int width)
     {
         var w = Math.Max(1, width);
         EnsureRender(w);

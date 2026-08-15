@@ -62,7 +62,7 @@ public enum Language
 /// <summary>
 /// A text editor control with syntax highlighting for supported languages.
 /// </summary>
-public class TextEditor : Control
+public class TextEditor : Control, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="TextEditor"/> highlighted for the given <paramref name="language"/>, with optional caret display and blink.</summary>
@@ -491,7 +491,7 @@ public class TextEditor : Control
     /// <inheritdoc/>
     // Report the wrapped row count as the content height so a surrounding ControlFrame sizes the editor to its
     // content and scrolls accurately (measured at the layout width, which may differ from the current ActualWidth).
-    protected override int MeasureHeight(int width) => BuildVisualRows(width).Count;
+    public virtual int MeasureHeight(int width) => BuildVisualRows(width).Count;
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Editor", "Editor", "A multi-line text editor.")

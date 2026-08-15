@@ -30,8 +30,6 @@ public class CompositeFocusChildTests
             content.WithFrame(borderStyle: BorderStyle.None);
             SetContent(new DockPanel(DockedControlPlacement.Top, header, content.Frame!));
         }
-
-        protected internal override bool FillsFrameViewport => true;
         protected override Control? FocusChild => _override ? _content : base.FocusChild;
     }
 

@@ -253,7 +253,6 @@ public sealed class MonitorDashboardExample : CompositeControl, IActivatableExam
     private sealed class Group : CompositeControl
     {
         public Group(ILayout content) => SetContent(content);
-        protected override bool FillsFrameViewport => true;
     }
 
     // Samples the OS process list off the UI thread: per-process CPU% (from TotalProcessorTime deltas between

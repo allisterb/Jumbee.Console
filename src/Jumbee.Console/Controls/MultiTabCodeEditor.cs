@@ -189,11 +189,9 @@ public class MultiTabCodeEditor : CompositeControl
         return null;
     }
 
-    // Each editor scrolls inside its own per-tab frame (see OpenDocument), so this group must fill a surrounding
-    // ControlFrame's viewport rather than balloon to content height — otherwise that outer frame becomes a second
-    // scroller and the mouse wheel (routed to the per-tab frame) targets the wrong one and no-ops.
-    /// <inheritdoc/>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: each editor already scrolls inside its own per-tab frame (see OpenDocument), so
+    // a surrounding frame that also scrolled this group would be a second, conflicting scroller — the wheel is
+    // routed to the per-tab frame, so the outer one would just no-op.
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Editors", "Editor Group",

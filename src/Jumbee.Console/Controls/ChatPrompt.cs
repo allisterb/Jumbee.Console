@@ -19,7 +19,7 @@ using Spectre.Console;
 /// layout cell and is framed like any control (<c>chat.WithRoundedBorder()</c>). Focus delegates to the input,
 /// which keeps the caret; the gutter is a non-focusable adornment.
 /// </remarks>
-public class ChatPrompt : CompositeControl
+public class ChatPrompt : CompositeControl, IScrollable
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="ChatPrompt"/> with an optional <paramref name="placeholder"/> hint.</summary>
@@ -113,7 +113,7 @@ public class ChatPrompt : CompositeControl
 
     // A single input row; a surrounding frame sizes us to one row (plus its border) instead of the 1000-row fill.
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width) => 1;
+    public virtual int MeasureHeight(int width) => 1;
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Prompt", "Chat prompt",

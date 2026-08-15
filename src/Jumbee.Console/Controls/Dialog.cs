@@ -212,15 +212,9 @@ public class Dialog : CompositeControl
         }
     }
 
-    // The dialog is content-sized (its Width/Height are set in the ctor); report the interior height so the wrapping
-    // frame in the overlay sizes to the box instead of ballooning to the scroll clamp.
-    /// <inheritdoc/>
-    protected override int MeasureHeight(int width) => Math.Max(1, Height);
-
-    // A dialog never scrolls, so tell the frame not to reserve the vertical-scrollbar column — otherwise it leaves a
-    // blank gutter down the right of the content. (The composite's explicit Width/Height still drive its real size.)
-    /// <inheritdoc/>
-    protected internal override bool FillsFrameViewport => true;
+    // A dialog is content-sized (its Width/Height are set in the ctor, and that explicit Height is what
+    // Control.CalculateSize honours) and never scrolls, so it does not implement IScrollable: its frame sizes it to
+    // the viewport and reserves no scrollbar column.
 
     private void OnDialogLostFocus()
     {

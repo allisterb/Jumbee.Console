@@ -87,11 +87,9 @@ public class TerminalEmulator : Control
     #endregion
 
     #region Methods
-    // A terminal owns its own scrollback, so it must fill the framing viewport rather than be given a frame's
-    // unbounded scroll height — otherwise it balloons to ~1000 rows, oversizing the PTY and pushing live output
-    // off-screen (no auto-scroll). Opting out makes the frame offer the bounded viewport height instead.
-    /// <summary>Always <see langword="true"/>: the terminal owns its scrollback and fills its frame's viewport rather than being scrolled.</summary>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: a terminal owns its own scrollback and must be sized to the visible viewport,
+    // because that size is the PTY's size. Letting a frame scroll it would balloon it to the height clamp,
+    // oversizing the PTY and pushing live output off-screen with no auto-scroll to bring it back.
 
     // The cell columns the shell draws into: the control width minus the column reserved for the scrollbar.
     private int ContentWidth => Math.Max(1, ActualWidth - ScrollbarWidth);

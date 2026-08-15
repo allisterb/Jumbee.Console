@@ -30,9 +30,7 @@ public class TerminalPaneFocusTests
             SetContent(new DockPanel(DockedControlPlacement.Top,
                 new TextLabel(TextLabelOrientation.Horizontal, "desc") { Focusable = false },
                 content is Control c ? c.WithFrame(borderStyle: Jumbee.Console.BorderStyle.None) : content));
-        }
-        protected internal override bool FillsFrameViewport => true;
-        protected override Control? FocusChild => _active as Control;
+        }        protected override Control? FocusChild => _active as Control;
     }
 
     // The fix: the example is a composite hosting the editor-over-terminal split, delegating focus to the terminal
@@ -44,9 +42,7 @@ public class TerminalPaneFocusTests
         public Workspace() =>
             SetContent(new SplitPanel(SplitOrientation.Vertical,
                 EditorPane.WithFrame(borderStyle: Jumbee.Console.BorderStyle.None),
-                Terminal.WithFrame(borderStyle: Jumbee.Console.BorderStyle.None), splitPosition: 6));
-        protected internal override bool FillsFrameViewport => true;
-        protected override Control? FocusChild => Terminal;
+                Terminal.WithFrame(borderStyle: Jumbee.Console.BorderStyle.None), splitPosition: 6));        protected override Control? FocusChild => Terminal;
     }
 
     // Stand-in for the editor pane: a nested composite is its own focus unit, so a click resolves to it directly and
@@ -59,9 +55,7 @@ public class TerminalPaneFocusTests
             Inner.WithFrame(borderStyle: Jumbee.Console.BorderStyle.None);
             SetContent(new DockPanel(DockedControlPlacement.Top,
                 new TextLabel(TextLabelOrientation.Horizontal, "ed") { Focusable = false }, Inner.Frame!));
-        }
-        protected internal override bool FillsFrameViewport => true;
-    }
+        }    }
 
     [Fact]
     public void ClickTerminalPane_FocusesIt()

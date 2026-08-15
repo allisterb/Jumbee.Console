@@ -14,7 +14,7 @@ using ConsoleGUI.Space;
 /// <summary>
 /// Displays a flat list of items and allows user input navigation and selection.
 /// </summary>
-public partial class ListBox : RenderableControl
+public partial class ListBox : RenderableControl, IScrollable
 {
     #region Constructors
     /// <summary>Initializes an empty <see cref="ListBox"/>.</summary>
@@ -250,7 +250,7 @@ public partial class ListBox : RenderableControl
     // scrolling frame and can fail to settle (an infinite layout loop); a width-independent height converges exactly
     // as the single-line case always did.
     /// <inheritdoc/>
-    protected override int MeasureHeight(int width) => Math.Max(1, EnsureLayout()[^1]);
+    public virtual int MeasureHeight(int width) => Math.Max(1, EnsureLayout()[^1]);
 
     // Per-item vertical layout: cumulative row offsets, length = itemCount + 1, so _offsets[k] is the first row of
     // item k and _offsets[itemCount] is the total content height. Recomputed when the item set/content changes

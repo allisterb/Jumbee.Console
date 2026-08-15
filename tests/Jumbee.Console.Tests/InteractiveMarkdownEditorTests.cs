@@ -55,8 +55,8 @@ public class InteractiveMarkdownEditorTests
     public void FramedEditor_AsFillUnderBoundaryToolbar_RendersCaptionAndBothPanes()
     {
         // Reproduces the "Interactive Markdown" example layout: a one-row caption + dropdown toolbar docked on top of
-        // the editor in the DockPanel fill slot. Two things this guards: (1) the editor sets FillsFrameViewport, so it
-        // needs a (borderless) frame to size to the fill area; (2) the toolbar HorizontalStackPanel would expand to the
+        // the editor in the DockPanel fill slot. Two things this guards: (1) the editor is sized to its frame's
+        // viewport, so it needs a (borderless) frame to size to the fill area; (2) the toolbar would expand to the
         // full height and collapse the fill region, so a Boundary(height: 1) pins it to one row.
         var editor = new InteractiveMarkdownEditor("# Hello\n\nsome body text");
         editor.WithFrame(borderStyle: BorderStyle.None);

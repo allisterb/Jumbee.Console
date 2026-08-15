@@ -40,9 +40,8 @@ public class RunChart : CompositeControl
         set => UI.Invoke(() => { _format = string.IsNullOrEmpty(value) ? "0.##" : value; RefreshLegend(); });
     }
 
-    /// <summary>Reports <see langword="true"/> so the chart fills its framing viewport rather than ballooning (it owns its own scrolling via the strip axis).</summary>
-    // The chart owns its scrolling via the strip axis, so it fills the framing viewport rather than ballooning.
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: the chart owns its scrolling via the strip axis, so it is sized to the viewport
+    // rather than scrolled.
 
     internal int Window => _window;
     #endregion

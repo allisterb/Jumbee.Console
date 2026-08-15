@@ -592,13 +592,13 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     public void Scroll(int n) => Top += n;
 
     /// <summary>
-    /// Re-runs the frame's child layout — re-reads the wrapped control's <see cref="Control.FillsFrameViewport"/> and
+    /// Re-runs the frame's child layout — re-checks whether the wrapped control is <see cref="IScrollable"/> and
     /// re-establishes its size limits.
     /// </summary>
     /// <remarks>
     /// Needed after a change that alters how the child should be sized but does not itself change the child's size
     /// (so no redraw bubbles up to trigger a relayout): e.g. swapping a composite's content between a scrollable
-    /// control and a fill-to-viewport one.
+    /// control and a non-scrolling one.
     /// </remarks>
     public void Relayout() => Initialize();
 
@@ -620,15 +620,16 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
                 // Allow infinite height for scrolling, but constrain width to make space for scrollbar
                 // If MaxSize.Width is infinite, we don't constrain width (except by MinSize/Control)
                 // But we generally want to fit in MaxSize.                        
-                // Reserve a column for the vertical scrollbar — except for a fill-viewport control, which never
-                // shows one, so giving up the column would just leave a blank gutter.
-                var fills = _control.FillsFrameViewport;
-                var limitWidth = Math.Max(0, controlLimitsMax.Width - (fills ? 0 : 1));
+                // Only an IScrollable is scrolled by its frame, and only it pays for the scrollbar column. Anything
+                // else gets the full width and the bounded viewport height, so it sizes to the visible area — which
+                // is what a control that fits its space, or manages its own viewport (Log, DataTable,
+                // TerminalEmulator), wants. Opting in is the deliberate act; doing nothing is safe.
+                var scrolls = _control is IScrollable;
+                var limitWidth = Math.Max(0, controlLimitsMax.Width - (scrolls ? 1 : 0));
 
-                // Normally the child gets unbounded height so it can grow and be scrolled. A control that fills the
-                // viewport itself (e.g. a terminal managing its own scrollback) instead gets the bounded viewport
-                // height, so it sizes to the visible area and the frame never scrolls it.
-                var limitHeight = fills ? Math.Max(0, controlLimitsMax.Height) : int.MaxValue;
+                // A scrollable child gets unbounded height so it can grow past the viewport and be scrolled; its
+                // IScrollable.MeasureHeight then decides the real height (see Control.CalculateSize).
+                var limitHeight = scrolls ? int.MaxValue : Math.Max(0, controlLimitsMax.Height);
 
                 ControlContext?.SetLimits(
                     new Size(Math.Max(0, controlLimitsMin.Width - 1), Math.Max(0, controlLimitsMin.Height)),
@@ -672,10 +673,10 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
                 var controlSize = ControlContext?.Size ?? Size.Empty;
 
                         
-                // Calculate desired size including margins, borders, and (for a scrolling control) the scrollbar
-                // column. A fill-viewport control reserves no scrollbar column (it draws its own within its width, or
-                // has none), so don't widen the frame for it — otherwise it leaves a blank gutter down the right.
-                var desiredControlSize = controlSize.Expand(fills ? 0 : 1, 0);
+                // Calculate desired size including margins, borders, and — only for an IScrollable — the scrollbar
+                // column. A non-scrolling control reserves none (it draws its own within its width, or has none), so
+                // don't widen the frame for it: that would leave a blank gutter down the right.
+                var desiredControlSize = controlSize.Expand(scrolls ? 1 : 0, 0);
                 var sizeRect = desiredControlSize.AsRect().Add(totalOffset);    
                 Resize(Size.Clip(MinSize, sizeRect.Size, MaxSize));
                         

@@ -30,8 +30,6 @@ public sealed class MultiTabEditorExample : CompositeControl, IActivatableExampl
         this.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);        
     }
 
-    protected override bool FillsFrameViewport => true;
-
     // When focus resolves up to this workspace (Ctrl-nav into the pane, or a click on the terminal — the one plain
     // control the composite owns), delegate to the terminal. The editor is a self-contained composite that
     // click-to-focus resolves to directly, so it doesn't route through here.

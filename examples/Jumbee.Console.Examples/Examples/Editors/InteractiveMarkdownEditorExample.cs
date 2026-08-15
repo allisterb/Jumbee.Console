@@ -25,7 +25,7 @@ public sealed class InteractiveMarkdownEditorExample : CompositeControl, IExampl
         this.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
     }
 
-    // The editor fills its frame's viewport (FillsFrameViewport), so it needs a borderless frame — as a bare fill
+    // The editor is sized to its frame's viewport, so it needs a borderless frame — as a bare fill
     // control its sizing collapses and the panes don't render.
     private static InteractiveMarkdownEditor BuildEditor(string text, SplitOrientation orientation) =>
         new InteractiveMarkdownEditor(text, orientation).WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
@@ -42,9 +42,6 @@ public sealed class InteractiveMarkdownEditorExample : CompositeControl, IExampl
 
     // Keyboard focus lands in the (current) editor, not the toolbar dropdown.
     protected override Control? FocusChild => editor;
-
-    // Fill the host pane (both editor panes scroll inside their own frames); don't balloon to content height.
-    protected override bool FillsFrameViewport => true;
 
     #region Fields
     private readonly DockPanel dock;

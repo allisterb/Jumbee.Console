@@ -33,10 +33,8 @@ public sealed class ExampleHost : CompositeControl
     /// so a live example's timers/threads don't keep running through shutdown. Idempotent.</summary>
     public void DeactivateActive() => (_active as IActivatableExample)?.OnDeactivated();
 
-    // Always fill the pane frame's viewport: the host never scrolls itself. A fill-to-viewport example (Plot, Canvas…)
-    // then fills the bounded height; a scrollable one scrolls inside its own inner frame (see Framed) with a single
-    // scrollbar. Ballooning the host instead would make the pane frame a second, redundant scroller.
-    protected override bool FillsFrameViewport => true;
+    // Not IScrollable: the host never scrolls itself. A scrollable example scrolls inside its own inner frame (see
+    // Framed), with a single scrollbar; making the host scrollable too would add a second, redundant scroller.
 
     // Delegate focus to the CURRENT example, not the composite's default "first focusable descendant" — which is set
     // once and never tracks the swapped-in content, so it would stick to a stale/detached control after the first

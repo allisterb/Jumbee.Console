@@ -210,10 +210,8 @@ public sealed class ScopeView : CompositeControl
     /// every hotkey), for computing a "rebuild rate" alongside <see cref="LiveShapeRebuilds"/>.</summary>
     public int ApplyCount { get; private set; }
 
-    // A scope fills its frame's viewport (like RunChart/Plot/Log) rather than growing content-tall to be scrolled:
-    // without this a framed ScopeView is given unbounded height, so the Plot lays out below the visible area and only
-    // its top axis chrome shows through the frame. See ControlFrame's FillsFrameViewport handling.
-    protected override bool FillsFrameViewport => true;
+    // A scope is sized to its frame's viewport (like RunChart/Plot/Log) rather than scrolled, so it is not
+    // IScrollable — growing content-tall would lay the Plot out below the visible area.
 
     // The Plot/TextLabel children cover the whole pane but aren't focusable, so their cells carry no mouse listener.
     // Opting into the mouse makes CompositeControl attach the pane's own listener to those cells, so a click anywhere

@@ -112,10 +112,8 @@ public abstract class InteractiveSourceEditor : CompositeControl
     /// <inheritdoc/>
     protected override Control? FocusChild => _editor;
 
-    // Both panes scroll inside their own frames, so this editor fills a surrounding frame's viewport rather than
-    // ballooning to content height (which would make that outer frame a second, conflicting scroller).
-    /// <inheritdoc/>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: both panes scroll inside their own frames, so a surrounding frame that also
+    // scrolled this editor would be a second, conflicting scroller.
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Editor", "Interactive Editor",

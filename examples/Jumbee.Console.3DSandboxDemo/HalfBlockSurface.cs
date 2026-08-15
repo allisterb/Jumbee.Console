@@ -250,10 +250,6 @@ public sealed class HalfBlockSurface : Control
     #endregion
 
     #region Protected methods
-    // A viewport, not a document: it must be exactly as tall as the frame's visible area, or a wrapping ControlFrame
-    // hands it the unbounded scroll height and it balloons to the 1000-row clamp.
-    /// <inheritdoc/>
-    protected override bool FillsFrameViewport => true;
 
     /// <inheritdoc/>
     protected override void Render()

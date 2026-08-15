@@ -35,7 +35,7 @@ public enum TreeGuide
 /// <remarks>
 /// Based on <see cref="Spectre.Console.Tree"/> but modified to support mutable tree nodes, concurrent updates, and node selection via user input.
 /// </remarks>
-public partial class Tree : RenderableControl
+public partial class Tree : RenderableControl, IScrollable
 {
     #region Constructors
     /// <summary>
@@ -460,6 +460,17 @@ public partial class Tree : RenderableControl
 
     internal void Update() => this.Invalidate();
 
+    // Report the rendered row count so a surrounding ControlFrame gets a real scroll range. Measured at a fixed wide
+    // width, like ListBox and for the same reason: a width-dependent height feeds the layout's content-height↔width
+    // convergence in a scrolling frame and can fail to settle. Long node labels clip to the viewport rather than
+    // wrapping, which is what a tree wants anyway.
+    /// <inheritdoc/>
+    public virtual int MeasureHeight(int width)
+    {
+        var options = new RenderOptions(ansiConsole.Profile.Capabilities, new Spectre.Console.Size(LayoutWidth, 1));
+        return Math.Max(1, Segment.SplitLines(Render(options, LayoutWidth)).Count);
+    }
+
     /// <inheritdoc/>
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth)
     {
@@ -758,6 +769,9 @@ public partial class Tree : RenderableControl
     #endregion
 
     #region Fields
+    // The fixed wide width rows are measured at, so the content height is width-independent (see MeasureHeight).
+    // Matches Control.CalculateSize's 1000-cell clamp, so nothing visible is lost to the cap.
+    private const int LayoutWidth = 1000;
     /// <summary>The renderable used as the root node's label.</summary>
     public IRenderable _rootLabel;
     /// <summary>Backing field for <see cref="Root"/>.</summary>

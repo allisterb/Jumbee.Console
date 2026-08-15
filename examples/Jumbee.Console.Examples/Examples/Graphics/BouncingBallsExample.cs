@@ -21,7 +21,6 @@ public sealed class BouncingBallsExample : Control, IActivatableExample
 
     #region Rendering
     protected override bool TracksDamage => true;
-    protected override bool FillsFrameViewport => true;
 
     protected override void Render()
     {

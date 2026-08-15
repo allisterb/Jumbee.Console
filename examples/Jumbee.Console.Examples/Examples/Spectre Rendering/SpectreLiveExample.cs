@@ -54,8 +54,6 @@ public sealed class SpectreLiveExample : CompositeControl, IActivatableExample
             splitPosition: 13));
     }
 
-    protected override bool FillsFrameViewport => true;
-
     #region IExample
     // Both widgets drive themselves from a background thread, so they run only while the example is on screen.
     // Each Start call returns once its callback does, which is what the token below makes happen.

@@ -416,10 +416,8 @@ public class Canvas : Control
     }
     #endregion
 
-    // A canvas fills its container and re-fits on resize; it must never be scrolled (inside a ControlFrame this hands
-    // it the bounded viewport height instead of the unbounded scroll height, which would balloon it to the clamp).
-    /// <summary>Always <see langword="true"/>: the canvas fills its frame's viewport and is never scrolled.</summary>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: a canvas fills its container and re-fits on resize, so it is sized to the
+    // viewport rather than scrolled.
 
     /// <summary>Rebuilds the composited layers when needed and blits them (with labels) to the buffer.</summary>
     protected override void Render()

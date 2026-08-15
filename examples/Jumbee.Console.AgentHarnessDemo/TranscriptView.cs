@@ -16,7 +16,7 @@ using Spectre.Console.Rendering;
 /// (render the whole transcript to a tall <see cref="ConsoleBuffer"/> once per width/version, then blit the visible
 /// window) so a surrounding <c>WithFrame</c> scrolls it. New content sticks the view to the bottom, like a chat log.
 /// </summary>
-internal sealed class TranscriptView : Control
+internal sealed class TranscriptView : Control, IScrollable
 {
     #region Methods
     /// <summary>Appends a user prompt bubble.</summary>
@@ -70,7 +70,7 @@ internal sealed class TranscriptView : Control
     protected override bool RendersOwnFocus => true;
     public override bool HandlesInput => true;
 
-    protected override int MeasureHeight(int width)
+    public int MeasureHeight(int width)
     {
         EnsureRender(Math.Max(1, width));
         return Math.Max(1, _contentHeight);

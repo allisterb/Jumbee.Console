@@ -226,10 +226,8 @@ public class Globe : Control
     }
     #endregion
 
-    // A globe fills its container and re-fits on resize; it must never be scrolled (inside a ControlFrame this hands
-    // it the bounded viewport height instead of the unbounded scroll height, which would balloon it to the clamp).
-    /// <summary>Always <see langword="true"/>: the globe fills its frame's viewport and is never scrolled.</summary>
-    protected internal override bool FillsFrameViewport => true;
+    // Deliberately NOT IScrollable: a globe fills its container and re-fits on resize, so it is sized to the
+    // viewport rather than scrolled.
 
     // Opt into partial redraw: the disc is inscribed in (and usually narrower than) the pane, so reporting just the
     // drawn disc lets the compositor skip the blank margins.
