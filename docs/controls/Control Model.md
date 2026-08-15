@@ -45,7 +45,9 @@ and no risk of adding the control while its frame stays behind.
 
 When a control is framed, the frame owns the border, the title, the margin, the scrollbar and — for scrollable
 content — the viewport. That's why `ListBox` and `Tree` need a frame to scroll: they size to their content and let
-the frame do the scrolling. `Log` and `DataTable` don't, because they own their viewports (`FillsFrameViewport`).
+the frame do the scrolling. `Log` doesn't, because it owns its viewport (`FillsFrameViewport`); `DataTable` doesn't
+either, because it draws its own scrollbar and tracks its own offset. Framing a control is most of what makes it
+scroll, but not all of it — see [Scrolling](#scrolling).
 
 ## What nests inside what
 
@@ -78,8 +80,48 @@ Every control resolves its size in the same order:
 before that, so anything size-dependent belongs in `Render()`, not a constructor or property setter. `HasLayout`
 is the guard.
 
-`MeasureHeight(width)` is how a frame asks a control how tall it wants to be at a given width — which is what makes
-scrolling work for content-tall controls.
+`MeasureHeight(width)` is how a frame asks a control how tall it wants to be at a given width. It's the whole basis
+of scrolling, and it has a default that will bite you — see below.
+
+## Scrolling
+
+A control never scrolls itself. The frame owns the viewport, the scrollbar and the offset; it hands the control an
+*unbounded* height so the content can grow past the visible area, then moves a window over it. Wheel, thumb drag and
+`Frame.Scroll(n)` all just change that offset.
+
+So framing gets you the entire mechanism for free. In exchange the control owes the frame one honest answer: **how
+tall is my content at this width?**
+
+```csharp
+protected override int MeasureHeight(int width) => Items.Count;
+```
+
+`ListBox` returns its item count, `TextEditor` its wrapped row count, `CodeEditor` the editor's row count so gutter
+and text scroll together.
+
+> **A control that doesn't override `MeasureHeight` gets a 1000-row scrollbar.** The default answer is `0`, meaning
+> "no opinion, fill what I'm given" — and what the frame gives is unbounded, which clamps to 1000. You get a sliver
+> of a thumb over ~1000 rows of blank space. Nothing throws and nothing logs; the content draws correctly at the top
+> of a vast empty region, so a snapshot of the visible area passes too. `CompositeControl` does **not** override it
+> for you: a composite you framed and expected to scroll is the usual way people meet this.
+
+Two more things the frame won't do for you:
+
+> **Focus does not scroll into view.** There is no `ScrollTo`. If your control is keyboard-navigable — a composite
+> with `TabNavigatesChildren`, a list with arrow keys — Tab can move focus to a child that's scrolled off screen,
+> and the focus cue gets drawn where nobody can see it. You have to scroll the frame yourself when focus moves;
+> `CodeEditor.AutoScroll` is the worked example.
+
+> **The scrollbar costs a column.** A frame reserves one column of the interior for it, always. If your control is
+> width-tuned — label gutters sized to the interior, columns that must line up — framing it shifts everything by a
+> cell.
+
+When the content height *changes*, re-lay-out with `Initialize()`, not just `Invalidate()`. `Invalidate()` only
+repaints; the frame re-measures on layout, so without it the scrollbar keeps the old range.
+
+Finally, a control that manages its own viewport — `Log`, `TerminalEmulator`, `Plot`, `Canvas`, `Globe` — sets
+`FillsFrameViewport` and is given the bounded viewport height instead, so the frame never scrolls it. Don't put a
+self-scrolling control inside a scrolling frame; both will try to scroll it.
 
 ## Focus
 
