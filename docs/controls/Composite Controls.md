@@ -30,8 +30,8 @@ and `editor.Gutter` expose the children.
 > unless it asks to be scrolled, so a framed composite that you expected to scroll simply won't until you add the
 > interface and its one method. `CodeEditor` returns the editor's wrapped row count, which is what lets an enclosing
 > frame scroll gutter and text together — and it raises `FocusRowChanged` when the caret moves, which is how the
-> frame knows to follow it. A composite whose children take focus has to do the same for whichever row its focused
-> child sits on. Full rules, including the traps, are in
+> frame knows to follow it. You don't need that for a composite whose *children* take focus: the frame reveals a
+> newly focused descendant on its own. Full rules, including the traps, are in
 > [Control Model → Scrolling](Control%20Model.md#scrolling).
 
 ## Authoring a composite: subclass `CompositeControl`

@@ -6,11 +6,11 @@ outgrew its terminal and the obvious fix — frame it, let it scroll — turned 
 that live in three different places.
 
 > **Status: shipped.** `IScrollable` carries `MeasureHeight` plus a defaulted `FocusRowChanged` event;
-> `ControlFrame` keys off the interface, subscribes to the event, and owns the one `ScrollIntoView` implementation;
-> `FillsFrameViewport` is gone. The polled `int? FocusRow` proposed below was **rejected** in favour of the event —
-> see *Why the focus row is an event, not a polled property*. Everything from "The default is the broken one"
-> through "Blast radius" describes the world *before* the change and is kept as the rationale; the sections after
-> the rule describe what shipped.
+> `ControlFrame` keys off the interface, subscribes to the event, owns the one `ScrollIntoView` implementation, and
+> reveals a newly focused descendant on its own; `FillsFrameViewport` is gone. The polled `int? FocusRow` proposed
+> below was **rejected** in favour of the event — see *Why the focus row is an event, not a polled property*.
+> Everything from "The default is the broken one" through "Blast radius" describes the world *before* the change and
+> is kept as the rationale; the sections after the rule describe what shipped.
 
 ## What the frame does today
 
@@ -245,9 +245,10 @@ the mistake worth catching. Three limits, all verified rather than assumed:
 So CS0067 is a nudge for the careless, not a guarantee. A real guarantee would be a Roslyn analyzer; the type
 system cannot require that a method be *called*.
 
-**What is still not automatic: composites.** A composite must work out which content row its focused child occupies
-and call `ScrollIntoView` itself. Making that automatic needs position information a control does not have, and the
-reason is structural rather than an oversight:
+**Composites are automatic after all.** An earlier draft of this note claimed a composite would have to work out its
+focused child's row itself, because a control has no position information. That was too pessimistic — see
+*Revealing a focused descendant* below. The underlying facts are still worth recording, because they are what shapes
+the solution:
 
 - A control *does* hold its context — `ConsoleGUI.Common.Control` has `private IDrawingContext _context`, surfaced
   as an explicit `IDrawingContext IControl.Context`, so it is not visible as `this.Context` in a derived control.
@@ -259,6 +260,36 @@ reason is structural rather than an oversight:
   is an `IDrawingContextListener`, not another `DrawingContext`, so there is no generic upward walk to accumulate
   offsets.
 
-Making it automatic therefore means extending the layout contract so a `Layout`/`CompositeControl` can resolve a
-descendant's row. That is a change to how placement information flows, not a small addition, and it is the open
-piece of this work.
+### Revealing a focused descendant
+
+The missing link in the list above is that `DrawingContext.Parent`, though typed `IDrawingContextListener`, is in
+practice also an `IControl` with a context of its own — so the chain *can* be walked after all, without extending
+the layout contract:
+
+```csharp
+var ctx = ((IControl)focused).Context as DrawingContext;
+while (ctx is not null) { if (ctx.Parent is ControlFrame f) { /* reveal at row */ }
+                          row += ctx.Offset.Y; ctx = (ctx.Parent as IControl)?.Context as DrawingContext; }
+```
+
+`ControlFrame.RevealFocused` does this, called from `Control.IsFocused` on gain. Two properties make it work:
+
+- **It reads the layout's real positions**, so it cannot drift from the layout the way arithmetic in a composite
+  would. That matters here: the sandbox sidebar's Scale section changed height twice in one afternoon.
+- **The walk stops at the context a `ControlFrame` owns**, and that context's offset — the frame's own border and
+  scroll offset — is deliberately not counted, so the result is a row in content coordinates.
+
+The rule that keeps it from fighting the event: **only a descendant deeper than the frame's direct child is
+revealed.** A framed `ListBox` reveals the selected *item* through the event; if the frame also revealed the list
+itself on focus, it would drag `Top` back to 0 every time the list was focused.
+
+Verified against nested framed composites, which is the shape that matters — a walk through a stack, through each
+`Section`'s frame, into its inner content, resolved every row exactly.
+
+**A trap this exposed, worth knowing on its own.** While validating the walk, a probe reported an inner control at a
+row 3 lower than the layout implied. The walk was right; the *probe* was wrong — its composite under-reported
+`MeasureHeight` (25 rows for content needing 35). Under-reporting does not clip the tail of a stack, it **collapses
+it to zero height**: the last sections came back with `frameH=0`, `innerH=0`, and the walk faithfully reported where
+those flattened controls now were. Over-reporting is harmless (a stack sizes to its content). So for a hand-written
+composite `MeasureHeight`, under-reporting is the dangerous direction, and it fails by silently flattening your last
+children rather than by looking obviously wrong.

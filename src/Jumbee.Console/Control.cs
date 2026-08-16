@@ -172,6 +172,10 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
                 // out of its subtree — its own IsFocused doesn't change, and the Owner chain doesn't reach it for a
                 // dynamically-added descendant, so a global signal is the reliable trigger.
                 UI.RaiseFocusChanged();
+                // Focus can land on a control scrolled outside its frame's viewport — Tab into a tall sidebar, say —
+                // which would draw the focus cue where nobody can see it. Only on gain: this setter also runs for the
+                // control losing focus.
+                if (value) ControlFrame.RevealFocused(this);
                 // Repaint so RenderCursor runs for both the old and new focus: only the focused control owns the
                 // terminal cursor, so the defocused one must clear its IsCursor cell.
                 InvalidateInteractive();

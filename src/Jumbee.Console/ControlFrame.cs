@@ -2,6 +2,7 @@ namespace Jumbee.Console;
 
 using System;
 
+using ConsoleGUI;
 using ConsoleGUI.Common;
 using ConsoleGUI.Data;
 using ConsoleGUI.Input;
@@ -995,6 +996,37 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
 
     private void OnFocusRowChanged(object? sender, RowSpan span) => ScrollIntoView(span.Start, span.Height);
 
+    /// <summary>
+    /// Scrolls the nearest enclosing scrolling frame so a newly focused descendant is visible. Called from
+    /// <see cref="Control.IsFocused"/> when focus is gained.
+    /// </summary>
+    /// <remarks>
+    /// A control is never told where it sits inside its parent, so the row is recovered by walking up the
+    /// drawing-context chain and summing each hop's vertical offset — which reads the layout's real, current
+    /// positions rather than arithmetic a composite would have to duplicate and keep in step. The walk stops at the
+    /// context a <see cref="ControlFrame"/> owns; that context's offset is the frame's own border/scroll offset, so
+    /// it is deliberately not counted.
+    /// </remarks>
+    internal static void RevealFocused(Control focused)
+    {
+        var row = 0;
+        var ctx = ((IControl)focused).Context as DrawingContext;
+        for (var hop = 1; ctx is not null && hop <= MaxRevealDepth; hop++)
+        {
+            if (ctx.Parent is ControlFrame frame)
+            {
+                // A frame's DIRECT child governs its own scrolling — a framed ListBox reveals the selected item, not
+                // the list. Only a deeper descendant, whose row nothing else knows, is revealed here.
+                if (hop > 1 && frame._control is IScrollable)
+                    frame.ScrollIntoView(row, Math.Max(1, focused.ActualHeight));
+                return;
+            }
+
+            row += ctx.Offset.Y;
+            ctx = (ctx.Parent as IControl)?.Context as DrawingContext;
+        }
+    }
+
     // --- Scrollbar mouse interaction: drag the thumb (captures so the drag survives leaving the 1-col bar), click
     // the classic end arrows to step, click the track above/below the thumb to page. ---
 
@@ -1095,6 +1127,8 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     // The control this frame is currently subscribed to for selection moves, so BindControl can detach on replace.
     // Null when the wrapped control isn't IScrollable.
     private IScrollable? _scrollSource;
+    // A guard on the RevealFocused context walk: deep nesting is legitimate, a cycle is not.
+    private const int MaxRevealDepth = 32;
     private CBorderPlacement _borderPlacement = CBorderPlacement.All;
     private Offset borderOffset;
     private Offset _margin;

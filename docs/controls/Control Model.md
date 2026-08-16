@@ -139,10 +139,11 @@ static text — simply omits it and stays silent.
 > saved position, is an imperative scroll: call `ControlFrame.ScrollIntoView(start, height)` (or the protected
 > `Control.ScrollIntoView`) directly.
 
-> **Focus still doesn't scroll into view by itself.** Tab can move focus to a child scrolled off screen, and the
-> focus cue gets drawn where nobody can see it. For a keyboard-navigable **composite** this is the case to watch: it
-> has to work out which content row its focused child occupies and raise the event itself, because a control isn't
-> told where it sits inside its parent.
+**Focus is handled for you.** When a control deep inside a scrolling frame takes focus — Tab into a tall sidebar,
+say — the frame reveals it automatically, so the focus cue is never drawn somewhere off screen. A composite needs no
+code for this and doesn't raise the event: the frame works out the row from the laid-out positions, which is why it
+stays correct when your layout changes. The event is for a selection *within* one control, where only that control
+knows which row is current.
 
 > **The scrollbar costs a column.** An `IScrollable` gives up one column of the frame's interior to the scrollbar. If
 > your control is width-tuned — label gutters sized to the interior, columns that must line up — expect everything to
