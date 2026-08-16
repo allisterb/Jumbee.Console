@@ -50,6 +50,11 @@ public class CodeEditor : CompositeControl, IScrollable
     }
     #endregion
 
+    #region Events
+    /// <inheritdoc/>
+    public event EventHandler<RowSpan>? FocusRowChanged;
+    #endregion
+
     #region Properties
     /// <summary>The wrapped text editor (focus this to type; e.g. <c>UI.SetFocus(codeEditor.Editor)</c>).</summary>
     public TextEditor Editor => _editor;
@@ -130,7 +135,7 @@ public class CodeEditor : CompositeControl, IScrollable
     private int EditorRowCount() => _editor.VisualRowCount(Math.Max(1, _editor.ActualWidth));
 
     // The editor itself isn't framed, so scroll OUR ControlFrame to keep the editor's caret row within the viewport.
-    private void AutoScroll() => ScrollIntoView(_editor.CaretVisualRow);
+    private void AutoScroll() => FocusRowChanged?.Invoke(this, new RowSpan(_editor.CaretVisualRow));
     #endregion
 
     #region Fields

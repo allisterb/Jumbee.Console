@@ -185,6 +185,9 @@ public partial class Tree : RenderableControl, IScrollable
     #endregion
 
     #region Events
+    /// <inheritdoc/>
+    public event EventHandler<RowSpan>? FocusRowChanged;
+
     /// <summary>Raised when a leaf node (one with no children) is activated — double-clicked, or Enter/Space pressed
     /// while it is selected. Parent nodes toggle expansion instead of raising this.</summary>
     public event EventHandler<TreeNode>? NodeActivated;
@@ -736,7 +739,7 @@ public partial class Tree : RenderableControl, IScrollable
     {
         var (start, height) = RowSpanOf(node);
         if (start < 0) { start = fallbackRow; height = 1; }
-        ScrollIntoView(start, height);
+        FocusRowChanged?.Invoke(this, new RowSpan(start, height));
     }
 
     private IEnumerable<TreeNode> Flatten(TreeNode node)

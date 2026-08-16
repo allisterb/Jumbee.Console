@@ -124,6 +124,72 @@ public class ScrollableTests
 
     // Tree's private copy of this clamp lacked the guard and scrolled a too-tall node past its own first row, so the
     // thing you navigated to went off the top of the viewport. Shared now, so it can only be fixed once.
+    // A control that reports a moving selection the way IScrollable documents: a field-like event, raised on move.
+    private sealed class SelectingPanel : CompositeControl, IScrollable
+    {
+        public SelectingPanel() => SetContent(new VerticalStackPanel(
+            new TextLabel(TextLabelOrientation.Horizontal, "x") { Focusable = false, Height = 1 }));
+
+        public event EventHandler<RowSpan>? FocusRowChanged;
+
+        public int MeasureHeight(int width) => 100;
+
+        public void Select(int row, int height = 1) => FocusRowChanged?.Invoke(this, new RowSpan(row, height));
+    }
+
+    [Fact]
+    public void RaisingFocusRowChanged_ScrollsTheFrame()
+    {
+        var panel = new SelectingPanel();
+        panel.WithFrame(borderStyle: BorderStyle.Rounded);
+        ConsoleSnapshot.Render(panel, Width, Height);
+        var frame = panel.Frame!;
+        Assert.Equal(0, frame.Top);
+
+        panel.Select(60);
+
+        Assert.True(frame.Top > 0, "the frame should have followed the selection");
+        Assert.InRange(60, frame.Top, frame.Top + frame.ViewportSize.Height - 1);
+    }
+
+    // ControlFrame.Control is settable, so the frame must stop following a control it no longer wraps — otherwise the
+    // old control keeps scrolling a frame that is showing something else entirely.
+    [Fact]
+    public void ReplacingTheWrappedControl_StopsFollowingTheOldOne()
+    {
+        var first = new SelectingPanel();
+        first.WithFrame(borderStyle: BorderStyle.Rounded);
+        ConsoleSnapshot.Render(first, Width, Height);
+        var frame = first.Frame!;
+
+        var second = new SelectingPanel();
+        frame.Control = second;
+        ConsoleSnapshot.Render(second, Width, Height);
+
+        // Prove the frame CAN still scroll after the swap, or the assertion below would pass for the wrong reason.
+        second.Select(60);
+        Assert.True(frame.Top > 0, "the frame should follow the control it now wraps");
+        frame.Top = 0;
+
+        first.Select(60);   // the control the frame no longer wraps
+
+        Assert.Equal(0, frame.Top);
+    }
+
+    // The interface's default implementation is a no-op, so a viewer with nothing to report neither declares the
+    // event nor gets scrolled — and the frame subscribing to that default is harmless.
+    [Fact]
+    public void ControlWithoutTheEvent_IsStillFramedAndScrollable()
+    {
+        var panel = new TallPanel();
+        panel.WithFrame(borderStyle: BorderStyle.Rounded);
+        ConsoleSnapshot.Render(panel, Width, Height);
+
+        panel.Frame!.ScrollIntoView(30);
+
+        Assert.True(panel.Frame!.Top > 0, "an imperative scroll should still work without the event");
+    }
+
     [Fact]
     public void ScrollIntoView_SpanTallerThanViewport_ShowsItsTopNotItsBottom()
     {

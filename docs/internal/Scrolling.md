@@ -5,11 +5,12 @@ contract used to be, and the interface that replaced it. It was written after th
 outgrew its terminal and the obvious fix — frame it, let it scroll — turned out to need three pieces of knowledge
 that live in three different places.
 
-> **Status: Phases 1 and 2 landed.** `IScrollable` exists and carries `MeasureHeight`; `ControlFrame` keys off it;
-> `FillsFrameViewport` is gone; `ControlFrame.ScrollIntoView` / `Control.ScrollIntoView` exist and the three
-> hand-rolled copies are gone. `FocusRow` as designed below was **rejected** — see *Why `FocusRow` is not an
-> interface member*. Everything from "The default is the broken one" through "Blast radius" describes the world
-> *before* the change and is kept as the rationale; the sections after the rule describe what shipped.
+> **Status: shipped.** `IScrollable` carries `MeasureHeight` plus a defaulted `FocusRowChanged` event;
+> `ControlFrame` keys off the interface, subscribes to the event, and owns the one `ScrollIntoView` implementation;
+> `FillsFrameViewport` is gone. The polled `int? FocusRow` proposed below was **rejected** in favour of the event —
+> see *Why the focus row is an event, not a polled property*. Everything from "The default is the broken one"
+> through "Blast radius" describes the world *before* the change and is kept as the rationale; the sections after
+> the rule describe what shipped.
 
 ## What the frame does today
 
@@ -81,8 +82,8 @@ assumes symmetry.
 
 ## Proposal: `IScrollable`
 
-> **As proposed, not as shipped.** `MeasureHeight` landed; `FocusRow` did not — it became an explicit
-> `ScrollIntoView` call instead. Kept here because the reasoning below is what the rejection argues against.
+> **As proposed, not as shipped.** `MeasureHeight` landed as-is; the polled `FocusRow` property became a
+> `FocusRowChanged` event. Kept here because the reasoning below is what the rejection argues against.
 
 ```csharp
 public interface IScrollable
@@ -192,10 +193,10 @@ silent failure, it was actively hiding one in a shipped control.
 Guarded by `tests/Jumbee.Console.Tests/ScrollableTests.cs` — the negative case (no interface → sized to viewport,
 never 1000) is the one that matters.
 
-## Why `FocusRow` is not an interface member
+## Why the focus row is an event, not a polled property
 
-Phase 2 shipped scroll-into-view as an explicit call, not the polled `int? FocusRow` property proposed above. Two
-reasons, and the first is fatal on its own.
+Scroll-into-view shipped as `event EventHandler<RowSpan>? FocusRowChanged` on `IScrollable`, not the polled
+`int? FocusRow` property proposed above. Two reasons the polling form was rejected, the first fatal on its own.
 
 **Polling would fight the user.** The frame lays out on resize and on content change. If it re-asserted a focus row
 every layout, then after you wheeled away from the selection, the next live-log append or terminal resize would yank
@@ -207,11 +208,42 @@ that genuinely moves the selection.
 
 Push is also what the three existing implementations already did — `ListBox`, `Tree` and `CodeEditor` each called
 their private `AutoScroll` at exactly the moment the selection or caret moved. That trigger was always right; only
-the arithmetic was duplicated. So Phase 2 kept the trigger where it was and moved the algorithm into
-`ControlFrame.ScrollIntoView(start, height)`, with `Control.ScrollIntoView` as a protected shorthand.
+the arithmetic was duplicated, and unifying it fixed a real bug: `Tree`'s copy lacked the guard `ListBox` had for a
+span taller than the viewport, so navigating to a tall node scrolled past its own first row and pushed the
+just-selected node off the top.
 
-Unifying it fixed a real bug: `Tree`'s copy lacked the guard `ListBox` had for a span taller than the viewport, so
-navigating to a tall node scrolled past its own first row and pushed the just-selected node off the top.
+### Why an event rather than the control calling the frame
+
+The first cut had the control call `Frame.ScrollIntoView(...)` directly. That works, but it is the inverted
+responsibility the original `FocusRow` argument objected to: the child reaches up and mutates its parent's state.
+The event recovers the layering without reintroducing polling — the control announces "my selection is now at these
+rows" and knows nothing about frames; the frame subscribes and decides. `ControlFrame` attaches and detaches in
+`BindControl`, which is the single path used by both the constructor and the settable `Control` property, so
+replacing a frame's control stops it following the old one. (That detach is load-bearing and tested: removing it
+makes `ReplacingTheWrappedControl_StopsFollowingTheOldOne` fail.)
+
+`ControlFrame.ScrollIntoView` stays public, because not every scroll is a selection move — following new output to
+the bottom, or restoring a saved position, has no business being an event.
+
+### What the event does and does not enforce
+
+Declared field-like, an event that is never raised gets **CS0067** in the implementer's own build, which is exactly
+the mistake worth catching. Three limits, all verified rather than assumed:
+
+- **Explicit implementation escapes it.** An explicit implementation cannot be field-like at all (`CS0071`), so it
+  must use `add`/`remove` accessors — and with no compiler-generated backing field there is nothing for CS0067 to
+  notice. The style that keeps members off the public surface is precisely the style that silences the check.
+- **A raise-method pattern also escapes it.** Adding `RaiseFocusRowChanged(...)` that invokes the event makes the
+  event "used" whether or not anything ever calls the raise method, so the lazy implementer compiles clean. It also
+  cannot live on the interface: a default interface method may not raise the interface's own event (`CS0079`),
+  because an interface has no backing field. So that pattern buys per-class boilerplate and costs the warning.
+- **Opting out is silent.** The event's do-nothing default is what keeps the seven selectionless implementers
+  (`MarkdownViewer`, `AsciiDocViewer`, `MermaidViewer`, `TextPanel`, `TranscriptView`, `TaskListView`,
+  `ChatPrompt`) from each carrying a CS0067 they cannot fix. The cost is that a control which *should* report a
+  selection can simply not declare the event, and nothing complains.
+
+So CS0067 is a nudge for the careless, not a guarantee. A real guarantee would be a Roslyn analyzer; the type
+system cannot require that a method be *called*.
 
 **What is still not automatic: composites.** A composite must work out which content row its focused child occupies
 and call `ScrollIntoView` itself. Making that automatic needs position information a control does not have, and the

@@ -116,6 +116,8 @@ public partial class ListBox : RenderableControl, IScrollable
     #endregion
 
     #region Events
+    /// <inheritdoc/>
+    public event EventHandler<RowSpan>? FocusRowChanged;
     /// <summary>Raised when the highlighted index changes (navigation or selection).</summary>
     public event EventHandler<int>? SelectionChanged;
     /// <summary>Raised when an item is committed (Enter or click).</summary>
@@ -411,7 +413,7 @@ public partial class ListBox : RenderableControl, IScrollable
         var offsets = EnsureLayout();
         if (_selectionIndex < 0 || _selectionIndex + 1 >= offsets.Length) return;
         var itemTop = offsets[_selectionIndex];
-        ScrollIntoView(itemTop, offsets[_selectionIndex + 1] - itemTop);
+        FocusRowChanged?.Invoke(this, new RowSpan(itemTop, offsets[_selectionIndex + 1] - itemTop));
     }
 
     /// <inheritdoc/>

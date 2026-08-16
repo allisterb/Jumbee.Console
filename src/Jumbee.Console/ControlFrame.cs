@@ -978,11 +978,22 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
 
     private void BindControl()
     {
+        // Follow the new control's selection, and stop following the old one — Control is settable, so without the
+        // detach a replaced control would keep this frame alive and keep scrolling it.
+        if (!ReferenceEquals(_scrollSource, _control))
+        {
+            if (_scrollSource is not null) _scrollSource.FocusRowChanged -= OnFocusRowChanged;
+            _scrollSource = _control as IScrollable;
+            if (_scrollSource is not null) _scrollSource.FocusRowChanged += OnFocusRowChanged;
+        }
+
         if (Control != null)
             ControlContext = new DrawingContext(this, Control);
         else
             ControlContext = DrawingContext.Dummy;
     }
+
+    private void OnFocusRowChanged(object? sender, RowSpan span) => ScrollIntoView(span.Start, span.Height);
 
     // --- Scrollbar mouse interaction: drag the thumb (captures so the drag survives leaving the 1-col bar), click
     // the classic end arrows to step, click the track above/below the thumb to page. ---
@@ -1081,6 +1092,9 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     private SpectreBoxBorder _boxBorder;
     private BorderStyle _borderStyle;
     private Control _control;
+    // The control this frame is currently subscribed to for selection moves, so BindControl can detach on replace.
+    // Null when the wrapped control isn't IScrollable.
+    private IScrollable? _scrollSource;
     private CBorderPlacement _borderPlacement = CBorderPlacement.All;
     private Offset borderOffset;
     private Offset _margin;

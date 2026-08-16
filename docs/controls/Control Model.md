@@ -108,25 +108,41 @@ what a control that fits its space, or one that owns its own viewport (`Log`, `D
 `Plot`, `Canvas`, `Globe`), wants. **Doing nothing is the safe default**, and a control that manages its own
 scrolling should keep it that way: implementing `IScrollable` too would make the frame a second, competing scroller.
 
-### Keeping the interesting row visible
+### Keeping the selection visible
 
-Scrolling is now under the *user's* control, not your content's — so when a selection or caret moves, nothing brings
-it back on screen. Call `ScrollIntoView` when it does:
+If your control has a moving point of interest — a selected item, a caret — say so with the interface's second
+member and the frame will follow it. Declare a plain event and raise it wherever the selection moves:
 
 ```csharp
-protected void OnSelectionChanged() => ScrollIntoView(SelectedRow);
+public event EventHandler<RowSpan>? FocusRowChanged;
+
+private void Select(int i)
+{
+    _index = i;
+    FocusRowChanged?.Invoke(this, new RowSpan(RowOf(i)));
+}
 ```
 
-It scrolls the minimum needed and does nothing when the rows are already visible, so it's safe to call on every
-move. Pass a height for a selection spanning several rows — `ScrollIntoView(itemTop, itemHeight)` — and a span
-taller than the viewport aligns to its top, so the thing you selected never scrolls off the top edge. `ListBox`,
-`Tree` and `CodeEditor` all drive it this way; `ControlFrame.ScrollIntoView` is the same method if you're holding
-the frame rather than the control.
+The frame subscribes, scrolls the minimum needed, and does nothing when the rows are already visible — so it's safe
+to raise on every move. Pass a height for a selection spanning several rows, `new RowSpan(itemTop, itemHeight)`; a
+span taller than the viewport aligns to its top, so the thing you selected never scrolls off the top edge.
+`ListBox`, `Tree` and `CodeEditor` all work this way.
 
-> **Nothing calls it for you, including on focus.** Tab can still move focus to a child scrolled off screen, and the
-> focus cue gets drawn where nobody can see it. For a keyboard-navigable **composite** this is the case to watch:
-> the composite has to work out which content row its focused child occupies and call `ScrollIntoView` itself, since
-> a control isn't told where it sits inside its parent.
+Declaring it field-like, as above, is worth doing deliberately: the compiler then reports **CS0067** if you never
+raise it, which catches the mistake that matters — a control that claims a moving selection and then lets it scroll
+off screen. Writing the event with explicit `add`/`remove` accessors silences that check.
+
+The event has a do-nothing default, so a control with no moving point of interest — a document viewer, a panel of
+static text — simply omits it and stays silent.
+
+> **This is for selection moves, not scrolling in general.** Following new output to the bottom, or restoring a
+> saved position, is an imperative scroll: call `ControlFrame.ScrollIntoView(start, height)` (or the protected
+> `Control.ScrollIntoView`) directly.
+
+> **Focus still doesn't scroll into view by itself.** Tab can move focus to a child scrolled off screen, and the
+> focus cue gets drawn where nobody can see it. For a keyboard-navigable **composite** this is the case to watch: it
+> has to work out which content row its focused child occupies and raise the event itself, because a control isn't
+> told where it sits inside its parent.
 
 > **The scrollbar costs a column.** An `IScrollable` gives up one column of the frame's interior to the scrollbar. If
 > your control is width-tuned — label gutters sized to the interior, columns that must line up — expect everything to
