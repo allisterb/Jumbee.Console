@@ -108,12 +108,25 @@ what a control that fits its space, or one that owns its own viewport (`Log`, `D
 `Plot`, `Canvas`, `Globe`), wants. **Doing nothing is the safe default**, and a control that manages its own
 scrolling should keep it that way: implementing `IScrollable` too would make the frame a second, competing scroller.
 
-Two things the frame still won't do for you:
+### Keeping the interesting row visible
 
-> **Focus does not scroll into view.** There is no `ScrollTo`. If your control is keyboard-navigable — a composite
-> with `TabNavigatesChildren`, a list with arrow keys — Tab can move focus to a child that's scrolled off screen,
-> and the focus cue gets drawn where nobody can see it. You have to scroll the frame yourself when focus moves;
-> `CodeEditor.AutoScroll` is the worked example.
+Scrolling is now under the *user's* control, not your content's — so when a selection or caret moves, nothing brings
+it back on screen. Call `ScrollIntoView` when it does:
+
+```csharp
+protected void OnSelectionChanged() => ScrollIntoView(SelectedRow);
+```
+
+It scrolls the minimum needed and does nothing when the rows are already visible, so it's safe to call on every
+move. Pass a height for a selection spanning several rows — `ScrollIntoView(itemTop, itemHeight)` — and a span
+taller than the viewport aligns to its top, so the thing you selected never scrolls off the top edge. `ListBox`,
+`Tree` and `CodeEditor` all drive it this way; `ControlFrame.ScrollIntoView` is the same method if you're holding
+the frame rather than the control.
+
+> **Nothing calls it for you, including on focus.** Tab can still move focus to a child scrolled off screen, and the
+> focus cue gets drawn where nobody can see it. For a keyboard-navigable **composite** this is the case to watch:
+> the composite has to work out which content row its focused child occupies and call `ScrollIntoView` itself, since
+> a control isn't told where it sits inside its parent.
 
 > **The scrollbar costs a column.** An `IScrollable` gives up one column of the frame's interior to the scrollbar. If
 > your control is width-tuned — label gutters sized to the interior, columns that must line up — expect everything to

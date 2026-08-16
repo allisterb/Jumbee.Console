@@ -408,21 +408,10 @@ public partial class ListBox : RenderableControl, IScrollable
     /// </summary>
     private void AutoScroll()
     {
-        if (Frame == null) return;
-
         var offsets = EnsureLayout();
         if (_selectionIndex < 0 || _selectionIndex + 1 >= offsets.Length) return;
         var itemTop = offsets[_selectionIndex];
-        var itemBottom = offsets[_selectionIndex + 1];   // exclusive
-
-        var top = Frame.Top;
-        var viewportHeight = Frame.ViewportSize.Height;
-        if (viewportHeight <= 0) return;
-
-        if (itemTop < top)
-            Frame.Top = itemTop;                                 // scrolled above: bring its top into view
-        else if (itemBottom > top + viewportHeight)
-            Frame.Top = Math.Min(itemTop, itemBottom - viewportHeight);   // below: reveal its bottom (top wins if taller than the viewport)
+        ScrollIntoView(itemTop, offsets[_selectionIndex + 1] - itemTop);
     }
 
     /// <inheritdoc/>

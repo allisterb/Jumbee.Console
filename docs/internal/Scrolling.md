@@ -5,11 +5,11 @@ contract used to be, and the interface that replaced it. It was written after th
 outgrew its terminal and the obvious fix — frame it, let it scroll — turned out to need three pieces of knowledge
 that live in three different places.
 
-> **Status: Phase 1 landed.** `IScrollable` exists and carries `MeasureHeight`; `ControlFrame` keys off it;
-> `FillsFrameViewport` is gone. `FocusRow` / scroll-into-view (Phase 2) is **not** built — the "What is missing
-> entirely" section below still stands. Everything from "The default is the broken one" through "Blast radius"
-> describes the world *before* the change and is kept as the rationale; see **What actually landed** at the end for
-> the corrections reality forced.
+> **Status: Phases 1 and 2 landed.** `IScrollable` exists and carries `MeasureHeight`; `ControlFrame` keys off it;
+> `FillsFrameViewport` is gone; `ControlFrame.ScrollIntoView` / `Control.ScrollIntoView` exist and the three
+> hand-rolled copies are gone. `FocusRow` as designed below was **rejected** — see *Why `FocusRow` is not an
+> interface member*. Everything from "The default is the broken one" through "Blast radius" describes the world
+> *before* the change and is kept as the rationale; the sections after the rule describe what shipped.
 
 ## What the frame does today
 
@@ -62,9 +62,12 @@ Seven controls override `MeasureHeight` (`ListBox`, `TextEditor`, `TextPanel`, `
 `Log`, `MultiTabCodeEditor`, `Plot`, `RunChart`, `TerminalEmulator`). Every one of those is a decision an author had
 to know to make. Nothing in the type system asks the question.
 
-## What is missing entirely
+## What was missing entirely
 
-**Scroll-into-view.** There is no `ScrollTo` / `ScrollIntoView` anywhere in `ControlFrame` or `CompositeControl`.
+*(All three were true before the change. The first is now solved for controls but not for composites; the second and
+third stand.)*
+
+**Scroll-into-view.** There was no `ScrollTo` / `ScrollIntoView` anywhere in `ControlFrame` or `CompositeControl`.
 `CodeEditor` keeps its caret visible by driving the enclosing frame itself (`AutoScroll`), and every other control
 that needs it would have to reinvent that. The consequence for a keyboard-navigable composite is sharp: with
 `TabNavigatesChildren` set, Tab can move focus to a child that is scrolled out of sight, and the focus cue is drawn
@@ -78,11 +81,14 @@ assumes symmetry.
 
 ## Proposal: `IScrollable`
 
+> **As proposed, not as shipped.** `MeasureHeight` landed; `FocusRow` did not — it became an explicit
+> `ScrollIntoView` call instead. Kept here because the reasoning below is what the rejection argues against.
+
 ```csharp
 public interface IScrollable
 {
     int MeasureHeight(int width);   // content height — the scroll range
-    int? FocusRow { get; }          // row to keep in view, or null for "don't care"
+    int? FocusRow { get; }          // row to keep in view, or null for "don't care"  (NOT shipped)
 }
 ```
 
@@ -118,15 +124,17 @@ outside consumers we have.
 
 ## Open questions
 
-- **Push or poll for `FocusRow`?** Polling an `int?` each layout pass is cheap and needs no notification plumbing,
-  but the frame only re-lays-out when something invalidates. A focus move that changes nothing else might not
-  trigger one.
+- **Push or poll for `FocusRow`?** *(Resolved: push. See the section below.)*
 - **Does the frame reserve the scrollbar column when content is shorter than the viewport?** Today it always does.
   Reserving only when needed is nicer, but the column appearing on the row that overflows would reflow the content.
 - **Height changes still need `Initialize()`, not `Invalidate()`**, so the frame re-measures. An interface does not
   fix that, and it is the second-most-common way to get this wrong.
 
 ## Documentation, which needs fixing regardless
+
+*(All three fixed. `Control Model.md` now carries the canonical recipe under its own **Scrolling** heading, names
+the 1000-row symptom outright, and documents both caveats; the composite page defers to it instead of restating
+it.)*
 
 The recipe exists and is good — [Composite Controls.md:29](../controls/Composite%20Controls.md) covers the unbounded
 height, the `MeasureHeight` requirement, `Initialize()`-not-`Invalidate()`, and the don't-nest-two-scrollers rule.
@@ -183,3 +191,42 @@ silent failure, it was actively hiding one in a shipped control.
 
 Guarded by `tests/Jumbee.Console.Tests/ScrollableTests.cs` — the negative case (no interface → sized to viewport,
 never 1000) is the one that matters.
+
+## Why `FocusRow` is not an interface member
+
+Phase 2 shipped scroll-into-view as an explicit call, not the polled `int? FocusRow` property proposed above. Two
+reasons, and the first is fatal on its own.
+
+**Polling would fight the user.** The frame lays out on resize and on content change. If it re-asserted a focus row
+every layout, then after you wheeled away from the selection, the next live-log append or terminal resize would yank
+you back. A scroll offset the user set must not be overridden by a control's standing preference — only by an event
+that genuinely moves the selection.
+
+**And it would mostly not fire.** A focus change calls `Invalidate` (repaint), not `Initialize` (layout). Polling in
+`Initialize` would miss most focus moves entirely, so the feature would be both intrusive and unreliable.
+
+Push is also what the three existing implementations already did — `ListBox`, `Tree` and `CodeEditor` each called
+their private `AutoScroll` at exactly the moment the selection or caret moved. That trigger was always right; only
+the arithmetic was duplicated. So Phase 2 kept the trigger where it was and moved the algorithm into
+`ControlFrame.ScrollIntoView(start, height)`, with `Control.ScrollIntoView` as a protected shorthand.
+
+Unifying it fixed a real bug: `Tree`'s copy lacked the guard `ListBox` had for a span taller than the viewport, so
+navigating to a tall node scrolled past its own first row and pushed the just-selected node off the top.
+
+**What is still not automatic: composites.** A composite must work out which content row its focused child occupies
+and call `ScrollIntoView` itself. Making that automatic needs position information a control does not have, and the
+reason is structural rather than an oversight:
+
+- A control *does* hold its context — `ConsoleGUI.Common.Control` has `private IDrawingContext _context`, surfaced
+  as an explicit `IDrawingContext IControl.Context`, so it is not visible as `this.Context` in a derived control.
+- But `IDrawingContext` exposes only `MinSize`, `MaxSize`, `Redraw`, `Update`, `SizeLimitsChanged` — **no offset**.
+  The concrete `DrawingContext` has `public Vector Offset`; the control only ever sees the interface. That is the
+  pull model's discipline: a control draws in its own coordinate space and never reasons about placement.
+- Even downcasting would give the wrong offset. A `DrawingContext` is created by the parent, so its `Offset`
+  describes one parent→child hop; scroll-into-view needs a row within a distant ancestor. And `DrawingContext.Parent`
+  is an `IDrawingContextListener`, not another `DrawingContext`, so there is no generic upward walk to accumulate
+  offsets.
+
+Making it automatic therefore means extending the layout contract so a `Layout`/`CompositeControl` can resolve a
+descendant's row. That is a change to how placement information flows, not a small addition, and it is the open
+piece of this work.

@@ -734,22 +734,9 @@ public partial class Tree : RenderableControl, IScrollable
     /// </summary>
     private void AutoScroll(TreeNode node, int fallbackRow)
     {
-        if (Frame == null) return;
-        var viewportHeight = Frame.ViewportSize.Height;
-        if (viewportHeight <= 0) return;
-
         var (start, height) = RowSpanOf(node);
         if (start < 0) { start = fallbackRow; height = 1; }
-
-        var top = Frame.Top;
-        if (start < top)
-        {
-            Frame.Top = start;                                // above the viewport -> show from its first row
-        }
-        else if (start + height > top + viewportHeight)
-        {
-            Frame.Top = start + height - viewportHeight;      // below -> scroll so its last row is visible
-        }
+        ScrollIntoView(start, height);
     }
 
     private IEnumerable<TreeNode> Flatten(TreeNode node)

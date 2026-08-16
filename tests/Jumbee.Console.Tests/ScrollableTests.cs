@@ -69,4 +69,70 @@ public class ScrollableTests
 
         Assert.Equal(21, height);   // the root plus its 20 children
     }
+
+    // A 100-row control in an 8-row viewport, so there is somewhere to scroll to in both directions.
+    private static ControlFrame TallFrame()
+    {
+        var panel = new TallPanel100();
+        panel.WithFrame(borderStyle: BorderStyle.Rounded);
+        ConsoleSnapshot.Render(panel, Width, Height);
+        return panel.Frame!;
+    }
+
+    private sealed class TallPanel100 : CompositeControl, IScrollable
+    {
+        public TallPanel100() => SetContent(new VerticalStackPanel(
+            new TextLabel(TextLabelOrientation.Horizontal, "x") { Focusable = false, Height = 1 }));
+
+        public int MeasureHeight(int width) => 100;
+    }
+
+    [Fact]
+    public void ScrollIntoView_AlreadyVisible_DoesNotMove()
+    {
+        var frame = TallFrame();
+        frame.Top = 20;
+
+        frame.ScrollIntoView(22);
+
+        Assert.Equal(20, frame.Top);
+    }
+
+    [Fact]
+    public void ScrollIntoView_Above_AlignsToTheRowsTop()
+    {
+        var frame = TallFrame();
+        frame.Top = 40;
+
+        frame.ScrollIntoView(12);
+
+        Assert.Equal(12, frame.Top);
+    }
+
+    [Fact]
+    public void ScrollIntoView_Below_ScrollsTheMinimumToRevealTheLastRow()
+    {
+        var frame = TallFrame();
+        frame.Top = 0;
+        var viewport = frame.ViewportSize.Height;
+
+        frame.ScrollIntoView(30, 2);
+
+        // The minimum move that puts row 31 (the span's last) on screen — not a jump that centres it.
+        Assert.Equal(32 - viewport, frame.Top);
+    }
+
+    // Tree's private copy of this clamp lacked the guard and scrolled a too-tall node past its own first row, so the
+    // thing you navigated to went off the top of the viewport. Shared now, so it can only be fixed once.
+    [Fact]
+    public void ScrollIntoView_SpanTallerThanViewport_ShowsItsTopNotItsBottom()
+    {
+        var frame = TallFrame();
+        frame.Top = 0;
+        var viewport = frame.ViewportSize.Height;
+
+        frame.ScrollIntoView(30, viewport + 5);
+
+        Assert.Equal(30, frame.Top);
+    }
 }

@@ -130,17 +130,7 @@ public class CodeEditor : CompositeControl, IScrollable
     private int EditorRowCount() => _editor.VisualRowCount(Math.Max(1, _editor.ActualWidth));
 
     // The editor itself isn't framed, so scroll OUR ControlFrame to keep the editor's caret row within the viewport.
-    private void AutoScroll()
-    {
-        if (Frame is null) return;
-        var caretRow = _editor.CaretVisualRow;
-        var top = Frame.Top;
-        var viewport = Frame.ViewportSize.Height;
-        if (viewport <= 0) return;
-
-        if (caretRow < top) Frame.Top = caretRow;
-        else if (caretRow >= top + viewport) Frame.Top = caretRow - viewport + 1;
-    }
+    private void AutoScroll() => ScrollIntoView(_editor.CaretVisualRow);
     #endregion
 
     #region Fields

@@ -592,6 +592,35 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     public void Scroll(int n) => Top += n;
 
     /// <summary>
+    /// Scrolls the minimum amount needed to bring content rows <paramref name="start"/> through
+    /// <paramref name="start"/> + <paramref name="height"/> into the viewport. A no-op when they are already visible.
+    /// </summary>
+    /// <remarks>
+    /// The rows are in the wrapped control's own content coordinates — the same space
+    /// <see cref="IScrollable.MeasureHeight"/> measures. Call it when a selection, caret or focus moves; a control
+    /// with more content than viewport has no other way to keep the interesting row on screen (nothing scrolls
+    /// automatically). A span taller than the viewport aligns to its top rather than its bottom, so the first row
+    /// stays visible.
+    /// </remarks>
+    public void ScrollIntoView(int start, int height = 1)
+    {
+        var viewport = ViewportSize.Height;
+        if (viewport <= 0) return;
+
+        var end = start + Math.Max(1, height);   // exclusive
+        if (start < Top)
+        {
+            Top = start;
+        }
+        else if (end > Top + viewport)
+        {
+            // Reveal the span's last row, except when the span itself is taller than the viewport — then showing its
+            // top is more useful than showing its bottom. Top's setter clamps to the real scroll range.
+            Top = Math.Min(start, end - viewport);
+        }
+    }
+
+    /// <summary>
     /// Re-runs the frame's child layout — re-checks whether the wrapped control is <see cref="IScrollable"/> and
     /// re-establishes its size limits.
     /// </summary>

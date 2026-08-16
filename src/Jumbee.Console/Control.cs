@@ -254,6 +254,18 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     protected virtual void OnMouseWheel(Position position, int delta) => Frame?.Scroll(delta);
 
     /// <summary>
+    /// Scrolls the surrounding <see cref="Frame"/> so content rows <paramref name="start"/> through
+    /// <paramref name="start"/> + <paramref name="height"/> are visible. A no-op when unframed or already visible.
+    /// </summary>
+    /// <remarks>
+    /// Nothing scrolls on its own, so an <see cref="IScrollable"/> whose selection, caret or focus can move must call
+    /// this when it does — otherwise the interesting row can sit outside the viewport with the cue drawn where it
+    /// cannot be seen. Rows are in this control's own content coordinates, the space
+    /// <see cref="IScrollable.MeasureHeight"/> measures.
+    /// </remarks>
+    protected void ScrollIntoView(int start, int height = 1) => Frame?.ScrollIntoView(start, height);
+
+    /// <summary>
     /// Grabs the mouse so this control receives all subsequent move/press/release (in its own frame) until
     /// <see cref="ReleaseMouse"/>, even when the pointer leaves its cells — for drags (a splitter divider, a
     /// scrollbar thumb, a slider). Call from <see cref="OnMousePress"/>; pair with <see cref="ReleaseMouse"/> in
@@ -762,8 +774,8 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     /// 0 (the default) to fill the parent's width.
     /// </summary>
     /// <remarks>
-    /// Unlike <see cref="MeasureHeight"/> — a content height honored only when the parent is unbounded — an
-    /// intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
+    /// Unlike <see cref="IScrollable.MeasureHeight"/> — a content height honored only when the parent is unbounded —
+    /// an intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
     /// fixed extent (e.g. a vertical <see cref="TextLabel"/>, one column wide) so a docking/layout parent can't
     /// stretch them to fill the region.
     /// </remarks>
