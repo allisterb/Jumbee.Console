@@ -231,8 +231,16 @@ public class Slider : RenderableControl
         ReleaseMouse();
     }
 
+    // The wheel adjusts the value when it is unambiguously aimed here — the slider has focus — or when nothing
+    // enclosing it could scroll anyway, which is the standalone case. Inside a scrolling panel an unfocused slider
+    // instead lets the notch through: a sidebar is mostly sliders, so eating the wheel would make it nearly
+    // unscrollable and would change a value the pointer was only passing over.
     /// <inheritdoc/>
-    protected override void OnMouseWheel(Position position, int delta) => StepBy(delta > 0 ? -1 : 1);
+    protected override void OnMouseWheel(Position position, int delta)
+    {
+        if (IsFocused || ControlFrame.FindScrollingFrame(this) is null) StepBy(delta > 0 ? -1 : 1);
+        else base.OnMouseWheel(position, delta);
+    }
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Slider", "Slider", "A draggable value.")

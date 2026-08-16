@@ -87,7 +87,11 @@ public static class SandboxShell
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
 
+        // A borderless frame purely to scroll: the sidebar is taller than a short terminal, and only a frame can
+        // window it. No border, because each section already draws its own — the frame contributes just the
+        // scrollbar column, and reveals whichever control Tab moves focus to.
         var sidebar = new ModelSidebarPanel(view, model);
+        sidebar.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
         var footer = new SceneFooter(view);
         view.Drew += s =>
         {

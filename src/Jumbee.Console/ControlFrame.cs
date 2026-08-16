@@ -1003,25 +1003,47 @@ public sealed class ControlFrame : CControl, IFocusable, IDrawingContextListener
     /// <remarks>
     /// A control is never told where it sits inside its parent, so the row is recovered by walking up the
     /// drawing-context chain and summing each hop's vertical offset — which reads the layout's real, current
-    /// positions rather than arithmetic a composite would have to duplicate and keep in step. The walk stops at the
-    /// context a <see cref="ControlFrame"/> owns; that context's offset is the frame's own border/scroll offset, so
-    /// it is deliberately not counted.
+    /// positions rather than arithmetic a composite would have to duplicate and keep in step. The walk continues
+    /// outward through any non-scrolling frames on the way — a panel of framed sections has one between the focused
+    /// control and the frame that actually scrolls — and stops at the first scrolling frame it reaches. That frame's
+    /// own context offset carries its border and scroll position, so it is deliberately not counted.
     /// </remarks>
+    /// <summary>
+    /// The nearest frame that actually scrolls <paramref name="from"/> — its own frame if that frame scrolls,
+    /// otherwise the first scrolling frame further out. Null when nothing above it scrolls.
+    /// </summary>
+    /// <remarks>
+    /// Walks the same drawing-context chain as <see cref="RevealFocused"/>. A control nested in a composite has no
+    /// frame of its own, so without this a wheel notch over it would fall on the floor.
+    /// </remarks>
+    internal static ControlFrame? FindScrollingFrame(Control from)
+    {
+        var ctx = ((IControl)from).Context as DrawingContext;
+        for (var hop = 0; ctx is not null && hop < MaxRevealDepth; hop++)
+        {
+            if (ctx.Parent is ControlFrame frame && frame._control is IScrollable) return frame;
+            ctx = (ctx.Parent as IControl)?.Context as DrawingContext;
+        }
+
+        return null;
+    }
+
     internal static void RevealFocused(Control focused)
     {
         var row = 0;
         var ctx = ((IControl)focused).Context as DrawingContext;
         for (var hop = 1; ctx is not null && hop <= MaxRevealDepth; hop++)
         {
-            if (ctx.Parent is ControlFrame frame)
+            // A frame's DIRECT child governs its own scrolling — a framed ListBox reveals the selected item, not the
+            // list — so only a deeper descendant, whose row nothing else knows, is revealed.
+            if (ctx.Parent is ControlFrame frame && hop > 1 && frame._control is IScrollable)
             {
-                // A frame's DIRECT child governs its own scrolling — a framed ListBox reveals the selected item, not
-                // the list. Only a deeper descendant, whose row nothing else knows, is revealed here.
-                if (hop > 1 && frame._control is IScrollable)
-                    frame.ScrollIntoView(row, Math.Max(1, focused.ActualHeight));
+                frame.ScrollIntoView(row, Math.Max(1, focused.ActualHeight));
                 return;
             }
 
+            // Not the frame we're looking for: count this hop (for a non-scrolling frame that is its top border) and
+            // keep going outward.
             row += ctx.Offset.Y;
             ctx = (ctx.Parent as IControl)?.Context as DrawingContext;
         }

@@ -253,9 +253,15 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
 
     /// <summary>
     /// Handles a wheel notch over the control (<paramref name="delta"/>: negative up, positive down). Default
-    /// scrolls the surrounding <see cref="Frame"/> if there is one; override to consume the wheel directly.
+    /// scrolls the nearest enclosing scrolling frame; override to consume the wheel directly.
     /// </summary>
-    protected virtual void OnMouseWheel(Position position, int delta) => Frame?.Scroll(delta);
+    /// <remarks>
+    /// "Nearest enclosing" rather than just <see cref="Frame"/>, because the control under the pointer is usually a
+    /// child several levels inside the thing being scrolled — a button in a panel of framed sections has no frame of
+    /// its own, and scrolling only its own would drop the notch.
+    /// </remarks>
+    protected virtual void OnMouseWheel(Position position, int delta) =>
+        ControlFrame.FindScrollingFrame(this)?.Scroll(delta);
 
     /// <summary>
     /// Scrolls the surrounding <see cref="Frame"/> so content rows <paramref name="start"/> through
@@ -371,7 +377,13 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
         CancelFeeds();
         UI.Paint -= OnPaint;
         UI.ThemeChanged -= OnThemeChanged;
-        if (Frame is not null) UI.ThemeChanged -= Frame.OnThemeChanged;
+        // Both of the frame's subscriptions, matching what the Frame setter attached — missing FocusChanged left
+        // every framed control ever created still handling focus moves for the lifetime of the process.
+        if (Frame is not null)
+        {
+            UI.ThemeChanged -= Frame.OnThemeChanged;
+            UI.FocusChanged -= Frame.OnFocusChanged;
+        }
     }
 
     /// <summary>

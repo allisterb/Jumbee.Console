@@ -1,5 +1,8 @@
 namespace Jumbee.Console.Tests;
 
+using ConsoleGUI.Input;
+using ConsoleGUI.Space;
+
 using Jumbee.Console.Snapshot;
 
 using Xunit;
@@ -263,6 +266,98 @@ public class ScrollableTests : IDisposable
         Focused(sidebar, 25, frame => Assert.True(frame.Top > 0));
         Focused(sidebar, 1, frame =>
             Assert.InRange(1, frame.Top, frame.Top + frame.ViewportSize.Height - 1));
+    }
+
+    // The 3D sandbox sidebar's shape: a scrolling panel whose children are themselves FRAMED sections. The reveal
+    // walk therefore meets a non-scrolling frame before the scrolling one, and must walk past it — stopping at the
+    // first frame found instead left the panel unscrolled, silently, because that inner frame isn't IScrollable.
+    private sealed class SectionedPanel : CompositeControl, IScrollable
+    {
+        public readonly Button[] Buttons = [.. Enumerable.Range(0, 3).Select(i => new Button($"b{i}"))];
+        private readonly Control[] _sections;
+
+        public SectionedPanel()
+        {
+            _sections = [.. Buttons.Select(Section)];
+            SetContent(new VerticalStackPanel([.. _sections]));
+        }
+
+        // Each section is 6 content rows inside a bordered frame, so 8 rows in the stack: 40 in total.
+        public int MeasureHeight(int width) => _sections.Length * 8;
+
+        public IEnumerable<Control> Parts => _sections.Concat(Buttons);
+
+        private static Control Section(Button inner)
+        {
+            var s = new Pane(inner) { Height = 6 };
+            s.WithFrame(borderStyle: BorderStyle.Rounded);
+            return s;
+        }
+
+        private sealed class Pane(Button inner) : CompositeControl(new VerticalStackPanel(inner));
+    }
+
+    [Fact]
+    public void FocusingThroughANestedFrame_StillReachesTheScrollingFrame()
+    {
+        var panel = Track(new SectionedPanel());
+        foreach (var part in panel.Parts) Track(part);
+        panel.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
+        ConsoleSnapshot.Render(panel, Width, Height);
+        var frame = panel.Frame!;
+        Assert.Equal(0, frame.Top);
+
+        var last = panel.Buttons[^1];
+        last.IsFocused = true;
+        try
+        {
+            Assert.True(frame.Top > 0, "the reveal must walk past each section's own frame to the scrolling one");
+        }
+        finally
+        {
+            last.IsFocused = false;
+        }
+    }
+
+    // The control under the pointer is almost never the one being scrolled — it is a button or a slider several
+    // levels inside the panel, with no frame of its own. Scrolling only its own Frame dropped the notch entirely.
+    [Fact]
+    public void WheelOverANestedChild_ScrollsTheEnclosingFrame()
+    {
+        var panel = Track(new SectionedPanel());
+        foreach (var part in panel.Parts) Track(part);
+        panel.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
+        ConsoleSnapshot.Render(panel, Width, Height);
+        var frame = panel.Frame!;
+        Assert.Equal(0, frame.Top);
+
+        ((IMouseWheelListener)panel.Buttons[0]).OnMouseWheel(new Position(1, 1), 3);
+
+        Assert.True(frame.Top > 0, "a wheel notch over a nested child should scroll the panel containing it");
+    }
+
+    // An unfocused slider inside a scrolling panel must let the wheel through: a sidebar is mostly sliders, so eating
+    // the notch would make it unscrollable and silently change a value the user was only scrolling past.
+    [Fact]
+    public void WheelOverAnUnfocusedSlider_ScrollsInsteadOfChangingIt()
+    {
+        var slider = Track(new Slider(0, 10, 5, "s"));
+        var panel = Track(new SliderPanel(slider));
+        panel.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
+        ConsoleSnapshot.Render(panel, Width, Height);
+        var frame = panel.Frame!;
+
+        ((IMouseWheelListener)slider).OnMouseWheel(new Position(1, 1), 3);
+
+        Assert.Equal(5, slider.Value);
+        Assert.True(frame.Top > 0, "the notch should have scrolled the panel");
+    }
+
+    private sealed class SliderPanel : CompositeControl, IScrollable
+    {
+        public SliderPanel(Slider slider) => SetContent(new VerticalStackPanel(slider));
+
+        public int MeasureHeight(int width) => 60;
     }
 
     // A frame's direct child governs its own scrolling: a framed ListBox reveals the selected ITEM, so focusing the

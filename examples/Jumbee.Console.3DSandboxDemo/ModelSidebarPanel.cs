@@ -12,7 +12,7 @@ using System.Numerics;
 /// a static scene the keys mutate directly, polled once per drawn frame, is simpler than threading an event through
 /// four transform methods and costs nothing at this size.
 /// </remarks>
-public sealed class ModelSidebarPanel : CompositeControl
+public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 {
     #region Constructors
     /// <summary>Builds the viewer sidebar over <paramref name="view"/> and the <paramref name="model"/> it shows.</summary>
@@ -53,12 +53,15 @@ public sealed class ModelSidebarPanel : CompositeControl
 
         // A blank row under every interactive control, as in SidebarPanel and for the same reason; the model's two
         // readout lines stay flush.
-        SetContent(new VerticalStackPanel(
+        sections =
+        [
             new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
             new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Edges", edges), spin), 5),
             new Section("Scale", Spaced(scaleAll, scaleX, scaleY, scaleZ, Row(resetScale, null)), 9),
             new Section("Shear", Spaced(shearX, shearZ, Row(resetShear, null)), 5),
-            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows)));
+            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows),
+        ];
+        SetContent(new VerticalStackPanel([.. sections]));
 
         Report();
     }
@@ -70,6 +73,20 @@ public sealed class ModelSidebarPanel : CompositeControl
     #endregion
 
     #region Methods
+    /// <summary>The stacked height of every section, so an enclosing frame scrolls the panel when the terminal is
+    /// too short for it.</summary>
+    /// <remarks>
+    /// Summed from the sections rather than written down as a total, because a total goes stale the moment a section
+    /// changes size — and under-reporting does not merely clip the tail, it collapses the last sections to zero
+    /// height. Nothing here reports which row the focused control is on: the frame works that out itself.
+    /// </remarks>
+    public int MeasureHeight(int width)
+    {
+        var rows = 0;
+        foreach (var section in sections) rows += section.OuterRows;
+        return rows;
+    }
+
     /// <summary>Re-reads the model's state into the widgets. Called once per drawn frame.</summary>
     public void Report()
     {
@@ -189,6 +206,7 @@ public sealed class ModelSidebarPanel : CompositeControl
     private readonly Button resetShear = Action("Reset");
 
     private readonly CameraPad camera;
+    private readonly Section[] sections;
 
     private bool syncing;
 
@@ -207,6 +225,10 @@ public sealed class ModelSidebarPanel : CompositeControl
             this.WithFrame(borderStyle: BorderStyle.Rounded, borderFgColor: BorderColor)
                 .WithTitle(title, new TitleStyle(TitlePos.TopLeft, TitleBorderStyle.Inline));
         }
+
+        // The rows this section occupies in the stack: its content plus the frame's top and bottom border. An inline
+        // title lives IN the top border row, so it costs nothing extra.
+        public int OuterRows => Height + 2;
 
         protected override bool TabNavigatesChildren => true;
     }
