@@ -19,7 +19,10 @@ using Spectre.Console;
 /// layout cell and is framed like any control (<c>chat.WithRoundedBorder()</c>). Focus delegates to the input,
 /// which keeps the caret; the gutter is a non-focusable adornment.
 /// </remarks>
-public class ChatPrompt : CompositeControl, IScrollable
+// Deliberately NOT IScrollable: a prompt is a single input row, and IntrinsicHeight says so — which is authoritative
+// even under a finite parent, where a content height would not be. Being scrollable also cost it a column of every
+// frame's interior for a scrollbar that could never appear.
+public class ChatPrompt : CompositeControl
 {
     #region Constructors
     /// <summary>Initializes a new <see cref="ChatPrompt"/> with an optional <paramref name="placeholder"/> hint.</summary>
@@ -111,9 +114,11 @@ public class ChatPrompt : CompositeControl, IScrollable
     /// <summary>Attaches type-ahead suggestions from a provider called with the current text.</summary>
     public Autocomplete WithSuggestions(Func<string, IEnumerable<string>> suggest) => new(_input, suggest);
 
-    // A single input row; a surrounding frame sizes us to one row (plus its border) instead of the 1000-row fill.
+    // A prompt is a single input row. Stated as an intrinsic height rather than an IScrollable content height so it
+    // holds under a finite parent too — a content height is honoured only when the parent leaves the height
+    // unbounded, i.e. only inside a frame.
     /// <inheritdoc/>
-    public virtual int MeasureHeight(int width) => 1;
+    protected override int IntrinsicHeight() => 1;
 
     /// <inheritdoc/>
     protected internal override HelpInfo? GetHelpInfo() => new HelpInfo("Prompt", "Chat prompt",

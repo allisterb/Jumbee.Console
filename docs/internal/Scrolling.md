@@ -193,6 +193,22 @@ silent failure, it was actively hiding one in a shipped control.
 Guarded by `tests/Jumbee.Console.Tests/ScrollableTests.cs` — the negative case (no interface → sized to viewport,
 never 1000) is the one that matters.
 
+### `ChatPrompt` was never scrollable
+
+It implemented `IScrollable` purely to answer `MeasureHeight => 1` — "I am one input row, do not balloon me". That
+is what `IntrinsicHeight` is for, and the difference is not cosmetic:
+
+- An intrinsic height is authoritative **even under a finite parent**; a content height is consulted only when the
+  parent leaves the height unbounded, i.e. only inside a frame. Unframed in a layout cell, the prompt filled the
+  cell (measured: 30×20) instead of being one row.
+- Being `IScrollable` also cost it a column of every frame's interior, reserved for a scrollbar that could never
+  appear — the framed prompt measured 27 cells wide where 28 were available.
+
+Both consumers frame it, so the fix is a straight gain: framed stays 30×3 with the content one column wider, and
+unframed now sizes to its single row. Worth noting the trap that nearly hid this: the `IntrinsicHeight() => 1`
+already in `ChatPrompt.cs` belongs to the file's inner `PromptGutter` class, not to `ChatPrompt` — so the
+`MeasureHeight` looked dead and was not. Removing it alone grew the prompt from 1 row to 18.
+
 ## Why the focus row is an event, not a polled property
 
 Scroll-into-view shipped as `event EventHandler<RowSpan>? FocusRowChanged` on `IScrollable`, not the polled
@@ -237,10 +253,10 @@ the mistake worth catching. Three limits, all verified rather than assumed:
   event "used" whether or not anything ever calls the raise method, so the lazy implementer compiles clean. It also
   cannot live on the interface: a default interface method may not raise the interface's own event (`CS0079`),
   because an interface has no backing field. So that pattern buys per-class boilerplate and costs the warning.
-- **Opting out is silent.** The event's do-nothing default is what keeps the seven selectionless implementers
-  (`MarkdownViewer`, `AsciiDocViewer`, `MermaidViewer`, `TextPanel`, `TranscriptView`, `TaskListView`,
-  `ChatPrompt`) from each carrying a CS0067 they cannot fix. The cost is that a control which *should* report a
-  selection can simply not declare the event, and nothing complains.
+- **Opting out is silent.** The event's do-nothing default is what keeps the selectionless implementers
+  (`MarkdownViewer`, `AsciiDocViewer`, `MermaidViewer`, `TextPanel`, `TranscriptView`) from each carrying a CS0067
+  they cannot fix. The cost is that a control which *should* report a selection can simply not declare the event,
+  and nothing complains.
 
 So CS0067 is a nudge for the careless, not a guarantee. A real guarantee would be a Roslyn analyzer; the type
 system cannot require that a method be *called*.

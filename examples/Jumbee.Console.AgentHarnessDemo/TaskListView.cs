@@ -30,6 +30,11 @@ internal sealed class TaskListView : RenderableControl, IScrollable
     }
     #endregion
 
+    #region Events
+    /// <inheritdoc/>
+    public event EventHandler<RowSpan>? FocusRowChanged;
+    #endregion
+
     #region Properties
     /// <summary>Bold header line drawn at the top of the pane.</summary>
     public string Title
@@ -50,7 +55,7 @@ internal sealed class TaskListView : RenderableControl, IScrollable
     }
 
     /// <summary>Re-renders after a caller mutated a step's <see cref="AgentStep.Status"/> (row count unchanged).</summary>
-    public void Refresh() => Invalidate();
+    public void Refresh() => UI.Invoke(() => { Invalidate(); ReportActiveRow(); });
 
     /// <summary>Completes the first Active step and promotes the next Pending step to Active. Returns <see langword="true"/>
     /// if a pending step was promoted, <see langword="false"/> when the checklist is finished — a demo helper for
@@ -64,8 +69,25 @@ internal sealed class TaskListView : RenderableControl, IScrollable
             foreach (var s in _steps)
                 if (s.Status == StepStatus.Pending) { s.Status = StepStatus.Active; promoted = true; break; }
             Invalidate();
+            ReportActiveRow();
         });
         return promoted;
+    }
+
+    // The pane is deliberately shorter than the checklist, so the step being worked on can sit below the fold.
+    // Reporting its row lets the surrounding frame keep it in view as the work advances — the same mechanism a list
+    // uses for its selected item. Must run on the UI thread: it reads the step collection.
+    private void ReportActiveRow()
+    {
+        var offset = _title.Length > 0 ? 2 : 0;   // the title row plus its blank spacer
+        for (var i = 0; i < _steps.Count; i++)
+        {
+            if (_steps[i].Status == StepStatus.Active)
+            {
+                FocusRowChanged?.Invoke(this, new RowSpan(offset + i));
+                return;
+            }
+        }
     }
 
     /// <summary>Removes all steps and re-lays-out.</summary>
