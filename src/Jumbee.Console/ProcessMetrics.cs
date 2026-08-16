@@ -35,6 +35,10 @@ public sealed class ProcessMetrics : IDisposable
         _frameAlloc = new long[capacity];
         _frameRedrawn = new bool[capacity];
         _frameDirty = new double[capacity];
+        _frameOrdinal = new long[capacity];
+        _frameWaitMs = new double[capacity];
+        _frameWriteMs = new double[capacity];
+        _frameWritten = new bool[capacity];
         _windowMs = windowMs;
         // dotnet.process.cpu.time is platform-guarded in the runtime; Environment.CpuUsage throws
         // PlatformNotSupportedException on Browser/WASI/tvOS/iOS(non-Catalyst). Mirror that guard.
@@ -46,6 +50,71 @@ public sealed class ProcessMetrics : IDisposable
     #region Properties — per-frame render cost (directly measured, high-resolution)
     /// <summary>Mean draw/paint cycle wall time over the retained frames, in milliseconds.</summary>
     public double RenderTimeMsAvg => Avg(_frameRenderMs);
+
+    /// <summary>Mean draw/paint cycle wall time over the frames that actually REDREW, in milliseconds.</summary>
+    /// <remarks>
+    /// <see cref="RenderTimeMsAvg"/> counts idle frames too, which are cheap, so it understates what a frame that
+    /// draws actually costs — the more retained the UI, the further apart the two drift. This is the one to pair
+    /// with the terminal-write timings, since those exist only for frames that drew.
+    /// </remarks>
+    public double RenderTimeMsDrawnAvg
+    {
+        get
+        {
+            double total = 0;
+            int count = 0;
+            for (int i = 0; i < _fCount; i++)
+            {
+                if (!_frameRedrawn[i]) continue;
+                total += _frameRenderMs[i];
+                count++;
+            }
+            return count > 0 ? total / count : 0;
+        }
+    }
+
+    /// <summary>
+    /// Mean end-to-end time (ms) from starting a frame to it reaching the terminal — render, queue wait and write,
+    /// summed PER FRAME over the frames whose write has completed.
+    /// </summary>
+    /// <remarks>
+    /// LATENCY, not throughput: the write overlaps the next frame's render, so the frame rate is bounded by
+    /// whichever side is slower, never by this sum.
+    /// </remarks>
+    public double FrameLatencyMsAvg
+    {
+        get
+        {
+            double total = 0;
+            int count = 0;
+            for (int i = 0; i < _fCount; i++)
+            {
+                if (!_frameWritten[i]) continue;
+                total += _frameRenderMs[i] + _frameWaitMs[i] + _frameWriteMs[i];
+                count++;
+            }
+            return count > 0 ? total / count : 0;
+        }
+    }
+
+    /// <summary>The worst end-to-end frame latency (ms) in the window — the frame that took longest to reach the
+    /// terminal.</summary>
+    /// <remarks>Only a per-frame pairing can give this: adding the separate averages yields a mean and can say
+    /// nothing about the worst case.</remarks>
+    public double FrameLatencyMsPeak
+    {
+        get
+        {
+            double peak = 0;
+            for (int i = 0; i < _fCount; i++)
+            {
+                if (!_frameWritten[i]) continue;
+                double latency = _frameRenderMs[i] + _frameWaitMs[i] + _frameWriteMs[i];
+                if (latency > peak) peak = latency;
+            }
+            return peak;
+        }
+    }
 
     /// <summary>Longest draw/paint cycle over the retained frames, in milliseconds — the peak render cost, which a
     /// burst (e.g. a paste re-rendering the editor) pushes up and which lingers until it ages out of the window.</summary>
@@ -233,7 +302,9 @@ public sealed class ProcessMetrics : IDisposable
     /// for an idle frame. Feeds <see cref="RedrawPercent"/>.</param>
     /// <param name="dirtyAreaFraction">Fraction (0..1) of the screen re-composited this frame. Feeds
     /// <see cref="DirtyAreaPercentAvg"/>/<see cref="DirtyAreaPercentPeak"/> (only counted on redrawn frames).</param>
-    public void RecordFrame(double renderMs, double periodMs, long renderAllocBytes, bool redrawn = false, double dirtyAreaFraction = 0)
+    /// <param name="ordinal">This frame's monotonic number, so a terminal write completing later can be matched back
+    /// to it by <see cref="RecordWrite"/>. 0 when the caller does not track one.</param>
+    public void RecordFrame(double renderMs, double periodMs, long renderAllocBytes, bool redrawn = false, double dirtyAreaFraction = 0, long ordinal = 0)
     {
         int idx = (_fStart + _fCount) % _frameRenderMs.Length;
         _frameRenderMs[idx] = renderMs;
@@ -241,10 +312,72 @@ public sealed class ProcessMetrics : IDisposable
         _frameAlloc[idx] = renderAllocBytes < 0 ? 0 : renderAllocBytes;
         _frameRedrawn[idx] = redrawn;
         _frameDirty[idx] = dirtyAreaFraction < 0 ? 0 : dirtyAreaFraction;
+        _frameOrdinal[idx] = ordinal;
+        // Take this frame's write if it already finished (the usual case for a fast write — see RecordWrite),
+        // otherwise clear the slot: stale timings from the frame that occupied it a window ago would otherwise be
+        // read as this frame's.
+        if (ordinal != 0 && TryClaimPendingWrite(ordinal, out var pendingWait, out var pendingWrite))
+        {
+            _frameWaitMs[idx] = pendingWait;
+            _frameWriteMs[idx] = pendingWrite;
+            _frameWritten[idx] = true;
+        }
+        else
+        {
+            _frameWritten[idx] = false;
+            _frameWaitMs[idx] = 0;
+            _frameWriteMs[idx] = 0;
+        }
         if (_fCount < _frameRenderMs.Length) _fCount++;
         else _fStart = (_fStart + 1) % _frameRenderMs.Length;
 
         Sample();
+    }
+
+    /// <summary>
+    /// Attaches the terminal-write timings for frame <paramref name="ordinal"/>, completing that frame's record.
+    /// </summary>
+    /// <remarks>
+    /// Called from the write continuation, off the UI thread, however many frames after the render. Silently does
+    /// nothing when the frame has already aged out of the window — a write that slow has no frame left to belong to.
+    /// </remarks>
+    public void RecordWrite(long ordinal, double waitMs, double writeMs)
+    {
+        int count = _fCount, start = _fStart, len = _frameRenderMs.Length;
+        for (int i = 0; i < count; i++)
+        {
+            int idx = (start + i) % len;
+            if (_frameOrdinal[idx] != ordinal) continue;
+            _frameWaitMs[idx] = waitMs;
+            _frameWriteMs[idx] = writeMs;
+            _frameWritten[idx] = true;
+            return;
+        }
+
+        // No slot yet: the write finished before its own frame was recorded. That is the COMMON case for a fast
+        // write — Emit runs mid-frame during the composite, RecordFrame only in the finally at the end — so dropping
+        // these would silently keep just the slow frames and inflate every latency reading. Park it for RecordFrame.
+        int p = (int)((uint)Interlocked.Increment(ref _pendingIndex) % (uint)_pendingOrdinal.Length);
+        _pendingWaitMs[p] = waitMs;
+        _pendingWriteMs[p] = writeMs;
+        Volatile.Write(ref _pendingOrdinal[p], ordinal);   // published last: a reader seeing it sees the timings too
+    }
+
+    // Claims a write that arrived before this frame was recorded. Cheap: the buffer is a handful of entries, since a
+    // write can only outrun its frame by the tail of one composite.
+    private bool TryClaimPendingWrite(long ordinal, out double waitMs, out double writeMs)
+    {
+        for (int i = 0; i < _pendingOrdinal.Length; i++)
+        {
+            if (Volatile.Read(ref _pendingOrdinal[i]) != ordinal) continue;
+            waitMs = _pendingWaitMs[i];
+            writeMs = _pendingWriteMs[i];
+            Volatile.Write(ref _pendingOrdinal[i], 0);
+            return true;
+        }
+
+        waitMs = writeMs = 0;
+        return false;
     }
 
     /// <summary>Snapshots the cumulative process counters (for the windowed rates).</summary>
@@ -318,8 +451,21 @@ public sealed class ProcessMetrics : IDisposable
     private readonly long[] _frameAlloc;
     private readonly bool[] _frameRedrawn;
     private readonly double[] _frameDirty;
+    // The terminal-write half of each frame's record, filled in LATER (the write completes off the UI thread, after
+    // the frame that produced it has already been recorded). _frameOrdinal is the join key: a monotonic frame number
+    // the writer carries with it, so a completion can find its own slot however many frames have passed since.
+    private readonly long[] _frameOrdinal;
+    private readonly double[] _frameWaitMs;
+    private readonly double[] _frameWriteMs;
+    private readonly bool[] _frameWritten;
     private int _fStart;
     private int _fCount;
+    // Writes that finished before their frame was recorded, waiting to be claimed. Small on purpose: a write can
+    // only outrun its own frame by the tail of one composite, so a few slots cover it.
+    private readonly long[] _pendingOrdinal = new long[8];
+    private readonly double[] _pendingWaitMs = new double[8];
+    private readonly double[] _pendingWriteMs = new double[8];
+    private int _pendingIndex = -1;
 
     private readonly int _windowMs;
     private readonly bool _cpuSupported;

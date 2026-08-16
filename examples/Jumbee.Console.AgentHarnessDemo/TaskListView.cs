@@ -2,7 +2,6 @@ namespace Jumbee.Console.AgentHarnessDemo;
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 
 using Jumbee.Console;
@@ -79,12 +78,11 @@ internal sealed class TaskListView : RenderableControl, IScrollable
     // uses for its selected item. Must run on the UI thread: it reads the step collection.
     private void ReportActiveRow()
     {
-        var offset = _title.Length > 0 ? 2 : 0;   // the title row plus its blank spacer
         for (var i = 0; i < _steps.Count; i++)
         {
             if (_steps[i].Status == StepStatus.Active)
             {
-                FocusRowChanged?.Invoke(this, new RowSpan(offset + i));
+                FocusRowChanged?.Invoke(this, new RowSpan(TitleRows + i));
                 return;
             }
         }
@@ -102,46 +100,47 @@ internal sealed class TaskListView : RenderableControl, IScrollable
         _faintStyle = Palette.TextFaint;
     }
 
-    // Measure at the fixed wide LayoutWidth so heights are width-INDEPENDENT — long lines clip rather than wrap, which
-    // avoids the layout convergence loop a width-dependent height causes in a scrolling frame (see ListBox).
-    public int MeasureHeight(int width)
-    {
-        var options = new RenderOptions(ansiConsole.Profile.Capabilities, new Spectre.Console.Size(LayoutWidth, 1));
-        return Math.Max(1, Segment.SplitLines(((IRenderable)BuildRows()).Render(options, LayoutWidth)).Count);
-    }
+    // Every row is exactly one line (see Render), so the height is arithmetic — no need to build and render the whole
+    // list just to count the lines it produced, which is what this used to do on every layout pass.
+    public int MeasureHeight(int width) => Math.Max(1, TitleRows + _steps.Count);
 
+    // Emits styled segments directly instead of composing a markup STRING and letting Spectre parse it back. The
+    // string round-trip cost a Style.ToMarkup + Color.ToMarkup on the way out and a MarkupTokenizer + StyleParser +
+    // ParseHexColor on the way back in, per fragment per frame — together the single largest source of allocation in
+    // this demo. A Segment already IS text plus a Style, so there is nothing to serialise.
     protected override IEnumerable<Segment> Render(RenderOptions options, int maxWidth)
-        => ((IRenderable)BuildRows()).Render(options, LayoutWidth);
-
-    // Title, a blank spacer row, then one single-line row per step — assembled as a Spectre Rows and rendered at the
-    // fixed wide width so each row is its explicit single line (matching MeasureHeight).
-    private Rows BuildRows()
     {
-        var rows = new List<IRenderable>(_steps.Count + 2);
-        if (_title.Length > 0)
+        if (TitleRows > 0)
         {
-            rows.Add(_titleStyle[_title]);   // Style indexer → a Markup with the text escaped
-            rows.Add(new Text(" "));
+            yield return new Segment(_title, _titleStyle);
+            yield return Segment.LineBreak;
+            yield return Segment.LineBreak;   // the blank spacer row under the title
         }
-        foreach (var step in _steps) rows.Add(RenderStep(step));
-        return new Rows(rows);
+
+        for (var i = 0; i < _steps.Count; i++)
+        {
+            foreach (var segment in RenderStep(_steps[i])) yield return segment;
+            if (i < _steps.Count - 1) yield return Segment.LineBreak;
+        }
     }
 
-    private IRenderable RenderStep(AgentStep step)
+    private IEnumerable<Segment> RenderStep(AgentStep step)
     {
         var (glyph, glyphStyle, textStyle) = Visual(step);
-        var sb = new StringBuilder();
-        sb.Append(' ', step.Indent * 2);
-        Append(sb, glyphStyle, glyph);
-        sb.Append(' ');
-        Append(sb, textStyle, step.Text);
+        if (step.Indent > 0) yield return new Segment(new string(' ', step.Indent * 2));
+        yield return new Segment(glyph, glyphStyle);
+        yield return new Segment(" ");
+        yield return new Segment(step.Text, textStyle);
         // Sub-steps (Indent == 1) read as a muted roll-up with a trailing disclosure chevron.
-        if (step.Indent >= 1) { sb.Append(' '); Append(sb, _faintStyle, "›"); }
-        return new Markup(sb.ToString());
+        if (step.Indent >= 1)
+        {
+            yield return new Segment(" ");
+            yield return new Segment("›", _faintStyle);
+        }
     }
 
-    private static void Append(StringBuilder sb, Style style, string text) =>
-        sb.Append('[').Append(style.ToMarkup()).Append(']').Append(Markup.Escape(text)).Append("[/]");
+    // The title line plus its blank spacer, or nothing when untitled.
+    private int TitleRows => _title.Length > 0 ? 2 : 0;
 
     // Glyph + glyph/text styles for a step. Sub-steps (Indent >= 1) are wholly muted regardless of status; top-level
     // steps colour by status: Done ✓ green/muted, Active spinner coral/bright, Pending ○ faint, Failed ✗ red.

@@ -38,6 +38,9 @@ public static class UI
     {
         if (isRunning) return runCompletion.Task;
         ProcessMetrics.Start();
+        // Complete each frame's record when its terminal write lands — off the UI thread, and after the loop has
+        // moved on, which is why the ordinal travels with the write rather than being inferred from position.
+        ConsoleManager.FrameWritten = (ordinal, waitMs, writeMs) => ProcessMetrics.RecordWrite(ordinal, waitMs, writeMs);
         // Self-heal a terminal left in a bad state by a PREVIOUS run that was hard-killed (SIGKILL, Task-Manager "End
         // task", a debugger Stop): no in-process code runs on a hard kill, so that run never disabled mouse/paste/focus
         // reporting and the shell has been echoing stray reports ever since. We can't fix the dying process, but the
@@ -550,6 +553,10 @@ public static class UI
 
         bool drew = false;
         double dirtyFraction = 0;
+        // Number this frame before anything can emit, so a terminal write started during the composite below carries
+        // the right ordinal home — the write completes long after this loop has moved on.
+        long ordinal = ++frameOrdinal;
+        ConsoleManager.FrameOrdinal = ordinal;
         try
         {
             // 1. Detect a terminal resize BEFORE painting, so controls re-lay-out at the new size and repaint into
@@ -603,7 +610,7 @@ public static class UI
             // Record the frame even if the draw/paint threw, so the metrics keep working (and exceptions/s surfaces
             // a per-frame throw) instead of silently freezing at 0.
             frameTimer.Stop();
-            ProcessMetrics.RecordFrame(frameTimer.Elapsed.TotalMilliseconds, periodMs, GC.GetTotalAllocatedBytes() - allocBefore, drew, dirtyFraction);
+            ProcessMetrics.RecordFrame(frameTimer.Elapsed.TotalMilliseconds, periodMs, GC.GetTotalAllocatedBytes() - allocBefore, drew, dirtyFraction, ordinal);
         }
     }
        
@@ -753,6 +760,41 @@ public static class UI
     /// <summary>Average time (ms) the renderer spent compositing/drawing frames to the console.</summary>
     public static double AverageDrawTime => ConsoleManager.AverageDrawTime;
 
+    /// <summary>
+    /// Average time (ms) the actual terminal write took. Concurrent with the next frame's render, so it does NOT add
+    /// to <see cref="AverageDrawTime"/> — the throughput ceiling is whichever of the two is larger.
+    /// </summary>
+    public static double AverageWriteTime => ConsoleManager.AverageOutputWriteTime;
+
+    /// <summary>Average time (ms) a frame waited for the previous frame's write before its own could start.</summary>
+    public static double AverageWriteWaitTime => ConsoleManager.AverageOutputWaitTime;
+
+    /// <summary>Frames rendered but not yet written to the terminal, right now — usually 0, since the queue drains
+    /// between frames. <see cref="WriteQueueDepthPeak"/> is the one that shows a backlog.</summary>
+    public static int WriteQueueDepth => ConsoleManager.OutputQueueDepth;
+
+    /// <summary>
+    /// Average end-to-end time (ms) from starting to render a frame to it being written to the terminal: the render,
+    /// the wait for the previous write, and the write itself.
+    /// </summary>
+    /// <remarks>
+    /// This is LATENCY, not throughput. The write runs concurrent with the next frame's render, so the frame rate is
+    /// bounded by whichever side is slower, not by this sum — a latency of 3 ms does not mean a 333 fps ceiling.
+    /// Summed per frame, not from separate averages, so it describes real frames rather than a blend of populations.
+    /// </remarks>
+    public static double AverageFrameLatency => ProcessMetrics.FrameLatencyMsAvg;
+
+    /// <summary>The worst end-to-end frame latency (ms) in the recent window.</summary>
+    /// <remarks>Available only because render and write are paired per frame; adding separate averages could never
+    /// yield a worst case.</remarks>
+    public static double PeakFrameLatency => ProcessMetrics.FrameLatencyMsPeak;
+
+    /// <summary>The most frames left waiting behind a terminal write over the recent window.</summary>
+    /// <remarks>Coarse: frames also queue for a thread-pool slot, so a small peak appears even when the write costs
+    /// nothing. <see cref="AverageWriteWaitTime"/> is the reliable back-pressure signal — it measures time actually
+    /// spent blocked.</remarks>
+    public static int WriteQueueDepthPeak => ConsoleManager.OutputQueueDepthPeak;
+
     /// <summary>Per-control average paint time (ms) over the recent sample window, keyed by control.</summary>
     public static IDictionary<IFocusable, double> AverageControlPaintTimes
     {
@@ -878,6 +920,9 @@ public static class UI
         { HotKeys.F1, ShowHelp }       
 
     };
+    // Monotonic frame number, the join key between a frame's render cost (recorded here, on the UI thread) and its
+    // terminal write (recorded later, on a pool thread). UI-thread only.
+    private static long frameOrdinal;
     private static readonly int paintTimeSamples = 60;
     private static readonly double[] paintTimes = new double[paintTimeSamples];
     private static readonly Stopwatch paintTimer = new Stopwatch();

@@ -8,8 +8,9 @@ using Spectre.Console.Rendering;
 using S = Spectre.Console;
 
 /// <summary>
-/// A translucent "glass" HUD showing live UI telemetry — frame draw/paint times (µs), CPU, working set, allocation
-/// rate and, the headline for a no-lock design, monitor lock contentions — floating over the app.
+/// A translucent "glass" HUD showing live UI telemetry — render, terminal-write and queue-wait times (µs), CPU,
+/// working set, allocation rate and, the headline for a no-lock design, monitor lock contentions — floating over
+/// the app.
 /// </summary>
 /// <remarks>
 /// <para>The panel is frosted glass (the app shows through as soft tinted smudges, not raw glyphs); the readout is
@@ -51,16 +52,25 @@ public sealed class PerfHud : GlassPanel
         => UI.RegisterHotKey(key ?? UI.HotKeys.Ctrl(ConsoleKey.G), () => { if (IsShown) Hide(); else ShowTopRight(margin); });
 
     /// <summary>Rebuilds the telemetry readout from the current metrics. Called automatically while shown.</summary>
-    public void Refresh() => Content = Build();
+    public void Refresh()
+    {
+        Content = Build(out var rows);
+        // Size to what was actually emitted rather than to a constant someone has to remember to update: a panel
+        // one row short silently drops its last metric instead of failing.
+        var needed = rows + PanelBorderRows;
+        if (Height != needed) Height = needed;
+    }
 
-    private static IRenderable Build()
+    private static IRenderable Build(out int rowCount)
     {
         var m = UI.ProcessMetrics;
-        // "frame"/"busy" are the high-resolution per-frame RENDER cost (peak-over-window) — near-0 for retained
+        // "render"/"busy" are the high-resolution per-frame RENDER cost (peak-over-window) — near-0 for retained
         // rendering, which is the point. "cpu" is whole-process (matches Task Manager); it captures work outside the
         // render cycle (input, dispatcher, other threads) that the per-frame numbers don't.
-        // frame/busy show the AVERAGE (the typical frame — low for retained rendering) with the PEAK as a separate
+        // render/busy show the AVERAGE (the typical frame — low for retained rendering) with the PEAK as a separate
         // row (the worst frame in the window — a resize/paste burst).
+        // Named "render", not "frame": it is the UI-thread work that ENDS when the ANSI bytes are built. The write to
+        // the terminal is the separate "write" row below, and the two overlap — see the note there.
         double renderUs = m.RenderTimeMsAvg * 1000.0;
         double renderPeakUs = m.RenderTimeMsPeak * 1000.0;
         double busy = m.BusyPercentAvg;
@@ -81,23 +91,53 @@ public sealed class PerfHud : GlassPanel
         double allocPeakKb = m.PeakAllocatedBytesPerFrame / 1024.0;
         double exc = m.ExceptionsPerSecond;
         long locks = m.LockContentions;
+        // The terminal write happens off the render loop, so none of the numbers above include it. It runs CONCURRENT
+        // with the next frame, so it doesn't add to "render" — the throughput ceiling is whichever is larger. queue is
+        // the frames rendered but not yet written: 1 is healthy, a climbing depth means the terminal is the limiter
+        // and the display is behind what has been drawn.
+        double writeUs = UI.AverageWriteTime * 1000.0;
+        double waitUs = UI.AverageWriteWaitTime * 1000.0;
+        // The PEAK backlog over the window, not the instant depth: the queue drains between frames, so an instant
+        // reading is 0 almost every time even while frames are demonstrably waiting (a non-zero "wait" proves it).
+        int queuePeak = UI.WriteQueueDepthPeak;
+        // End-to-end: render + wait + write, summed PER FRAME (the write carries its frame's ordinal home, so the two
+        // halves are the same frame's). LATENCY, not a frame budget — the write overlaps the next frame's render, so
+        // this is deliberately NOT what caps the frame rate. The peak is worth having on its own: it is the worst a
+        // frame took to reach the screen, which no combination of separate averages could tell you.
+        double latencyUs = UI.AverageFrameLatency * 1000.0;
+        double latencyPeakUs = UI.PeakFrameLatency * 1000.0;
 
-        var g = new S.Grid();       
+        var g = new S.Grid();
         g.AddColumn(new S.GridColumn { Padding = new S.Padding(0, 0, 2, 0) });
         g.AddColumn();
+        // Every row goes through Row() so the panel's height is derived from what was actually emitted. The height
+        // used to be a hand-kept constant, and when it fell behind the row count the last metric was simply clipped
+        // away — no error, just a number silently missing from the readout.
+        int rows = 0;
+        void Row(string label, string value)
+        {
+            g.AddRow(new S.Markup($"[grey62]{label}[/]"), new S.Markup(value));
+            rows++;
+        }
         // Each metric on one row: the AVERAGE (the typical/steady value) in bright ink, then the PEAK — the worst
         // frame in the window (a resize/paste burst) — dimmed after a slash. redraw/cpu are single gauges.
-        g.AddRow(new S.Markup("[grey62]frame[/]"), new S.Markup($"[#e8f0ff]{renderUs,5:F0} µs[/] [grey50]/ {renderPeakUs:F0}[/]"));
-        g.AddRow(new S.Markup("[grey62]busy[/]"), new S.Markup($"[#e8f0ff]{busy,5:F0} %[/] [grey50]/ {busyPeak:F0}[/]"));
-        g.AddRow(new S.Markup("[grey62]redraw[/]"), new S.Markup($"[#e8f0ff]{redraw,5:F0} %[/]"));
-        g.AddRow(new S.Markup("[grey62]dirty[/]"), new S.Markup($"[#e8f0ff]{dirty,5:F1} %[/] [grey50]/ {dirtyPeak:F0}[/]"));
-        g.AddRow(new S.Markup("[grey62]cpu[/]"), new S.Markup($"[#e8f0ff]{cpu,5:F1} %[/]"));
-        g.AddRow(new S.Markup("[grey62]mem[/]"), new S.Markup($"[#e8f0ff]{memMb,5:F1} MB[/] [grey50]/ {memPeakMb:F0}[/]"));
-        g.AddRow(new S.Markup("[grey62]alloc[/]"), new S.Markup($"[#e8f0ff]{allocKb,5:F1} KB/f[/] [grey50]/ {allocPeakKb:F0}[/]"));
-        g.AddRow(new S.Markup("[grey62]exc/s[/]"), new S.Markup(exc > 0 ? $"[bold #ff6b6b]{exc,5:F0}[/]" : "[#e8f0ff]    0[/]"));
+        // The three µs timings are kept adjacent so they read as one group: render (UI-thread work) then write and
+        // wait (the terminal side, concurrent with the next frame). busy follows as the percentage view of render.
+        Row("render", $"[#e8f0ff]{renderUs,5:F0} µs[/] [grey50]/ {renderPeakUs:F0}[/]");
+        Row("write", $"[#e8f0ff]{writeUs,5:F0} µs[/] [grey50]/ q{queuePeak}[/]");
+        Row("wait", $"[#e8f0ff]{waitUs,5:F0} µs[/]");
+        Row("latency", $"[#e8f0ff]{latencyUs,5:F0} µs[/] [grey50]/ {latencyPeakUs:F0}[/]");
+        Row("busy", $"[#e8f0ff]{busy,5:F0} %[/] [grey50]/ {busyPeak:F0}[/]");
+        Row("redraw", $"[#e8f0ff]{redraw,5:F0} %[/]");
+        Row("dirty", $"[#e8f0ff]{dirty,5:F1} %[/] [grey50]/ {dirtyPeak:F0}[/]");
+        Row("cpu", $"[#e8f0ff]{cpu,5:F1} %[/]");
+        Row("mem", $"[#e8f0ff]{memMb,5:F1} MB[/] [grey50]/ {memPeakMb:F0}[/]");
+        Row("alloc", $"[#e8f0ff]{allocKb,5:F1} KB/f[/] [grey50]/ {allocPeakKb:F0}[/]");
+        Row("exc/s", exc > 0 ? $"[bold #ff6b6b]{exc,5:F0}[/]" : "[#e8f0ff]    0[/]");
         // The dagger: a no-lock UI design holds contention at zero. Green 0 when true, red count otherwise.
-        g.AddRow(new S.Markup("[grey62]locks[/]"), new S.Markup(locks == 0 ? "[bold #7CFC00]0 ✓[/]" : $"[bold #ff6b6b]{locks}[/]"));
+        Row("locks", locks == 0 ? "[bold #7CFC00]0 ✓[/]" : $"[bold #ff6b6b]{locks}[/]");
 
+        rowCount = rows;
         return new S.Panel(g)
         {
             Border = S.BoxBorder.Rounded,
@@ -133,7 +173,11 @@ public sealed class PerfHud : GlassPanel
 
     #region Fields
     private const int HudWidth = 34;
-    private const int HudHeight = 11;
+    // The panel's top and bottom border rows, which sit outside the metric rows.
+    private const int PanelBorderRows = 2;
+    // Only the height the panel is CONSTRUCTED at; Refresh immediately re-derives it from the rows Build emitted,
+    // so adding or removing a metric needs no change here.
+    private const int HudHeight = 13;
     private const long RefreshMs = 250;
     private readonly Stopwatch _refresh = Stopwatch.StartNew();
     #endregion

@@ -146,15 +146,20 @@ public class GlassPanelTests
     [Fact]
     public void PerfHud_ShowsFramedTelemetry_OverOverlay()
     {
+        // The viewport must be tall enough for the whole HUD at y=1, or the assertions below silently test a
+        // clipped panel — the last row ("locks") is the one that goes first.
         using var hud = new PerfHud();
-        var overlay = new Overlay(new Grid([12], [40], [[new Solid(new CColor(30, 30, 30))]]));
-        ConsoleSnapshot.Render(overlay, 40, 12);
+        var overlay = new Overlay(new Grid([16], [40], [[new Solid(new CColor(30, 30, 30))]]));
+        ConsoleSnapshot.Render(overlay, 40, 16);
         hud.Show(2, 1, overlay);
 
-        var text = ConsoleSnapshot.ToText(overlay, 40, 12);
-        Assert.Contains("perf", text);   // the panel header rendered (markup parsed without throwing)
-        Assert.Contains("frame", text);  // a telemetry label rendered
-        Assert.Contains("locks", text);  // the no-lock dagger row
+        var text = ConsoleSnapshot.ToText(overlay, 40, 16);
+        Assert.Contains("perf", text);      // the panel header rendered (markup parsed without throwing)
+        // Every label, first to last. The HUD derives its height from the rows it emits, and "locks" — the last row —
+        // is the canary: when the height was a hand-kept constant that fell behind, that row was silently clipped
+        // away rather than erroring.
+        foreach (var label in new[] { "render", "write", "wait", "latency", "busy", "locks" })
+            Assert.Contains(label, text);
         Assert.True(hud.IsShown);
     }
     #endregion
