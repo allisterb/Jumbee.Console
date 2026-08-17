@@ -601,6 +601,40 @@ principled fix is to draw the **convex hull's** edges, which is a genuine shape 
 `ConvexHull` does not expose its geometry so that means writing a hull ourselves. Left as a known limitation; the
 solid and shaded renderers handle meshes well, and they are the ones meshes are for.
 
+> **Follow-up (2026-08-16) — mostly wrong, and instructively so.** It *was* a tuning problem, just not of the number
+> being tuned. Three things were wrong at once, and each hid the others. (1) The cap was flat, so it was tuned for a
+> sandbox body ~30 cells across and then applied unchanged to the model viewer, where one body fills the viewport —
+> the bunny got 64 of its 7,473 edges, 0.9%. (2) Thinning strided the *edge* list, so consecutive picks were
+> unrelated triangles anywhere on the surface and each landed as a floating segment; thinning by whole triangle
+> costs the same and lands as surface. (3) Nothing culled back faces, so half the budget was spent on geometry
+> behind the geometry, and no silhouette could form. Fixed together: budget = projected sub-pixel area / 40,
+> clamped to [64, 1200] triangles; whole triangles; world-space normal cull. The bunny and the teapot now read as
+> themselves, and the sandbox is denser than it was rather than poorer. Sweep evidence: at 25 sub-pixels/triangle
+> the bunny fills in and reads as a silhouette, at 120 it is back to a cloud, 40 is the knee. Cost 0.39 ms/frame
+> (bunny) and 0.98 ms (dragon, 250k triangles — dominated by the per-vertex transform that was always there).
+> **What survives of the original claim** is only the extreme: at 250k triangles a sampled triangle is sub-pixel, so
+> the dragon is a correctly-shaped cloud and not a surface. Hull edges are the fix for *that*, and only that.
+>
+> **Follow-up 2, same day — and this is the finding worth keeping.** The first attempt above did all three things
+> and still drew models with chunks missing, visible as gaps from the side and top that moved as the camera
+> orbited. Cause: it found visible faces and chose which to draw in ONE pass — stride forward, draw what survives
+> the cull, `break` at the budget. That ends the walk partway down the triangle list, and OBJ index order is
+> spatially coherent, so the tail of the model was never *considered* rather than merely thinned. For the bunny at
+> viewer size the walk stopped near index 2,500 of 4,968. Where it stopped depended on the cull survival rate,
+> which depends on the camera angle, which is why the gap moved; integer truncation of the stride made it jump
+> between roughly 50% and 67% of the list as you zoomed. Fix: two passes — collect front-facing triangles across
+> the whole mesh, then spread the budget over the collected set with a Bresenham pick. One reused `int[]`.
+>
+> **The part to remember is how it hid.** The drawn *total* was always exactly the budget. Every volume-of-ink
+> measure was correct and only the distribution was wrong, so it survived: the lit-cell checks, a by-eye look at
+> the three-quarter view (which happened to be an angle where the missing part faced away), and — measured, not
+> assumed — a purpose-written check comparing the ink's bounding box against the projected bounding box of the
+> geometry, which passed at 93% with the bug deliberately reintroduced. A bounding box cannot see an interior
+> hole; the extremities are still drawn, so the box is still the right size. What does catch it is a coarse
+> occupancy grid whose ground truth is *front-facing* geometry computed exhaustively: 89% covered with the code
+> correct against 60% with the bug back. Using all vertices instead of front-facing ones halves that separation to
+> 93 vs 88 — noise the size of the signal — because a hollow model has cells only back faces can reach.
+
 **Cost** with two meshes plus a sphere (200×50, orbiting camera):
 
 | | scene | total | ANSI |

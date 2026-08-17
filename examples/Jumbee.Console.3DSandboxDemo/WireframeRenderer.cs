@@ -15,6 +15,10 @@ using Jumbee.Console.Drawing;
 /// convincing because a sphere's silhouette really is a circle from any angle.
 /// </para>
 /// <para>
+/// A loaded mesh is too big to draw whole, so it is culled to the faces pointing at the camera and thinned to a
+/// budget that follows its size on screen — see <see cref="DrawMesh"/>, where the reasoning is.
+/// </para>
+/// <para>
 /// Depth is a painter's sort of whole bodies, not per pixel: draw far ones first and let near ones overwrite them.
 /// It is wrong for interpenetrating bodies and right almost everywhere else, which is the trade a wireframe makes.
 /// </para>
@@ -161,15 +165,109 @@ public sealed class WireframeRenderer : ISceneRenderer
     }
 
     // A loaded model drawn edge-for-edge would swamp this renderer -- a 6,300-face teapot has ~9,500 unique edges,
-    // against 12 for a box -- and cheapness is the whole reason the wireframe exists. Mesh.WireEdges is a thinned,
-    // capped sample of them, so a model costs about what a dozen boxes do and still reads as its shape.
+    // against 12 for a box -- and cheapness is the whole reason the wireframe exists. So a model is thinned to a
+    // budget; the three decisions that make the thinned sample READ as the model rather than as a dot cloud are:
+    //
+    //   1. The budget comes from how big the body is ON SCREEN, not from a constant. The sandbox draws many bodies
+    //      a few dozen sub-pixels across, where a hundred edges is more line than there is room for; the model
+    //      viewer draws ONE body filling the viewport, where the same hundred edges is 1% of the ink available. A
+    //      single cap cannot serve both, and the one that was here served the sandbox -- a 4,968-face bunny came out
+    //      as 64 edges out of 7,473, a strided sample so sparse it read as scattered dashes.
+    //   2. Thinning is by TRIANGLE, keeping its three edges together. Striding an edge list picks unrelated edges
+    //      from all over the surface, and each lands as a floating segment; whole triangles land as surface.
+    //   3. Back faces are culled first, so the sample is spread over the half of the model you can actually see and
+    //      the silhouette survives. Without it the far side is interleaved with the near one and neither reads.
     private void DrawMesh(in CameraView view, Mesh mesh, Vector3 center, Matrix4x4 transform, Color color)
     {
-        EnsureMeshCapacity(mesh.Vertices.Length);
-        for (var i = 0; i < mesh.Vertices.Length; i++)
-            meshWorld[i] = center + Vector3.Transform(mesh.Vertices[i], transform);
+        var vertices = mesh.Vertices;
+        EnsureMeshCapacity(vertices.Length);
 
-        foreach (var (a, b) in mesh.WireEdges) DrawWorldLine(view, meshWorld[a], meshWorld[b], color);
+        // The bounding radius falls out of the transform loop for one LengthSquared per vertex, and it is exact
+        // under shear and non-uniform scale where transforming the mesh's extents would only approximate it.
+        var farthest = 0f;
+        for (var i = 0; i < vertices.Length; i++)
+        {
+            var offset = Vector3.Transform(vertices[i], transform);
+            meshWorld[i] = center + offset;
+            farthest = MathF.Max(farthest, offset.LengthSquared());
+        }
+
+        var budget = TriangleBudget(view, center, MathF.Sqrt(farthest));
+
+        // Two passes, and they are separate for a reason: finding the visible faces and choosing which of them to
+        // draw must EACH walk the whole mesh. Doing it in one pass -- stride forward, draw what survives the cull,
+        // stop at the budget -- ends the walk partway down the triangle list, and OBJ index order is spatially
+        // coherent, so the tail of the model is never CONSIDERED rather than merely thinned. That drew the bunny
+        // with its back half missing, and moved the missing part as the camera orbited (where the walk stops
+        // depends on how many faces the cull happens to keep, which depends on the angle).
+        var triangles = mesh.TriangleCount;
+        var indices = mesh.Indices;
+
+        // Pass 1 -- which faces point at us. Strided, so a 250k-triangle dragon costs a bounded number of winding
+        // tests rather than 250k of them, but it always runs to the END of the list.
+        var scanStride = Math.Max(1, triangles / Math.Max(1, budget * Overscan));
+        var facing = 0;
+        EnsureFacingCapacity((triangles + scanStride - 1) / scanStride);
+
+        for (var t = 0; t < triangles; t += scanStride)
+        {
+            var i = t * 3;
+            var a = meshWorld[indices[i]];
+            var b = meshWorld[indices[i + 1]];
+            var c = meshWorld[indices[i + 2]];
+
+            // Backface culling against the world-space normal rather than the projected winding: meshes are wound
+            // counter-clockwise seen from outside, so cross(b-a, c-a) points out of the surface, and a face is
+            // visible when that agrees with the direction back to the eye. Correct under any affine transform --
+            // which matters here, because the model viewer's bodies carry shear and non-uniform scale.
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), view.Eye - a) <= 0) continue;
+
+            facingTriangles[facing++] = i;
+        }
+
+        // Pass 2 -- spread the budget over those. A Bresenham pick rather than a second integer stride: it draws
+        // exactly min(facing, budget) triangles spaced evenly across the whole survivor list, where `facing /
+        // budget` truncated to an integer both overshoots the budget and bunches the picks toward one end.
+        var carry = 0;
+        for (var k = 0; k < facing; k++)
+        {
+            carry += budget;
+            if (carry < facing) continue;
+            carry -= facing;
+
+            var i = facingTriangles[k];
+            var a = meshWorld[indices[i]];
+            var b = meshWorld[indices[i + 1]];
+            var c = meshWorld[indices[i + 2]];
+            DrawWorldLine(view, a, b, color);
+            DrawWorldLine(view, b, c, color);
+            DrawWorldLine(view, c, a, color);
+        }
+    }
+
+    private void EnsureFacingCapacity(int count)
+    {
+        if (facingTriangles.Length < count) facingTriangles = new int[Math.Max(count, facingTriangles.Length * 2)];
+    }
+
+    /// <summary>How many triangles of a mesh body are worth drawing, from the area its bounding sphere covers on
+    /// screen.</summary>
+    /// <remarks>
+    /// The canvas keeps X in [-1, 1] across <c>Width x 2</c> braille sub-pixels and stretches Y to the cell aspect
+    /// to match, so one NDC unit is <see cref="Viewport.Width"/> sub-pixels on <em>both</em> axes — which is what
+    /// lets a screen-space radius in NDC become a sub-pixel area with one multiply.
+    /// </remarks>
+    private int TriangleBudget(in CameraView view, Vector3 center, float radius)
+    {
+        if (!Projection.TryProject(view.Transform(center), out var x, out var y) ||
+            !Projection.TryProject(view.Transform(center + (view.Right * radius)), out var ex, out var ey))
+        {
+            return MinTriangles;
+        }
+
+        var screenRadius = MathF.Sqrt(((ex - x) * (ex - x)) + ((ey - y) * (ey - y))) * Viewport.Width;
+        var area = 4f * screenRadius * screenRadius;
+        return Math.Clamp((int)(area / SubPixelsPerTriangle), MinTriangles, MaxTriangles);
     }
 
     private void EnsureMeshCapacity(int count)
@@ -206,6 +304,33 @@ public sealed class WireframeRenderer : ISceneRenderer
     #endregion
 
     #region Fields
+    /// <summary>
+    /// Braille sub-pixels of screen area per drawn triangle, and it is set by LEGIBILITY rather than by cost.
+    /// </summary>
+    /// <remarks>
+    /// Lower means denser. Tuned on the bunny filling the model viewer at 200x50: at 25 the body fills in until it
+    /// reads as a silhouette rather than a wireframe, at 120 it opens back up into a cloud, and 40 is where the
+    /// surface is solid enough to read and still see-through. The Canvas could afford several times the resulting
+    /// edge count — this is set by what the eye can separate, not by what the renderer can pay for.
+    /// </remarks>
+    public const float SubPixelsPerTriangle = 40f;
+
+    /// <summary>The floor on <see cref="TriangleBudget"/>, so a body too small or too distant to earn the density
+    /// still reads as a shape rather than a handful of strokes.</summary>
+    /// <remarks>The cap this replaces was 64 <em>edges</em> for every mesh body whatever its size. As a floor on
+    /// triangles it leaves sandbox-sized bodies denser than they were, which they can afford now that culling
+    /// spends the whole budget on the side facing the camera.</remarks>
+    public const int MinTriangles = 64;
+
+    /// <summary>The ceiling on <see cref="TriangleBudget"/>. Reached only by a body filling most of the viewport,
+    /// and there to bound the per-frame cost rather than because the picture needs it.</summary>
+    public const int MaxTriangles = 1200;
+
+    /// <summary>How many triangles pass 1 examines per one pass 2 expects to draw, which is what bounds the scan of
+    /// a dense mesh. Above 2 because culling discards about half of a closed mesh and the budget should still
+    /// fill from what is left.</summary>
+    private const int Overscan = 3;
+
     private static readonly (int A, int B)[] BoxEdges =
     [
         (0, 1), (2, 3), (4, 5), (6, 7),
@@ -216,6 +341,10 @@ public sealed class WireframeRenderer : ISceneRenderer
     private readonly Canvas canvas;
     private readonly Vector3[] corners = new Vector3[8];
     private Vector3[] meshWorld = new Vector3[64];
+
+    /// <summary>Pass 1's output: the index-array offset of each front-facing triangle found this frame. Reused
+    /// across frames and bodies so the two-pass draw allocates nothing.</summary>
+    private int[] facingTriangles = new int[256];
 
     private int[] order = new int[64];
     private float[] depths = new float[64];

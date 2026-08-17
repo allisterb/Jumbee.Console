@@ -16,9 +16,8 @@ if (args.Contains("--load"))
     {
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
         var m = ObjLoader.Load(f);
-        var wire = m.WireEdges.Length;
         Console.WriteLine($"  {Path.GetFileName(f),-12} {m.TriangleCount,7} tris  parse {sw0.ElapsedMilliseconds,5} ms  " +
-                          $"{new FileInfo(f).Length / 1024,6} KB  wire {wire}  " +
+                          $"{new FileInfo(f).Length / 1024,6} KB  " +
                           $"extents {m.Extents.X:F3},{m.Extents.Y:F3},{m.Extents.Z:F3}");
     }
 
@@ -276,8 +275,6 @@ Check("selecting a body lights cells in the selection colour", selectedCells > u
 Console.WriteLine("\nmeshes:");
 var knot = Meshes.Get(knotId);
 Check("the torus knot generates", knot.TriangleCount > 500, $"{knot.TriangleCount} triangles, {knot.Vertices.Length} verts");
-Check("its wire edges are capped", knot.WireEdges.Length <= Mesh.MaxWireEdges,
-    $"{knot.WireEdges.Length} edges (cap {Mesh.MaxWireEdges})");
 
 if (teapotId >= 0)
 {
@@ -288,11 +285,130 @@ if (teapotId >= 0)
     var radius = 0f;
     foreach (var v in teapot.Vertices) radius = Math.Max(radius, Math.Max(Math.Abs(v.X), Math.Max(Math.Abs(v.Y), Math.Abs(v.Z))));
     Check("it is normalised to a half-extent of 0.5", Math.Abs(radius - 0.5f) < 0.01f, $"largest extent {radius:F3}");
-    Check("its wire edges are capped", teapot.WireEdges.Length <= Mesh.MaxWireEdges, $"{teapot.WireEdges.Length} edges");
 }
 else
 {
     Console.WriteLine("  SKIP  teapot.obj not found at the reference path");
+}
+
+// --- the wireframe's mesh thinning ---------------------------------------------------------------------------
+// Its budget follows the body's ON-SCREEN size, so the same mesh must draw substantially more ink when it fills
+// the viewport than when it is a sandbox-sized body across the floor -- that is the whole claim, and a flat cap
+// (which is what was here) fails it. Counted as lit sub-pixels rather than as an internal edge count, so it is
+// what a human would see. Bounded above too: MaxTriangles must actually bound the ink.
+{
+    int LitCells(ISceneRenderer r, SceneSnapshot s, OrbitCamera c)
+    {
+        _ = ConsoleSnapshot.ToText(r.Surface, W, H);
+        r.Draw(s, c);
+        return ConsoleSnapshot.ToText(r.Surface, W, H).Count(ch => ch is not (' ' or '\n' or '\r'));
+    }
+
+    var meshId = teapotId >= 0 ? teapotId : knotId;
+    var one = new SceneSnapshot(1) { Count = 1, AwakeCount = 1 };
+    one.Ids[0] = 1;
+    one.Shapes[0] = BodyShape.Mesh;
+    one.MeshIds[0] = meshId;
+    one.Positions[0] = new Vector3(0, 5.5f, 0);
+    one.Rotations[0] = Quaternion.Identity;
+    one.HalfExtents[0] = new Vector3(ModelScene.ViewRadius);
+    one.ColorKeys[0] = 1;
+    one.Awake[0] = true;
+
+    var wire = new WireframeRenderer();
+    var near = new OrbitCamera { Target = new Vector3(0, 5.5f, 0), Distance = 20f };
+    var far = new OrbitCamera { Target = new Vector3(0, 5.5f, 0), Distance = 55f };
+
+    var nearCells = LitCells(wire, one, near);
+    var farCells = LitCells(wire, one, far);
+    Check("a mesh filling the viewport draws far more than a distant one", nearCells > farCells * 2,
+        $"{nearCells} lit cells near, {farCells} far");
+
+    // The floor grid is drawn every frame whatever the body does, so a lower bound on the near shot is really a
+    // lower bound on grid + body. It still separates the two regimes: the old flat 64-edge cap put both shots
+    // within a few dozen cells of each other.
+    Check("the near shot is bounded, not a filled scribble", nearCells < W * H / 2,
+        $"{nearCells} of {W * H} cells");
+
+    // And the thinned sample must cover the WHOLE model, not a prefix of its triangle list. This is the check that
+    // would have caught drawing the bunny with its back half missing: every earlier check passed while a third to a
+    // half of the mesh was never even considered, because the drawn TOTAL was right and only its extent was wrong.
+    // Measured against ground truth -- the analytically projected bounding box of the posed vertices -- so it is
+    // "the ink reaches as far as the geometry does", not a comparison with a previous render.
+    // Rendered LARGER than the rest of these checks, and that is load-bearing. The budget follows on-screen area,
+    // so at 100x34 the teapot gets ~190 triangles and a tenth of the frame can be legitimately blank just from the
+    // sampling rate -- which swamps the signal (measured: 80% with the code correct against 84% with the bug, i.e.
+    // backwards). At 240x80 it gets ~1,100 and blank means missing.
+    const int CW = 240, CH = 80;
+    var bare = new WireframeRenderer { GridHalfExtent = 0 };   // no floor grid, so the ink IS the body
+    var mesh = Meshes.Get(meshId);
+    var worst = 1.0;
+    foreach (var theta in new[] { 0f, MathF.PI / 3, MathF.PI / 2, 2f * MathF.PI / 3, MathF.PI })
+    {
+        var camera = new OrbitCamera { Target = new Vector3(0, 5.5f, 0), Distance = 22f, Theta = theta };
+        _ = ConsoleSnapshot.ToText(bare.Surface, CW, CH);
+        bare.Draw(one, camera);
+        var rows = ConsoleSnapshot.ToText(bare.Surface, CW, CH).Split('\n');
+
+        // A coarse occupancy grid over the viewport, not a bounding box: the failure this guards against leaves a
+        // HOLE in the middle of the model, and a bounding box cannot see one -- the extremities still get drawn, so
+        // the box comes out the right size while a third of the body is missing. (Learned the hard way: the first
+        // version of this check passed with the bug deliberately reintroduced.)
+        const int G = 6;
+        var inked = new bool[G, G];
+        var wanted = new bool[G, G];
+        for (var cy = 0; cy < rows.Length; cy++)
+        {
+            for (var cx = 0; cx < rows[cy].Length; cx++)
+            {
+                if (rows[cy][cx] is ' ' or '\r') continue;
+                inked[Math.Min(G - 1, cx * G / CW), Math.Min(G - 1, cy * G / CH)] = true;
+            }
+        }
+
+        // What the geometry says should be occupied, computed the same way the renderer decides -- over the whole
+        // triangle list with nothing thinned, and counting only FRONT-FACING triangles. Using every vertex instead
+        // makes the metric mush: the teapot is hollow with a handle and a spout, so cells covered only by faces
+        // pointing away are permanently unreachable and the shortfall they cause (7%) is the same size as the bug's.
+        var basis = camera.GetView();
+        var port = bare.Viewport;
+        var scale = Matrix4x4.CreateScale(ModelScene.ViewRadius / 0.5f);
+        var posed = new Vector3[mesh.Vertices.Length];
+        for (var v = 0; v < posed.Length; v++)
+            posed[v] = one.Positions[0] + Vector3.Transform(mesh.Vertices[v], scale);
+
+        for (var t = 0; t + 2 < mesh.Indices.Length; t += 3)
+        {
+            var a = posed[mesh.Indices[t]];
+            var b = posed[mesh.Indices[t + 1]];
+            var c = posed[mesh.Indices[t + 2]];
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), basis.Eye - a) <= 0) continue;
+            if (!bare.Projection.TryProject(basis.Transform((a + b + c) / 3f), out var nx, out var ny)) continue;
+            var cx = (int)((nx + 1f) / 2f * (port.Width - 1));
+            var cy = (int)((port.CellAspect - ny) / (2.0 * port.CellAspect) * (port.Height - 1));
+            if (cx < 0 || cy < 0 || cx >= port.Width || cy >= port.Height) continue;
+            wanted[Math.Min(G - 1, cx * G / CW), Math.Min(G - 1, cy * G / CH)] = true;
+        }
+
+        int want = 0, got = 0;
+        for (var gx = 0; gx < G; gx++)
+        {
+            for (var gy = 0; gy < G; gy++)
+            {
+                if (!wanted[gx, gy]) continue;
+                want++;
+                if (inked[gx, gy]) got++;
+            }
+        }
+
+        worst = Math.Min(worst, got / Math.Max(1.0, want));
+    }
+
+    // Threshold sits between the two measured states rather than at an aspiration: 89% with the code correct
+    // (a thinned sample will always miss a sliver-thin cell at the silhouette) against 60% with the early exit
+    // deliberately put back. Anything below 80% means a region of the model is not being drawn at all.
+    Check("the thinned sample leaves no holes, from every angle", worst > 0.80,
+        $"worst angle inks {worst:P0} of the cells the geometry occupies");
 }
 
 // Triangulation gets its own synthetic case: every model in the reference set is ALREADY triangulated, so loading

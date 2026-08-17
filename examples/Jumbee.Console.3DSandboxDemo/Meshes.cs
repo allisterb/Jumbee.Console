@@ -60,60 +60,6 @@ public sealed class Mesh
 
     /// <summary>Number of triangles.</summary>
     public int TriangleCount => Indices.Length / 3;
-
-    /// <summary>
-    /// A reduced edge list for the wireframe renderer: unique triangle edges, thinned to at most
-    /// <see cref="MaxWireEdges"/>.
-    /// </summary>
-    /// <remarks>
-    /// Drawing every edge of a loaded model is not an option — a 6,300-face teapot has ~9,500 unique edges, and the
-    /// wireframe renderer exists precisely because it is the cheap one that scales to many bodies. Thinning keeps
-    /// the shape recognisable as a wire cloud at a bounded cost. Built once, on first use.
-    /// </remarks>
-    public (int A, int B)[] WireEdges => wireEdges ??= BuildWireEdges();
-    #endregion
-
-    #region Private methods
-    private (int A, int B)[] BuildWireEdges()
-    {
-        var seen = new HashSet<(int, int)>();
-        var edges = new List<(int A, int B)>();
-        for (var t = 0; t + 2 < Indices.Length; t += 3)
-        {
-            Add(Indices[t], Indices[t + 1]);
-            Add(Indices[t + 1], Indices[t + 2]);
-            Add(Indices[t + 2], Indices[t]);
-        }
-
-        void Add(int a, int b)
-        {
-            var key = a < b ? (a, b) : (b, a);
-            if (seen.Add(key)) edges.Add((key.Item1, key.Item2));
-        }
-
-        if (edges.Count <= MaxWireEdges) return [.. edges];
-
-        // Stride rather than truncate: taking the first N would draw one dense corner of the model and nothing
-        // else, where an even sample across the whole edge list still reads as the shape.
-        var stride = (edges.Count + MaxWireEdges - 1) / MaxWireEdges;
-        var thinned = new List<(int A, int B)>(MaxWireEdges);
-        for (var i = 0; i < edges.Count; i += stride) thinned.Add(edges[i]);
-        return [.. thinned];
-    }
-    #endregion
-
-    #region Fields
-    /// <summary>
-    /// Ceiling on <see cref="WireEdges"/>, and it is set by LEGIBILITY rather than by cost.
-    /// </summary>
-    /// <remarks>
-    /// A body is perhaps 30 cells across on screen, so 60 braille sub-pixels. Several hundred edges over that area
-    /// is more line than there is space, and the model renders as a solid scribble -- the first attempt used 400 and
-    /// looked like a filled blob. Roughly a box's worth of edges reads as a shape; the Canvas could afford far more.
-    /// </remarks>
-    public const int MaxWireEdges = 64;
-
-    private (int A, int B)[]? wireEdges;
     #endregion
 }
 

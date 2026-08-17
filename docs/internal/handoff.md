@@ -53,9 +53,25 @@ excerpts, not library snippets), so it is not machine-checked — see the open q
    UI (layout, key↔widget agreement both ways, sidebar toggle, camera pad) and a `--sidebar` row dump. It has
    caught four shipped bugs. Still sources only at [`scratch/`](scratch/README.md), not wired into the solution.
    **This is the one that will rot.**
-4. **Should the wireframe renderer draw a convex hull for mesh bodies?** Unchanged from last session: it draws a
-   thinned sample capped at 64 edges and a dense model reads as a sparse cloud. The principled fix is hull edges,
-   but Box3D does not expose hull geometry, so it means writing a hull ourselves.
+4. ~~**Should the wireframe renderer draw a convex hull for mesh bodies?**~~ **Largely answered without the hull.**
+   The sparse cloud was three separable problems, not one: a flat 64-edge cap that ignored how big the body was on
+   screen, thinning by *edge* so every pick landed as a floating segment, and no backface culling so the far side
+   was interleaved with the near one. Fixing all three — a budget of one triangle per 40 sub-pixels of projected
+   area, whole triangles kept together, back faces culled — makes the bunny and the teapot read as themselves at
+   viewer size, and leaves sandbox bodies denser than before at a floor of 64 triangles. Costs 0.4 ms/frame for the
+   bunny at 200×50, 1.0 ms for the 250k-triangle dragon (which is dominated by the pre-existing per-vertex
+   transform, not the new work). **Still open for very dense meshes**: at 250k triangles a sampled triangle is
+   sub-pixel, so the dragon is a correctly-shaped cloud rather than a surface. That case is what hull edges would
+   actually fix, and Box3D still does not expose hull geometry.
+
+   **A second bug lived inside the first fix**, and it is the more interesting one — see follow-up 2 in the plan
+   doc. Finding visible faces and choosing which to draw in one pass ends the walk partway down the triangle list,
+   and OBJ index order is spatially coherent, so the tail of the model is never considered. Models drew with
+   chunks missing, and the missing chunk moved as the camera orbited. The lesson generalises past this renderer:
+   **when a thinning step has a fixed output size, every measure of output volume is right by construction and only
+   the distribution can be wrong** — so lit-cell counts, byte counts and bounding boxes all pass. The harness now
+   has an occupancy-grid check with front-facing ground truth (89% correct vs 60% buggy); the bounding-box version
+   I wrote first scored 93% with the bug reintroduced.
 5. **Vendor a model, or keep pointing at `reference/`?** Unchanged. The demo ships only a generated torus knot.
    If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
 

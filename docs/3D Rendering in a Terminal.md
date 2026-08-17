@@ -453,10 +453,42 @@ Its representation of a primitive is *exact* and almost free:
 
 Depth is a painter's sort of whole bodies. Wrong for interpenetrating objects, right almost everywhere else.
 
-**Where it falls down** is dense meshes, and this is a real limitation rather than a tuning problem. A 6,320-triangle
-teapot has ~9,500 unique edges, and a body on screen is perhaps 30 cells across. Drawing all of them is a solid
-scribble; the current cap of 64 reads as a sparse wire cloud. The principled fix is to draw the *convex hull's*
-edges — a genuine shape at 30–60 edges — which needs a hull implementation the physics engine does not expose.
+**A loaded mesh is the hard case.** A 6,320-triangle teapot has ~9,500 unique edges, and drawing all of them into a
+body 30 cells across is a solid scribble. So a mesh is thinned to a budget — and *how* you thin it matters more than
+the number you thin it to:
+
+- **The budget follows the body's size on screen**, not a constant. Project the bounding radius, square it into a
+  sub-pixel area, and spend one triangle per 40 of them. The sandbox draws many bodies a few dozen sub-pixels
+  across; the model viewer draws one filling the viewport. A single cap cannot serve both — and a flat cap of 64
+  edges turned a 4,968-triangle bunny into 0.9% of its edges, which reads as scattered dashes rather than a rabbit.
+- **Thin by triangle, not by edge**, keeping each triangle's three edges together. Striding an edge list picks
+  unrelated edges from all over the surface and each one lands as a floating segment. Whole triangles land as
+  surface.
+- **Cull back faces first**, so the budget is spent on the half you can see and the silhouette survives. The test
+  is `dot(cross(b-a, c-a), eye-a) > 0` — the world-space normal against the direction back to the eye, which stays
+  correct under the shear and non-uniform scale the model viewer applies.
+
+The scan is bounded too: it walks an evenly spaced sample of about three triangles per one it expects to draw, so a
+250k-triangle dragon costs the same triangle tests as the bunny.
+
+**Finding the visible faces and choosing which to draw have to be separate passes**, and this is the subtle part.
+The obvious single-pass version — stride forward, draw what survives the cull, stop once the budget is full — ends
+the walk partway down the triangle list. OBJ index order is spatially coherent, so *partway down the list* means
+*part of the model*, and the tail is never considered rather than merely thinned. The bunny came out with its back
+half missing; the missing part moved as the camera orbited, because where the walk stops depends on how many faces
+the cull happens to keep, which depends on the angle. Two passes — collect the front-facing triangles across the
+whole mesh, then spread the budget over what you collected — costs one reused `int[]` and nothing else.
+
+That failure is worth naming because of how it hides. The drawn *total* was always exactly the budget, so every
+measure of ink volume looked right; only the ink's *distribution* was wrong. A test comparing lit-cell counts, or
+even the model's on-screen bounding box, passes cleanly while a third of the body is absent — the extremities are
+still drawn, so the box is still the right size. Catching it needs an occupancy grid: divide the frame into coarse
+cells, compute which ones front-facing geometry actually occupies, and require the ink to reach them.
+
+**Where it still falls down** is a mesh dense enough that a sampled triangle is smaller than a sub-pixel. The dragon
+reads as a correctly-shaped cloud rather than as a surface, because at 250k triangles over one viewport there is no
+budget at which whole triangles are also *visible* triangles. Drawing the convex hull's edges instead would give a
+genuine shape at 30–60 edges, and needs a hull implementation the physics engine does not expose.
 
 ### Solid — flat shaded, one directional light
 
