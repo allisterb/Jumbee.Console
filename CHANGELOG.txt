@@ -2,6 +2,16 @@
 -----
 ADDED
 
+  * UI.RestoreBuiltInHotKeys() - drops every hotkey an app registered with UI.RegisterHotKey, keeping the
+    library's own (Ctrl+Q, the Ctrl focus tier, F1). UI.Stop now calls it, so hotkeys are scoped to the
+    session that registered them, alongside the control list Stop already cleared.
+
+    BEHAVIOUR CHANGE, and only for an app that starts the UI more than once in a process - swapping between
+    two screens, say. There the old behaviour was a bug rather than a feature: the second session inherited
+    the first's bindings, still closed over the first session's objects, which by then were disposed.
+    Register hotkeys per session, next to the tree they act on. An app that starts one UI and exits sees no
+    difference.
+
   * IScrollable - the opt-in that makes a framed control scroll. A ControlFrame owns the viewport, the
     scrollbar and the offset; the control's side of the bargain is one honest answer, "how tall is my content
     at this width", which is now IScrollable.MeasureHeight. Implemented by ListBox, Tree, TextEditor,

@@ -34,6 +34,11 @@ var failures = 0;
 // sidebar exists to make: that a key and its widget always agree, in both directions.
 if (args.Contains("--shell")) return Render3d.ShellChecks.Run(W, H, args);
 
+// --- Switching shells without leaving the process ---------------------------------------------------------------
+// Real UI.Start/Stop cycles over the real shells. Separate from --shell because it is the only mode that runs the
+// UI LOOP; everything else renders through ConsoleSnapshot with no loop at all.
+if (args.Contains("--switch")) return Render3d.SwitchChecks.Run(W, H);
+
 void Check(string what, bool ok, string? detail = null)
 {
     Console.WriteLine($"  {(ok ? "PASS" : "FAIL")}  {what}{(detail is null ? "" : $"  [{detail}]")}");

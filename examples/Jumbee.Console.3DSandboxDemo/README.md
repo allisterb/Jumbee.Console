@@ -31,6 +31,10 @@ dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- --model
 `obj` takes **one** path, a file *or* a directory. Either way the whole directory is loaded and `[` / `]` cycle
 through it — naming a file only decides which one opens first.
 
+Whichever you launch, **Scene ▸ Switch to model viewer** (and **Model ▸ Switch to sandbox** coming back) moves
+between the two without leaving the process. Loaded models are kept, so nothing is re-parsed, and the viewer opens on
+whichever model you were last looking at — or, coming from the sandbox, on whatever the spawn drop-down was set to.
+
 > **Loading a directory can pause at startup.** Models are parsed eagerly, before the UI appears, and a large one
 > is not fast: the 250,000-triangle Stanford dragon takes ~600 ms on its own, where a 6,000-triangle teapot takes
 > ~4 ms. A directory of big models will sit for a moment before anything is drawn. This is deliberate — parsing on

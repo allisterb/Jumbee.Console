@@ -303,6 +303,7 @@ public static class UI
             signalRegistrations = null;
         }
         controls.Clear();
+        RestoreBuiltInHotKeys();
         MouseButton = TerminalMouseButton.None;   // clear transient input state so it can't leak into a later session
         ProcessMetrics.Stop();
         runCompletion.TrySetResult();
@@ -454,6 +455,20 @@ public static class UI
 
     /// <summary>Removes a global hotkey registered via <see cref="RegisterHotKey"/>.</summary>
     public static void UnregisterHotKey(ConsoleKeyInfo key) => Invoke(() => GlobalHotKeys.Remove(key));
+
+    /// <summary>Drops every hotkey registered via <see cref="RegisterHotKey"/>, leaving only the library's own
+    /// (Ctrl+Q, the Ctrl focus tier, F1).</summary>
+    /// <remarks>
+    /// Called by <see cref="Stop"/>, so an app's hotkeys are scoped to the session that registered them. That matters
+    /// when one process starts the UI more than once — swapping between two screens, say: without it the second
+    /// session inherits the first's bindings, still pointing at the first session's objects, which by then are
+    /// disposed. Register hotkeys per session, alongside the tree they act on.
+    /// </remarks>
+    public static void RestoreBuiltInHotKeys() => Invoke(() =>
+    {
+        GlobalHotKeys.Clear();
+        foreach (var (key, action) in BuiltInHotKeys) GlobalHotKeys[key] = action;
+    });
 
     /// <summary>
     /// Marks the UI as needing a redraw on the next frame.
@@ -905,21 +920,24 @@ public static class UI
     private static Overlay? systemOverlay;
     private static readonly List<IFocusable> controls = new List<IFocusable>();
     private static readonly GlobalInputListener globalInputListener = new GlobalInputListener();
-    private static readonly Dictionary<ConsoleKeyInfo, Action> GlobalHotKeys = new Dictionary<ConsoleKeyInfo, Action>
-    {
-        { HotKeys.CtrlQ, Stop },
+    // The hotkeys the library owns. Separate from the live table because Stop restores it: an app's own hotkeys are
+    // session state, and a second Start must not inherit the first session's bindings (see RestoreBuiltInHotKeys).
+    private static readonly KeyValuePair<ConsoleKeyInfo, Action>[] BuiltInHotKeys =
+    [
+        new(HotKeys.CtrlQ, Stop),
         // Focus navigation (the "Ctrl tier"). Ctrl+arrows move spatially between root-layout regions; Ctrl+N/P
         // cycle within the current region. Plain keys stay with the focused control; Alt is layout-specific nav.
-        { HotKeys.CtrlN, FocusNext },
-        { HotKeys.CtrlP, FocusPrevious },
-        { HotKeys.CtrlLeft, FocusLeft },
-        { HotKeys.CtrlRight, FocusRight },
-        { HotKeys.CtrlUp, FocusUp },
-        { HotKeys.CtrlDown, FocusDown },
+        new(HotKeys.CtrlN, FocusNext),
+        new(HotKeys.CtrlP, FocusPrevious),
+        new(HotKeys.CtrlLeft, FocusLeft),
+        new(HotKeys.CtrlRight, FocusRight),
+        new(HotKeys.CtrlUp, FocusUp),
+        new(HotKeys.CtrlDown, FocusDown),
         // Global help dialog (toggles open/closed).
-        { HotKeys.F1, ShowHelp }       
+        new(HotKeys.F1, ShowHelp),
+    ];
 
-    };
+    private static readonly Dictionary<ConsoleKeyInfo, Action> GlobalHotKeys = new(BuiltInHotKeys);
     // Monotonic frame number, the join key between a frame's render cost (recorded here, on the UI thread) and its
     // terminal write (recorded later, on a pool thread). UI-thread only.
     private static long frameOrdinal;

@@ -34,7 +34,7 @@ public sealed class SceneView : CompositeControl
 
         // The scene changes continuously, so drive redraws on a clock rather than waiting for a state change to
         // invalidate. Feed runs on the UI thread, so Draw and the camera reads it makes need no synchronization.
-        Feed(Tick, Math.Max(1, 1000 / Math.Max(1, fps)));
+        feed = Feed(Tick, Math.Max(1, 1000 / Math.Max(1, fps)));
     }
     #endregion
 
@@ -406,6 +406,29 @@ public sealed class SceneView : CompositeControl
         runner?.Post(scene => scene.DragTo(id, target));
     }
 
+    /// <summary>Stops the render feed and unwires the control. After this the view never draws again, whatever is
+    /// still queued for it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Two steps, because cancelling a feed stops the <em>producer</em> and not the work it has already handed over.
+    /// <see cref="FeedHandle.StopAsync"/> joins the tick in flight; the flag makes any tick already sitting in the
+    /// dispatcher queue a no-op.
+    /// </para>
+    /// <para>
+    /// Both are invisible in an app that disposes on the way out, and exactly visible in one that starts a second UI
+    /// afterwards. The queue is <b>not</b> cleared between a <see cref="UI.Stop"/> and the next <see cref="UI.Start"/>
+    /// — deliberately, since that is how you post work for the next session to pick up (the demo sets its initial
+    /// focus that way) — so a feed left running for even a few milliseconds after the stop lands its ticks in the
+    /// <em>next</em> session, where they draw a scene nobody is looking at.
+    /// </para>
+    /// </remarks>
+    public override void Dispose()
+    {
+        disposed = true;
+        feed.StopAsync().Wait(FeedJoinMs);
+        base.Dispose();
+    }
+
     /// <inheritdoc/>
     // A wheel notch reports delta < 0 for up, so up pulls the camera in and down pushes it out.
     protected override void OnMouseWheel(Position position, int delta) =>
@@ -530,6 +553,8 @@ public sealed class SceneView : CompositeControl
 
     private void Tick()
     {
+        if (disposed) return;
+
         // The turntable is driven from wall clock, not a frame count, so it turns at the same rate whatever the
         // paint rate or the terminal size.
         var now = clock.Elapsed;
@@ -580,7 +605,12 @@ public sealed class SceneView : CompositeControl
     private const float MuzzleNdcRadius = 0.2f;
     private const float MinMuzzleDistance = 2f;
 
+    // Bound on joining the render feed at Dispose. Generous: a tick is sub-millisecond, and the wait exists to avoid
+    // hanging a teardown on a wedged one, not to time a normal frame.
+    private const int FeedJoinMs = 500;
+
     private readonly ISceneSource source;
+    private readonly FeedHandle feed;
 
     // The simulation, when the source IS one. Null for a static scene (the model viewer), where spawning, grabbing
     // and deleting have nothing to act on and quietly do nothing.
@@ -596,6 +626,7 @@ public sealed class SceneView : CompositeControl
     private bool selectNewestSpawn;
     private int highestSeenId;
     private bool orbiting;
+    private volatile bool disposed;
     private int? grabbed;
     private Vector3 grabPlanePoint;
     private Vector3 grabPlaneNormal;

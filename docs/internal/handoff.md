@@ -1,4 +1,4 @@
-# Handoff — wireframe mesh thinning, control settings, renderable Select, grab fixes (2026-08-17)
+# Handoff — mesh thinning, control settings, renderable Select, grab fixes, shell switching (2026-08-17)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
@@ -11,10 +11,50 @@ arc (screen-area budget, whole triangles, backface culling, the two-pass draw, `
 including the two new test files. Verified at that point: build clean, 1034/1034 tests, doc snippets, the parked
 harness, and `--shell` at 40 / 50 / 56 rows plus the viewer.
 
-**Uncommitted after that:** two grab-gesture bugs the user hit by playing with the sandbox, plus three sidebar
-buttons they asked for — all in the demo only (`PhysicsRunner.cs`, `SceneView.cs`, `SandboxShell.cs`,
-`SidebarPanel.cs`), with ten new checks in the parked harness. Written up under *Two grab bugs* and *Three sidebar
-buttons* below.
+**Then `2464d4f` "Fix sandbox physics bugs, add UI controls"** — two grab-gesture bugs the user hit by playing with
+the sandbox, and three sidebar buttons they asked for. Both written up below.
+
+**Uncommitted after that:** **switching between the two scenes without leaving the process** — the only one of the
+three that reached the library, and the only one with a behaviour change in `CHANGELOG.txt`. Written up next.
+
+### Switching shells in one process — what restarting the UI actually costs
+
+**Scene ▸ Switch to model viewer** and **Model ▸ Switch to sandbox** now tear one shell down and build the other,
+same process. `SandboxShell.ShellType` names the two; the menu item records the request and calls `UI.Stop`, and a
+**loop in `Program`** runs the next one after the awaited `Start` completes.
+
+**A loop, not a menu item that calls `RunSandbox`/`RunModelViewer`.** That was the original sketch and it is the one
+thing worth not copying: a menu handler runs on the UI thread inside the frame loop of the shell it belongs to, so
+starting the next UI from there starts one from inside another and keeps a shell alive per switch. As a request it
+costs nothing — the switch is just a field the loop reads once `Start`'s task has completed and the UI thread is gone.
+
+**The restart mechanism itself was already sound**, which was the surprise. `Dispatcher.Start` explicitly re-creates
+its cancelled lifetime and joins a previous loop; `UI.Stop` already clears `controls`, joins the reader thread, and
+notes in a comment that a reader from a *previous* Start would otherwise steal this one's input. The test suite has
+been starting and stopping the UI hundreds of times per run all along. What restarting exposes is not the loop —
+it is **everything scoped to a session that nobody scoped**:
+
+1. **Hotkeys outlived their session.** *(library fix.)* `GlobalHotKeys` is static and `Stop` never touched it, so the
+   viewer inherited the sandbox's `space`, `.` and `r` — closures over a **disposed `PhysicsRunner`**. `Stop` now
+   calls the new public `UI.RestoreBuiltInHotKeys()`, which drops app registrations and keeps the library's own
+   (Ctrl+Q, the Ctrl focus tier, F1). Two tests, and the `--switch` mode fails on exactly this when the call is
+   removed (`2 hits, expected 1`).
+2. **A cancelled feed is not a stopped feed, twice over.** `SceneView` runs a 60 Hz render feed. `Control.Dispose`
+   cancels it but does not join it, so the tick already in flight still ran — and, worse, **the dispatcher queue is
+   not cleared between a `Stop` and the next `Start`**, so ticks posted in the gap were picked up and run by the
+   *next* session. That gap is deliberate (it is how `Program` posts its initial `SetFocus` for the session it is
+   about to start), so the fix belongs at the producer: `SceneView.Dispose` now joins via `FeedHandle.StopAsync` and
+   sets a flag that makes any already-queued tick a no-op. Measured: 2 stale frames per switch before, 0 after.
+3. **Every `Control` subscribes to the static `UI.Paint`/`UI.ThemeChanged` in its constructor**, and only `Dispose`
+   unsubscribes. So a discarded tree keeps painting into a detached buffer for the life of the process. The shell
+   records are `IDisposable` now and tear down what they hold (view, sidebar, menu, runner), but the leaves — labels,
+   sliders, sections — are not reachable from there and stay subscribed. Bounded and cheap (a no-op delegate call per
+   control per frame), so it is **not** fixed here. **A tree-walking dispose is the library follow-up**, and
+   `ILayout.Controls` is per-cell rather than deep, so it is a real piece of work rather than a one-liner.
+
+Verified by `--switch`, a new harness mode and the only one that runs the UI **loop**: three sessions
+(sandbox → viewer → sandbox), asserting each starts and paints, that a hotkey from the previous session no longer
+fires, and that no earlier shell is still drawing. 13 checks, and 3 of them fail if either fix is backed out.
 
 ### Three sidebar buttons, and what they cost
 
@@ -312,7 +352,12 @@ Still open from the vtop eval loop. Evidence for each is in `eval-findings.md`.
 4. **Cheap doc cross-links** — V-24 (no stated way to turn *off* a control's mouse handling), V-26
    (`ConsoleSnapshot`'s mouse API isn't mentioned in "Testing without a terminal", where everyone starts), V-19
    (`TitleBorderStyle` has no `None`, and the default adds a divider under the title). V-16 is closed.
-5. **V-31 — `DataTable` grid style.** Attempted in the 0.1.9 session and **reverted**; see `eval-findings.md` for
+5. **A tree-walking dispose.** Every `Control` subscribes to the static `UI.Paint`/`UI.ThemeChanged` in its
+   constructor and only `Dispose` unsubscribes, so any app that discards a control tree (rather than exiting) leaks
+   the whole tree's handlers. There is no way to tear a tree down: `ILayout.Controls` is per-cell, not deep, and a
+   `CompositeControl`'s children are not in it at all. Found by the shell-switch work above; deferred there because
+   the residual cost is a no-op delegate call per stale control per frame.
+6. **V-31 — `DataTable` grid style.** Attempted in the 0.1.9 session and **reverted**; see `eval-findings.md` for
    the three geometry traps. Short version: don't model Spectre's table layout, *measure* it — `Render` already
    renders to segments and counts them, so derive both the top chrome and the horizontal overhead from the real
    table and delete the `- 1` and `3n + 1` constants before adding any enum.

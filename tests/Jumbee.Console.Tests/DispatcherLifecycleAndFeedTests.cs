@@ -125,6 +125,69 @@ public class DispatcherLifecycleAndFeedTests
         }
     }
 
+    // ④ ---------------------------------------------------------------------------------------------------------
+    // A hotkey belongs to the session that registered it. This only matters to an app that starts the UI more than
+    // once in a process -- swapping between two screens, say -- and there it matters a lot: the surviving binding is
+    // a closure over the previous session's objects, which have been disposed by the time it fires.
+    // No UI session at all: with no UI thread running, RegisterHotKey/RestoreBuiltInHotKeys marshal inline, so the
+    // reset's own behaviour is asserted without depending on a loop starting, running and stopping first.
+    [Fact]
+    public void RestoreBuiltInHotKeys_DropsAppKeys_AndKeepsTheLibrarys()
+    {
+        UiTestHarness.EnsureStopped();
+        var fired = 0;
+        var key = UI.HotKeys.Char('~');
+        var label = new TextLabel(TextLabelOrientation.Horizontal, "x");
+
+        UI.RegisterHotKey(key, () => fired++);
+        UI.SendInput(label, key, routeGlobal: true);
+        Assert.Equal(1, fired);
+
+        UI.RestoreBuiltInHotKeys();
+
+        UI.SendInput(label, key, routeGlobal: true);
+        Assert.Equal(1, fired);
+
+        // F1 is the built-in help toggle, and a no-op with no control supplying help — so the observable claim is
+        // that the global route still CONSUMES the key, i.e. the library's own bindings survived the reset.
+        var f1 = new ConsoleGUI.Input.InputEvent(UI.HotKeys.F1);
+        new UI.GlobalInputListener().OnInput(f1);
+        Assert.True(f1.Handled);
+    }
+
+    // The scenario the reset exists for: one process, two UIs. Without it the second session inherits a binding
+    // closed over the first session's objects, which by then have been disposed.
+    [Fact]
+    public void HotKeysRegisteredForASession_DoNotReachTheNextOne()
+    {
+        UiTestHarness.EnsureStopped();
+        var fired = 0;
+        var key = UI.HotKeys.Char('~');
+        var first = new TextLabel(TextLabelOrientation.Horizontal, "first");
+        var second = new TextLabel(TextLabelOrientation.Horizontal, "second");
+
+        // Registered BEFORE Start, as an app assembling its shell does — and as it happens the only ordering with no
+        // UI thread to marshal through, so the registration cannot be dropped by a loop that is still settling.
+        UI.RegisterHotKey(key, () => fired++);
+        _ = UI.Start(new VerticalStackPanel(first), 40, 8, fps: 66,
+            isAnsiTerminal: true, console: new StubConsole(40, 8), input: new NoInput());
+        UI.SendInput(first, key, routeGlobal: true);
+        Assert.Equal(1, fired);
+        UI.Stop();
+
+        _ = UI.Start(new VerticalStackPanel(second), 40, 8, fps: 66,
+            isAnsiTerminal: true, console: new StubConsole(40, 8), input: new NoInput());
+        try
+        {
+            UI.SendInput(second, key, routeGlobal: true);
+            Assert.Equal(1, fired);
+        }
+        finally
+        {
+            UI.Stop();
+        }
+    }
+
     // Helpers -------------------------------------------------------------------------------------------------
     private sealed class FeedProbe : Control
     {

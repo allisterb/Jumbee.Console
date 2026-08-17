@@ -13,8 +13,10 @@ namespace Jumbee.Console.SandboxDemo;
 public static class SandboxShell
 {
     #region Methods
-    /// <summary>Builds the sandbox scene over <paramref name="populate"/>, which fills a fresh world.</summary>
-    public static Sandbox BuildSandbox(Action<PhysicsScene> populate, Action? onLoadModel = null)
+    /// <summary>Builds the sandbox scene over <paramref name="populate"/>, which fills a fresh world.
+    /// <paramref name="onSwitch"/> is invoked with the scene to change to; see <see cref="ShellType"/>.</summary>
+    public static Sandbox BuildSandbox(Action<PhysicsScene> populate, Action? onLoadModel = null,
+                                       Action<ShellType>? onSwitch = null)
     {
         var runner = new PhysicsRunner(scene =>
         {
@@ -66,7 +68,9 @@ public static class SandboxShell
         _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
 
         var loadModel = onLoadModel ?? (() => { });
-        var menu = SceneMenu.ForSandbox(view, runner, parameters, Reset, () => ToggleSidebar(sidebar), loadModel);
+        var switchTo = onSwitch ?? (_ => { });
+        var menu = SceneMenu.ForSandbox(view, runner, parameters, Reset, () => ToggleSidebar(sidebar), loadModel,
+            () => switchTo(ShellType.ModelViewer));
         var root = Compose(menu, footer, sidebar, view);
 
         // App-level keys are global hotkeys; everything that acts on the SCENE lives in SceneView instead, so it
@@ -83,8 +87,9 @@ public static class SandboxShell
         return new Sandbox(root, runner, view, sidebar, parameters, menu);
     }
 
-    /// <summary>Builds the model viewer over the mesh at <paramref name="startIndex"/>.</summary>
-    public static Viewer BuildViewer(int startIndex, Action? onOpenModels = null)
+    /// <summary>Builds the model viewer over the mesh at <paramref name="startIndex"/>.
+    /// <paramref name="onSwitch"/> is invoked with the scene to change to; see <see cref="ShellType"/>.</summary>
+    public static Viewer BuildViewer(int startIndex, Action? onOpenModels = null, Action<ShellType>? onSwitch = null)
     {
         var model = new ModelScene(startIndex);
         var view = new SceneView(model, new ShadedRenderer()) { Model = model };
@@ -106,7 +111,9 @@ public static class SandboxShell
         _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
 
         var openModels = onOpenModels ?? (() => { });
-        var menu = SceneMenu.ForViewer(view, model, () => ToggleSidebar(sidebar), openModels);
+        var switchTo = onSwitch ?? (_ => { });
+        var menu = SceneMenu.ForViewer(view, model, () => ToggleSidebar(sidebar), openModels,
+            () => switchTo(ShellType.Sandbox));
         var root = Compose(menu, footer, sidebar, view);
 
         UI.RegisterHotKey(UI.HotKeys.Char('u'), () => ToggleSidebar(sidebar));
@@ -143,6 +150,19 @@ public static class SandboxShell
     #endregion
 
     #region Private methods
+    // Disposing a Control cancels its background feeds and unsubscribes it from UI.Paint / UI.ThemeChanged, both of
+    // which are STATIC and both of which every Control subscribes to in its constructor. That costs nothing in an app
+    // that builds one tree and exits, and it is the whole game in one that builds a second: without it SceneView's
+    // 60 Hz feed keeps rendering a scene nobody is looking at, into the next session's dispatcher, once per switch.
+    //
+    // Only the pieces the shell records hold are reachable here. The leaves (labels, sliders, sections) stay
+    // subscribed to UI.Paint and repaint into a detached buffer — bounded, cheap, and the reason a tree-walking
+    // dispose is on the library backlog rather than being faked here.
+    private static void Teardown(params IDisposable[] parts)
+    {
+        foreach (var part in parts) part.Dispose();
+    }
+
     // The NDC half-span of a viewport on a wide terminal, used only before the first layout. See AimAtModel.
     private const double DefaultCellAspect = 0.6;
 
@@ -156,6 +176,21 @@ public static class SandboxShell
     #endregion
 
     #region Child types
+    /// <summary>Which of the app's two scenes is running.</summary>
+    /// <remarks>
+    /// A switch is a request, not a call: the menu item hands this back and stops the UI, and the caller's loop
+    /// builds the other shell after the current one has fully torn down. Building the next shell from inside the menu
+    /// handler would start a UI from within the running one's frame loop, and nest a shell per switch.
+    /// </remarks>
+    public enum ShellType
+    {
+        /// <summary>The physics sandbox.</summary>
+        Sandbox,
+
+        /// <summary>The model viewer.</summary>
+        ModelViewer,
+    }
+
     /// <summary>The assembled sandbox scene.</summary>
     /// <param name="Root">The root layout to hand to <see cref="UI.Start"/>.</param>
     /// <param name="Runner">The physics thread. Dispose it when the UI stops.</param>
@@ -164,7 +199,16 @@ public static class SandboxShell
     /// <param name="Parameters">The world settings the sidebar tunes.</param>
     /// <param name="Menu">The application menu.</param>
     public readonly record struct Sandbox(ILayout Root, PhysicsRunner Runner, SceneView View, SidebarPanel Sidebar,
-                                          SandboxParameters Parameters, MenuBar Menu);
+                                          SandboxParameters Parameters, MenuBar Menu) : IDisposable
+    {
+        /// <summary>Stops the physics thread and unwires the controls. Call it once the UI has stopped, and always
+        /// before building another shell in the same process — see <see cref="Teardown"/>.</summary>
+        public void Dispose()
+        {
+            Runner.Dispose();
+            Teardown(View, Sidebar, Menu);
+        }
+    }
 
     /// <summary>The assembled model viewer.</summary>
     /// <param name="Root">The root layout to hand to <see cref="UI.Start"/>.</param>
@@ -173,6 +217,10 @@ public static class SandboxShell
     /// <param name="Sidebar">The right-hand panel.</param>
     /// <param name="Menu">The application menu.</param>
     public readonly record struct Viewer(ILayout Root, ModelScene Model, SceneView View, ModelSidebarPanel Sidebar,
-                                         MenuBar Menu);
+                                         MenuBar Menu) : IDisposable
+    {
+        /// <summary>Unwires the controls. Call it once the UI has stopped — see <see cref="Teardown"/>.</summary>
+        public void Dispose() => Teardown(View, Sidebar, Menu);
+    }
     #endregion
 }

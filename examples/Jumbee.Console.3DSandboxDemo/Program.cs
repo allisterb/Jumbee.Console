@@ -4,6 +4,8 @@ using System.Numerics;
 using Jumbee.Console;
 using Jumbee.Console.SandboxDemo;
 
+using ShellType = Jumbee.Console.SandboxDemo.SandboxShell.ShellType;
+
 // --- Jumbee.Console 3D sandbox ----------------------------------------------------------------------------------
 // Two scenes over one renderer stack.
 //
@@ -22,6 +24,11 @@ using Jumbee.Console.SandboxDemo;
 // Threading (sandbox only) is the pattern from docs/controls/Live Data.md: the physics world, the body list and
 // every Box3D handle belong to the physics thread, which publishes one immutable SceneSnapshot per tick. The UI
 // thread only ever reads the newest snapshot and posts mutations back. There is no lock anywhere.
+
+// The scene the running one asked to become, and which model the viewer should open on when it is next built. Both
+// are read by Run between shells — never while one is running — so neither needs marshalling.
+ShellType? pending = null;
+var viewerStart = 0;
 
 var modelPath = new Argument<string?>("path")
 {
@@ -54,7 +61,7 @@ objCommand.SetAction(async (parse, ct) =>
     // The generated knot goes last, so it is always reachable with '[' / ']' even when a directory was given, and
     // so the viewer still has something to show if the directory turns out to hold no models at all.
     Meshes.Register(Meshes.TorusKnot(), "knot");
-    return await RunModelViewer(start);
+    return await Run(ShellType.ModelViewer, start);
 });
 
 var root = new RootCommand("A real-time 3D rigid-body sandbox in the terminal, with three renderers.")
@@ -69,10 +76,30 @@ root.SetAction(async (parse, ct) =>
     // self-occlusion to be compared on, and it means the mesh path works with no third-party asset.
     Meshes.Register(Meshes.TorusKnot(), "knot");
     if (!LoadModels(parse.GetValue(sandboxModels))) return 1;
-    return await RunSandbox();
+    return await Run(ShellType.Sandbox, 0);
 });
 
 return await root.Parse(args).InvokeAsync();
+
+// The app's whole lifetime: run one scene until its UI stops, and if it stopped in order to become the other one,
+// build that and go round again. Quit leaves `pending` null and falls out.
+//
+// A LOOP, not a menu item that calls RunSandbox/RunModelViewer directly. A menu handler runs on the UI thread inside
+// the frame loop of the shell it belongs to, so starting the next UI from there would start one from inside another
+// and keep a shell alive per switch. Here the switch is only a request: the handler records it and calls UI.Stop,
+// the awaited Start completes, the shell is disposed, and only then is the next one built. Nothing overlaps.
+async Task<int> Run(ShellType shell, int startIndex)
+{
+    while (true)
+    {
+        pending = null;
+        var code = shell == ShellType.Sandbox ? await RunSandbox() : await RunModelViewer(startIndex);
+        if (code != 0 || pending is not { } next) return code;
+
+        shell = next;
+        startIndex = viewerStart;
+    }
+}
 
 // Loads every model the path resolved to, returning the index to open on, or -1 on a reported failure.
 //
@@ -112,17 +139,29 @@ static bool LoadModel(string path)
 static bool LoadModels(string[]? paths) => (paths ?? []).All(LoadModel);
 
 // The default scene: physics, a floor, and everything you can do to a pile of bodies.
-static async Task<int> RunSandbox()
+async Task<int> RunSandbox()
 {
     // The whole shell — viewport, sidebar, menu, footer, keys — is assembled by SandboxShell so the headless
     // harness can drive the real one rather than a rebuild of it.
     SandboxShell.Sandbox app = default;
-    app = SandboxShell.BuildSandbox(Populate, () => LoadMeshDialog(app));
+    app = SandboxShell.BuildSandbox(Populate, () => LoadMeshDialog(app), RequestSwitch);
     UI.Post(() => UI.SetFocus(app.View));
 
     await UI.Start(app.Root, width: 120, height: 48, fps: 60);
-    app.Runner.Dispose();
+    // Whatever the spawn drop-down was pointing at is what the viewer opens on, so switching to it shows the model
+    // you were about to throw rather than an arbitrary one.
+    viewerStart = Math.Max(0, app.View.Spawn.MeshId);
+    app.Dispose();
     return 0;
+}
+
+// A switch is recorded and the UI stopped; Run's loop does the rest. Setting `pending` from a menu handler is safe
+// without marshalling because that handler already runs on the UI thread, and Run only reads it after Start's task
+// has completed — which happens after the UI thread has gone.
+void RequestSwitch(ShellType to)
+{
+    pending = to;
+    UI.Stop();
 }
 
 // Load a model while the app is running, which is what --model used to be the only way to do. The chosen mesh
@@ -164,7 +203,7 @@ static void OpenModelsDialog(SandboxShell.Viewer app) =>
 // The `obj` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
 // ground stays — it costs nothing and it earns its place, giving the model a sense of scale and somewhere for the
 // ambient occlusion to land, both of which a model floating in a void loses.
-static async Task<int> RunModelViewer(int startIndex)
+async Task<int> RunModelViewer(int startIndex)
 {
     if (Meshes.RegisteredCount == 0)
     {
@@ -173,10 +212,13 @@ static async Task<int> RunModelViewer(int startIndex)
     }
 
     SandboxShell.Viewer app = default;
-    app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app));
+    app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app), RequestSwitch);
     UI.Post(() => UI.SetFocus(app.View));
 
     await UI.Start(app.Root, width: 120, height: 48, fps: 60);
+    // Come back to the model you left on, if this one is switched away from and later returned to.
+    viewerStart = app.Model.MeshId;
+    app.Dispose();
     return 0;
 }
 

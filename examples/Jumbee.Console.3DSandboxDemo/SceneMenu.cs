@@ -15,7 +15,7 @@ public static class SceneMenu
     #region Methods
     /// <summary>The sandbox menu: scene, render, spawn, camera and help.</summary>
     public static MenuBar ForSandbox(SceneView view, PhysicsRunner runner, SandboxParameters parameters,
-                                     Action reset, Action toggleSidebar, Action loadMesh)
+                                     Action reset, Action toggleSidebar, Action loadMesh, Action? switchScene = null)
     {
         var bar = new MenuBar();
 
@@ -30,6 +30,12 @@ public static class SceneMenu
             MenuItem.Separator,
             new MenuItem("Load model…", loadMesh) { Shortcut = "o" },
             MenuItem.Separator,
+            // Tears this scene down and builds the other one in the same process — see SandboxShell.ShellType.
+            // Disabled rather than hidden when the host did not supply a switch (the headless harness).
+            new MenuItem("Switch to model viewer", switchScene ?? (() => { }))
+            {
+                Enabled = switchScene is not null,
+            },
             new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
         ]);
 
@@ -82,7 +88,8 @@ public static class SceneMenu
     }
 
     /// <summary>The model viewer's menu: no simulation to pause, and the transforms the sandbox does not have.</summary>
-    public static MenuBar ForViewer(SceneView view, ModelScene model, Action toggleSidebar, Action openModels)
+    public static MenuBar ForViewer(SceneView view, ModelScene model, Action toggleSidebar, Action openModels,
+                                    Action? switchScene = null)
     {
         var bar = new MenuBar();
 
@@ -105,6 +112,7 @@ public static class SceneMenu
                 Shortcut = "a",
             },
             MenuItem.Separator,
+            new MenuItem("Switch to sandbox", switchScene ?? (() => { })) { Enabled = switchScene is not null },
             new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
         ]);
 

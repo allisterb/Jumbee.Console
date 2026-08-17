@@ -14,6 +14,7 @@ with a `$(Repo)` property at the top pointing at the repo root.
 |---|---|
 | *(none)* | 63 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
+| `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
@@ -36,6 +37,12 @@ with a `$(Repo)` property at the top pointing at the repo root.
 - **Colour read back from emitted ANSI** (`AnsiConsoleSnapshot`), so a selection highlight is verified as pixels
   rather than as internal state.
 - **The `obj` path-resolution rules**, all of which are edge cases, via `ModelLibrary.Resolve`.
+- **The only mode that runs the UI LOOP.** Everything else renders through `ConsoleSnapshot` with no loop at all, so
+  `--switch` is where anything lifecycle-shaped shows up: a second `UI.Start` after a `Stop`, session state that
+  outlives the session that made it, a background feed still posting after its control is gone. It counts frames
+  through `SceneView.Drew` rather than asserting a method returned, because the question is whether a shell is
+  *alive*. Note it runs with `isAnsiTerminal: false` — the ANSI renderer writes to stdout through
+  `ConsoleManager.AnsiOutput` and never consults the `IConsole`, so a stub console silences nothing.
 - **The real shell, not a rebuild of it.** `--shell` drives `SandboxShell`, the same assembly `Program.cs` uses —
   which matters precisely because keyboard routing differs between the root-layout path and a hand-built container.
   It also asserts the sidebar's central claim in both directions: press `v` and the drop-down follows; set a
