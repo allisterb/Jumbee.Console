@@ -19,7 +19,7 @@ object ←
 
 ## Remarks
 
-<p>Two measurement styles: <xref href="Jumbee.Console.ProcessMetrics.RecordFrame(System.Double%2cSystem.Double%2cSystem.Int64%2cSystem.Boolean%2cSystem.Double)" data-throw-if-not-resolved="false"></xref> takes the <em>directly measured</em> cost of one
+<p>Two measurement styles: <xref href="Jumbee.Console.ProcessMetrics.RecordFrame(System.Double%2cSystem.Double%2cSystem.Int64%2cSystem.Boolean%2cSystem.Double%2cSystem.Int64)" data-throw-if-not-resolved="false"></xref> takes the <em>directly measured</em> cost of one
 draw/paint cycle (high-resolution wall time + allocation delta, bracketed around the render in the UI loop) —
 this is immune to the coarse (~15 ms) resolution of process CPU time and, read as a <em>peak</em>, surfaces
 bursts an average would hide. <xref href="Jumbee.Console.ProcessMetrics.Sample" data-throw-if-not-resolved="false"></xref> snapshots cumulative process counters (CPU time, GC pause,
@@ -181,6 +181,42 @@ public double ExceptionsPerSecond { get; }
 
  double
 
+### <a id="Jumbee_Console_ProcessMetrics_FrameLatencyMsAvg"></a> FrameLatencyMsAvg
+
+Mean end-to-end time (ms) from starting a frame to it reaching the terminal — render, queue wait and write,
+summed PER FRAME over the frames whose write has completed.
+
+```csharp
+public double FrameLatencyMsAvg { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+LATENCY, not throughput: the write overlaps the next frame's render, so the frame rate is bounded by
+whichever side is slower, never by this sum.
+
+### <a id="Jumbee_Console_ProcessMetrics_FrameLatencyMsPeak"></a> FrameLatencyMsPeak
+
+The worst end-to-end frame latency (ms) in the window — the frame that took longest to reach the
+    terminal.
+
+```csharp
+public double FrameLatencyMsPeak { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+Only a per-frame pairing can give this: adding the separate averages yields a mean and can say
+    nothing about the worst case.
+
 ### <a id="Jumbee_Console_ProcessMetrics_GcPausePercent"></a> GcPausePercent
 
 Fraction of wall time (0..100) the runtime spent paused for GC over the rolling window — the
@@ -232,7 +268,7 @@ public int Gen2Collections { get; }
 
 ### <a id="Jumbee_Console_ProcessMetrics_LockContentions"></a> LockContentions
 
-Total monitor lock contentions since process start — the no-lock dagger; 0 for the single-threaded UI.
+Total monitor lock contentions since process start.
 
 ```csharp
 public long LockContentions { get; }
@@ -241,6 +277,29 @@ public long LockContentions { get; }
 #### Property Value
 
  long
+
+#### Remarks
+
+Cumulative and never reset, so it cannot say whether contention is happening <em>now</em> — prefer
+    <xref href="Jumbee.Console.ProcessMetrics.LockContentionsPerSecond" data-throw-if-not-resolved="false"></xref> for that.
+
+### <a id="Jumbee_Console_ProcessMetrics_LockContentionsPerSecond"></a> LockContentionsPerSecond
+
+Monitor lock contentions per second over the rolling window — the no-lock dagger; 0 for the
+    single-threaded UI.
+
+```csharp
+public double LockContentionsPerSecond { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+A RATE, not a total, so it describes contention happening now. <xref href="Jumbee.Console.ProcessMetrics.LockContentions" data-throw-if-not-resolved="false"></xref> only ever
+climbs, so a handful picked up during startup reads as permanent trouble long after everything has settled.
 
 ### <a id="Jumbee_Console_ProcessMetrics_ManagedHeapBytes"></a> ManagedHeapBytes
 
@@ -296,6 +355,24 @@ public double RenderTimeMsAvg { get; }
 #### Property Value
 
  double
+
+### <a id="Jumbee_Console_ProcessMetrics_RenderTimeMsDrawnAvg"></a> RenderTimeMsDrawnAvg
+
+Mean draw/paint cycle wall time over the frames that actually REDREW, in milliseconds.
+
+```csharp
+public double RenderTimeMsDrawnAvg { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+<xref href="Jumbee.Console.ProcessMetrics.RenderTimeMsAvg" data-throw-if-not-resolved="false"></xref> counts idle frames too, which are cheap, so it understates what a frame that
+draws actually costs — the more retained the UI, the further apart the two drift. This is the one to pair
+with the terminal-write timings, since those exist only for frames that drew.
 
 ### <a id="Jumbee_Console_ProcessMetrics_RenderTimeMsPeak"></a> RenderTimeMsPeak
 
@@ -392,13 +469,13 @@ Stops collection and releases resources.
 public void Dispose()
 ```
 
-### <a id="Jumbee_Console_ProcessMetrics_RecordFrame_System_Double_System_Double_System_Int64_System_Boolean_System_Double_"></a> RecordFrame\(double, double, long, bool, double\)
+### <a id="Jumbee_Console_ProcessMetrics_RecordFrame_System_Double_System_Double_System_Int64_System_Boolean_System_Double_System_Int64_"></a> RecordFrame\(double, double, long, bool, double, long\)
 
 Records the directly-measured cost of one draw/paint cycle (from the UI loop, which brackets the
     render), and takes a cumulative sample for the windowed process rates.
 
 ```csharp
-public void RecordFrame(double renderMs, double periodMs, long renderAllocBytes, bool redrawn = false, double dirtyAreaFraction = 0)
+public void RecordFrame(double renderMs, double periodMs, long renderAllocBytes, bool redrawn = false, double dirtyAreaFraction = 0, long ordinal = 0)
 ```
 
 #### Parameters
@@ -425,9 +502,35 @@ Bytes allocated on the managed heap during the cycle.
 Fraction (0..1) of the screen re-composited this frame. Feeds
     <xref href="Jumbee.Console.ProcessMetrics.DirtyAreaPercentAvg" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.ProcessMetrics.DirtyAreaPercentPeak" data-throw-if-not-resolved="false"></xref> (only counted on redrawn frames).
 
+`ordinal` long
+
+This frame's monotonic number, so a terminal write completing later can be matched back
+    to it by <xref href="Jumbee.Console.ProcessMetrics.RecordWrite(System.Int64%2cSystem.Double%2cSystem.Double)" data-throw-if-not-resolved="false"></xref>. 0 when the caller does not track one.
+
 #### Remarks
 
 Call once per frame on the UI thread.
+
+### <a id="Jumbee_Console_ProcessMetrics_RecordWrite_System_Int64_System_Double_System_Double_"></a> RecordWrite\(long, double, double\)
+
+Attaches the terminal-write timings for frame <code class="paramref">ordinal</code>, completing that frame's record.
+
+```csharp
+public void RecordWrite(long ordinal, double waitMs, double writeMs)
+```
+
+#### Parameters
+
+`ordinal` long
+
+`waitMs` double
+
+`writeMs` double
+
+#### Remarks
+
+Called from the write continuation, off the UI thread, however many frames after the render. Silently does
+nothing when the frame has already aged out of the window — a write that slow has no frame left to belong to.
 
 ### <a id="Jumbee_Console_ProcessMetrics_Sample"></a> Sample\(\)
 
@@ -439,7 +542,7 @@ public void Sample()
 
 #### Remarks
 
-Called by <xref href="Jumbee.Console.ProcessMetrics.RecordFrame(System.Double%2cSystem.Double%2cSystem.Int64%2cSystem.Boolean%2cSystem.Double)" data-throw-if-not-resolved="false"></xref> once per frame; exposed for callers/tests without a frame loop.
+Called by <xref href="Jumbee.Console.ProcessMetrics.RecordFrame(System.Double%2cSystem.Double%2cSystem.Int64%2cSystem.Boolean%2cSystem.Double%2cSystem.Int64)" data-throw-if-not-resolved="false"></xref> once per frame; exposed for callers/tests without a frame loop.
 
 ### <a id="Jumbee_Console_ProcessMetrics_Start"></a> Start\(\)
 

@@ -39,6 +39,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [DockPanel](Jumbee.Console.DockPanel.md) — A two-child layout that pins one control to an edge and fills the remaining space with the other.
 - [DocumentClosingEventArgs](Jumbee.Console.DocumentClosingEventArgs.md) — Arguments for `DocumentClosing`. Set `Cancel` to keep the document open (e.g. after confirming unsaved changes).
 - [FeedHandle](Jumbee.Console.FeedHandle.md) — A handle to a running background feed started by `Feed` and its overloads. Cancel it to stop the feed; await `Completion` (or `StopAsync`) to know the in-flight tick has finished — for safely disposing a resource the feed's producer reads.
+- [FileBrowser](Jumbee.Console.FileBrowser.md) — A two-pane file chooser: a lazily-populated directory `Tree` on the left, the current directory's contents in a `ListBox` on the right, a path field above and a filter drop-down below.
 - [FocusInputEvent](Jumbee.Console.FocusInputEvent.md) — Terminal focus gained/lost (DEC mode 1004).
 - [Footer](Jumbee.Console.Footer.md) — A one-row key-hints bar (e.g. `^j Send ^t Method ^c Quit f1 Help`), filling the available width.
 - [Gauge](Jumbee.Console.Gauge.md) — A single-row horizontal progress bar: the track is filled proportional to `Value` / `Max`, optionally followed by the percentage and the raw value — e.g. `████████░░░░ 34.5% (126)`. For dashboards (year/day progress, a deployment %, a capacity meter).
@@ -66,7 +67,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [MultiTabCodeEditor](Jumbee.Console.MultiTabCodeEditor.md) — A tabbed group of `CodeEditor`s — a VS-Code-style editor area. Each open document is a closable tab (click the ✕ on the active/hovered tab), and a "+" button at the end of the bar opens a new document.
 - [Overlay](Jumbee.Console.Overlay.md) — A layered layout: a persistent `Bottom` layer with an optional floating popup composited on top (wraps ConsoleGUI's `Overlay`).
 - [PasteInputEvent](Jumbee.Console.PasteInputEvent.md) — A bracketed-paste payload, delivered as one event so it is never re-interpreted as keystrokes.
-- [PerfHud](Jumbee.Console.PerfHud.md) — A translucent "glass" HUD showing live UI telemetry — frame draw/paint times (µs), CPU, working set, allocation rate and, the headline for a no-lock design, monitor lock contentions — floating over the app.
+- [PerfHud](Jumbee.Console.PerfHud.md) — A translucent "glass" HUD showing live UI telemetry — render, terminal-write and queue-wait times (µs), CPU, working set, allocation rate and, the headline for a no-lock design, monitor lock contentions — floating over the app.
 - [Plot](Jumbee.Console.Plot.md) — A line/scatter chart backed by the ConsolePlot library, rendered into the control's buffer. Add data with `AddSeries` and tune the axes/grid/ticks with the `Configure*` methods.
 - [PlotSeries](Jumbee.Console.PlotSeries.md) — A live, updatable series in a `Plot`. Returned by `AddLiveSeries` (line), `AddLiveScatter` (markers) or `AddLiveBars`; hold onto it and feed data as it arrives with `SetData`, `SetValues`, `Push` or `Clear`.
 - [ProcessMetrics](Jumbee.Console.ProcessMetrics.md) — Collects live process/runtime performance metrics for the perf HUD by reading the runtime APIs the `System.Runtime` meter wraps (`GC`, `Environment`, `ThreadPool`, `Monitor`) directly — no `MeterListener`, so there is nothing to sample-schedule and no observable-instrument staleness.
@@ -82,6 +83,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [Select](Jumbee.Console.Select.md) — A drop-down selector.
 - [SelectionList](Jumbee.Console.SelectionList.md) — A vertical list of independently-checkable options (multi-select).
 - [SelectionStylesExtensions](Jumbee.Console.SelectionStylesExtensions.md) — Turns a `SelectionStyle` into the prefix + text style a control applies to its selected item.
+- [Slider](Jumbee.Console.Slider.md) — A single-row draggable value control: an optional `Label`, a track filled to `Value` between `Minimum` and `Maximum`, and an optional numeric readout — e.g. `Gravity ████▌ 9.80`.
 - [Sparkline](Jumbee.Console.Sparkline.md) — A compact, single-row chart that draws a series of numeric values as block bars (one cell per value), scaling each value's height against the series maximum.
 - [SpectreControl-1](Jumbee.Console.SpectreControl-1.md) — Wraps an existing Spectre.Console `IRenderable` control for use with ConsoleGUI control and layout types.
 - [SpectreLiveDisplay](Jumbee.Console.SpectreLiveDisplay.md) — A Spectre.Console LiveDisplay widget.
@@ -126,8 +128,10 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [PlotPalette](Jumbee.Console.PlotPalette.md) — The ordered colours a plot cycles through for series that don't name one.
 - [ProgressBarGlyphs](Jumbee.Console.ProgressBarGlyphs.md) — The glyphs (no colours) a `ProgressBar` draws its bar with: the `Fill` for a filled cell and the `Track` for an empty one, plus the `Mode` that selects solid-band or per-cell-glyph rendering.
 - [ProgressBarStyle](Jumbee.Console.ProgressBarStyle.md) — The per-part `Style` a `ProgressBar` composes: the task `Description`, the filled and empty portions of the bar (`Fill`/`Track`), and the three optional readouts — `Percentage`, `Time` and `Spinner`.
+- [RowSpan](Jumbee.Console.RowSpan.md) — A run of content rows: Start` and the Height` rows following it.
 - [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md) — The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track behind it, and the two end arrows.
 - [ScrollBarStyle](Jumbee.Console.ScrollBarStyle.md) — The per-part `Style` (foreground/background/decoration, no glyph) a control frame applies to its vertical scrollbar.
+- [SliderStyle](Jumbee.Console.SliderStyle.md) — The per-part `Style` a `Slider` composes: the `Label`, the filled and empty portions of the track (`Fill`/`Track`), the draggable `Thumb`, and the numeric `Value` readout.
 - [Style](Jumbee.Console.Style.md) — A text style — foreground/background colour and text decoration — wrapping a Spectre.Console style. Exposes the named colour palette (`Red1`, `Cyan1`, …) and decoration presets (`Bold`, `Italic`, …) as ready-made tokens; combine them with `|`.
 - [TitleStyle](Jumbee.Console.TitleStyle.md) — Describes how a control frame title is aligned, bordered, and colored.
 
@@ -139,6 +143,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [IInputSource](Jumbee.Console.IInputSource.md) — Supplies `TerminalInputEvent`s (keys, mouse, paste, focus) to the UI input loop.
 - [ILayout](Jumbee.Console.ILayout.md) — Common interface for Jumbee.Console layout classes: a 2-D grid of focusable cells over a ConsoleGUI control, with focus navigation and input routing.
 - [IPty](Jumbee.Console.IPty.md) — A pseudo-terminal session: a child process attached to a PTY, exposing its stdin/stdout as streams.
+- [IScrollable](Jumbee.Console.IScrollable.md) — A control whose content can be taller than the space it is given, and which therefore wants its `ControlFrame` to scroll it.
 - [IStyleTheme](Jumbee.Console.IStyleTheme.md) — The general appearance theme: a set of semantic `Style` tokens (foreground + background + decoration) that controls compose when resolving their default appearance, plus the rest of a control's non-glyph styling — e.g. a frame's border shape (`FrameBorder`) and its title's position/border/colour.
 - [ITheme](Jumbee.Console.ITheme.md) — A complete theme bundling an `IStyleTheme` and an `IGlyphTheme`, for callers that want to customise both colours/styles and glyphs as one unit and apply them together (via `UI.SetTheme(ITheme)`).
 
@@ -153,6 +158,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [DialogButtons](Jumbee.Console.DialogButtons.md) — The predefined button set a `Dialog` shows along its bottom edge.
 - [DialogResult](Jumbee.Console.DialogResult.md) — Which button dismissed a `Dialog` (or how it was dismissed).
 - [DockedControlPlacement](Jumbee.Console.DockedControlPlacement.md) — Which edge a `DockPanel` pins its docked control to.
+- [FileBrowserMode](Jumbee.Console.FileBrowserMode.md) — What a `FileBrowser` is asking the user to choose.
 - [FocusStyle](Jumbee.Console.FocusStyle.md) — How the themed default focus cue is drawn on a focused control that isn't showing focus another way (no visible frame border, and `Control.RendersOwnFocus` is false).
 - [Justify](Jumbee.Console.Justify.md) — Horizontal alignment of text within its available width.
 - [Language](Jumbee.Console.Language.md) — A source language for syntax highlighting, shared by the text/code controls (e.g. `TextEditor`, `CodeEditor`). `None` renders plain, unhighlighted text.

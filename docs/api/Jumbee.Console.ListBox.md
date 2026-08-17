@@ -6,7 +6,7 @@ Assembly: Jumbee.Console.dll
 Displays a flat list of items and allows user input navigation and selection.
 
 ```csharp
-public class ListBox : RenderableControl, IFocusable
+public class ListBox : RenderableControl, IFocusable, IScrollable
 ```
 
 #### Inheritance
@@ -19,7 +19,8 @@ Control ←
 
 #### Implements
 
-[IFocusable](Jumbee.Console.IFocusable.md)
+[IFocusable](Jumbee.Console.IFocusable.md), 
+[IScrollable](Jumbee.Console.IScrollable.md)
 
 #### Inherited Members
 
@@ -57,6 +58,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -86,8 +88,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -169,6 +169,25 @@ public ListBox(params IEnumerable<string> items)
 `items` IEnumerable<string\>
 
 ## Properties
+
+### <a id="Jumbee_Console_ListBox_CommitOnClick"></a> CommitOnClick
+
+Whether a single click <xref href="Jumbee.Console.ListBox.Committed?text=commits" data-throw-if-not-resolved="false"></xref> the row it selects. Default
+    <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>.
+
+```csharp
+public bool CommitOnClick { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+Set <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> for a list the user should be able to look through before acting on it — a file
+chooser, a picker with a preview pane — where a click should only <em>select</em>. Committing then needs a
+double-click or Enter, which is the usual desktop split.
 
 ### <a id="Jumbee_Console_ListBox_ContextMenu"></a> ContextMenu
 
@@ -427,11 +446,10 @@ can further modify (or create) it.
 
 ### <a id="Jumbee_Console_ListBox_MeasureHeight_System_Int32_"></a> MeasureHeight\(int\)
 
-The control's intrinsic content height in rows at the given <code class="paramref">width</code>, or 0 when it has no
-intrinsic height and should fill the space its parent gives it (the default).
+The control's content height in rows at the given <code class="paramref">width</code> — the frame's scroll range.
 
 ```csharp
-protected override int MeasureHeight(int width)
+public virtual int MeasureHeight(int width)
 ```
 
 #### Parameters
@@ -444,11 +462,8 @@ protected override int MeasureHeight(int width)
 
 #### Remarks
 
-Consulted by <xref href="Jumbee.Console.Control.CalculateSize" data-throw-if-not-resolved="false"></xref> only when a parent leaves the height unbounded — i.e. inside a
-scrolling <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> — so the frame can size the control to its content and show an accurate
-scrollbar instead of a tiny thumb over ~1000 empty rows. Override on content controls (lists, editors,
-logs). A content change that alters the height must re-lay-out (<xref href="Jumbee.Console.Control.Initialize" data-throw-if-not-resolved="false"></xref>, not merely
-<xref href="Jumbee.Console.Control.Invalidate" data-throw-if-not-resolved="false"></xref>) so the frame re-measures.
+Measure the content, not the viewport: a list returns its item count, a text control its wrapped row count.
+Returning the visible height instead defeats the purpose, leaving a scrollbar that never moves.
 
 ### <a id="Jumbee_Console_ListBox_OnClick_ConsoleGUI_Space_Position_"></a> OnClick\(Position\)
 
@@ -574,6 +589,37 @@ public event EventHandler<ListBox.ListBoxItem>? ContextMenuOpening
 
 Use it to tailor the menu, or read <xref href="Jumbee.Console.ListBox.SelectedItem" data-throw-if-not-resolved="false"></xref> from the menu's own item handlers.
     Only fires when <xref href="Jumbee.Console.ListBox.ContextMenu" data-throw-if-not-resolved="false"></xref> is set.
+
+### <a id="Jumbee_Console_ListBox_FocusRowChanged"></a> FocusRowChanged
+
+Raised when the control's point of interest — a selected item, a caret — moves, carrying the content rows it
+now occupies. The wrapping <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> subscribes and scrolls them into view.
+
+```csharp
+public event EventHandler<RowSpan>? FocusRowChanged
+```
+
+#### Event Type
+
+ EventHandler<[RowSpan](Jumbee.Console.RowSpan.md)\>?
+
+#### Remarks
+
+<p>
+Declare it as a plain field-like event and raise it wherever the selection moves:
+
+<pre><code class="lang-csharp">public event EventHandler&lt;RowSpan&gt;? FocusRowChanged;
+private void Select(int i) { _index = i; FocusRowChanged?.Invoke(this, new RowSpan(RowOf(i))); }</code></pre>
+
+Written that way the compiler reports <code>CS0067</code> if it is never raised, which is the mistake worth
+catching: a control that says it has a moving selection and then leaves it to scroll off screen.
+</p>
+<p>
+The default implementation does nothing, so a control with no moving point of interest — a document viewer,
+a panel of static text — simply omits it. Scrolls that are not selection moves (following new output to the
+bottom, restoring a saved position) are not what this is for; call
+<xref href="Jumbee.Console.ControlFrame.ScrollIntoView(System.Int32%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref> directly instead.
+</p>
 
 ### <a id="Jumbee_Console_ListBox_SelectionChanged"></a> SelectionChanged
 

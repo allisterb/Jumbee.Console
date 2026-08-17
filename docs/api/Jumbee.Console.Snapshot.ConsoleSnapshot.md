@@ -72,6 +72,48 @@ latches <code>UI.MouseButton</code> the way the live input path does, which is w
 buttons apart (e.g. <code>ListBox</code> opening its <code>ContextMenu</code>). The pointer is left hovering the target
 afterwards, as it would be after a real click. Returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> if nothing is under it.
 
+### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_Drag_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_"></a> Drag\(ConsoleBuffer, int, int, int, int, int\)
+
+Drags from (<code class="paramref">fromX</code>, <code class="paramref">fromY</code>) to (<code class="paramref">toX</code>,
+<code class="paramref">toY</code>) in <code class="paramref">buffer</code>: press at the start, <code class="paramref">steps</code> moves
+along the way, release at the end.
+
+```csharp
+public static bool Drag(ConsoleBuffer buffer, int fromX, int fromY, int toX, int toY, int steps = 4)
+```
+
+#### Parameters
+
+`buffer` [ConsoleBuffer](Jumbee.Console.ConsoleBuffer.md)
+
+`fromX` int
+
+`fromY` int
+
+`toX` int
+
+`toY` int
+
+`steps` int
+
+#### Returns
+
+ bool
+
+#### Remarks
+
+<p>
+Honours mouse capture the way the live path does: if the control takes the capture on press (a splitter, a
+scrollbar thumb, a <code>Slider</code>), every later move and the release go to <em>it</em>, in its own frame,
+with no hit-test — so a drag that wanders off the control still steers it. Without that, a test drag would
+silently retarget whatever cell it passed over, and pass for the wrong reason.
+</p>
+<p>
+The capture origin is computed here from the press hit-test rather than read from <code>ConsoleManager</code>,
+which latches its own from a pointer position this headless path never sets. Returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>
+if nothing is under the start point.
+</p>
+
 ### <a id="Jumbee_Console_Snapshot_ConsoleSnapshot_ForegroundAt_Jumbee_Console_ConsoleBuffer_System_Int32_System_Int32_"></a> ForegroundAt\(ConsoleBuffer, int, int\)
 
 The foreground colour of the rendered cell at (<code class="paramref">x</code>, <code class="paramref">y</code>) as a

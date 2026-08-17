@@ -67,6 +67,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -96,8 +97,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -287,30 +286,18 @@ Override to describe the control and its keys. The result is deduplicated across
 <xref href="Jumbee.Console.HelpInfo.Name" data-throw-if-not-resolved="false"></xref>, so give controls of the same kind the same name. <xref href="Jumbee.Console.Control.OnHelp" data-throw-if-not-resolved="false"></xref> handlers
 can further modify (or create) it.
 
-### <a id="Jumbee_Console_ChatPrompt_MeasureHeight_System_Int32_"></a> MeasureHeight\(int\)
+### <a id="Jumbee_Console_ChatPrompt_IntrinsicHeight"></a> IntrinsicHeight\(\)
 
-The control's intrinsic content height in rows at the given <code class="paramref">width</code>, or 0 when it has no
-intrinsic height and should fill the space its parent gives it (the default).
+The intrinsic, fixed height counterpart of <xref href="Jumbee.Console.Control.IntrinsicWidth" data-throw-if-not-resolved="false"></xref> (e.g. a horizontal
+    <xref href="Jumbee.Console.TextLabel" data-throw-if-not-resolved="false"></xref> is one row tall). Returns 0 to fill the parent's height (the default).
 
 ```csharp
-protected override int MeasureHeight(int width)
+protected override int IntrinsicHeight()
 ```
-
-#### Parameters
-
-`width` int
 
 #### Returns
 
  int
-
-#### Remarks
-
-Consulted by <xref href="Jumbee.Console.Control.CalculateSize" data-throw-if-not-resolved="false"></xref> only when a parent leaves the height unbounded — i.e. inside a
-scrolling <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> — so the frame can size the control to its content and show an accurate
-scrollbar instead of a tiny thumb over ~1000 empty rows. Override on content controls (lists, editors,
-logs). A content change that alters the height must re-lay-out (<xref href="Jumbee.Console.Control.Initialize" data-throw-if-not-resolved="false"></xref>, not merely
-<xref href="Jumbee.Console.Control.Invalidate" data-throw-if-not-resolved="false"></xref>) so the frame re-measures.
 
 ### <a id="Jumbee_Console_ChatPrompt_WithSuggestions_System_String___"></a> WithSuggestions\(params string\[\]\)
 

@@ -183,24 +183,46 @@ hud.ShowTopRight();              // floats over the app in the ambient overlay
 hud.RegisterToggle();            // a hotkey to show/hide it
 ```
 
-What the counters mean, and what good looks like:
+What the counters mean, and what good looks like. Where a row shows two numbers, the second — after the slash — is
+the window's worst case, which is usually the more interesting half:
 
 | Counter | Reading it |
 |---|---|
-| `frame` | Time for the last frame, in µs, and the retained-frame count. |
+| `render` | UI-thread work per frame: layout, paint, composite. It **ends when the ANSI bytes are built**, not when they reach the terminal. Averaged over the frames that actually drew, so it doesn't get diluted by cheap idle ones. |
+| `write` | How long the terminal write itself took, and after the slash the peak write backlog (`q`). Runs off the UI thread. |
+| `wait` | How long a built frame waited for the previous frame's write before its own could start. This is where a terminal that can't keep up shows up first. |
+| `latency` | End-to-end for one frame: `render + wait + write`, summed for the *same* frame. How long from starting to draw something until it is on screen. |
 | `busy` | UI-thread utilisation. Near 0 when idle; sustained high means the UI thread is doing work that belongs on a background one. |
-| `redraw` / `dirty` | How much of the surface is being repainted. Persistently ~100% dirty on a mostly-static screen means something invalidates too broadly. |
+| `redraw` / `dirty` | `redraw` is the share of frames that drew *at all*; `dirty` is how much of the screen those frames repainted. High `redraw` with low `dirty` is healthy for an animated UI. Persistently ~100% `dirty` on a mostly-static screen means something invalidates too broadly. |
 | `alloc` | Bytes allocated per frame. This is the one that catches per-frame rebuilds. |
 | `exc/s` | First-chance exceptions per second, thrown *or* caught. **Should be 0.** A steady non-zero rate is exceptions used as control flow. |
-| `locks` | `Monitor.LockContentionCount`, **cumulative since process start** — not a rate. A single-threaded UI design should hold this at or near 0. |
+| `locks` | Monitor lock contention per second over the rolling window. A single-threaded UI design holds this at 0 while idle. |
 
-Two caveats worth internalising:
+### `latency` is not a frame budget
 
-- **`locks` is a running total**, so what matters is whether it *climbs* while the app sits there, not its absolute
-  value at a glance.
+`render` and `write` **overlap**: the terminal write for one frame runs while the next frame is being rendered. So
+the frame rate is bounded by whichever side is slower, never by their sum:
+
+- **throughput ceiling** ≈ `max(render, wait + write)` — the side that can't keep up
+- **latency** = `render + wait + write` — how stale what you're looking at is
+
+A `latency` of 3 ms does not mean a 333 fps ceiling. If `write` ever approaches your frame period, the *terminal* has
+become the limiter and `render` alone will still look perfectly healthy while the display falls behind.
+
+Trust `wait` over the queue depth for that. Frames also queue waiting for a thread-pool slot, so `q` reads a small
+non-zero even when the write costs nothing; `wait` measures time actually spent blocked.
+
+Three caveats worth internalising:
+
 - **`locks` measures contention, not correctness.** The dangerous bug — a background thread writing control state
   with no synchronization at all — produces *zero* contention and still corrupts. Use the counter to confirm you
   haven't introduced locking, not to prove your threading is right.
+- **A few `locks` per second during input is normal.** The background input reader hands bytes to the UI thread by
+  blocking on a read, and that handoff is a monitor operation. What matters is contention while the app is *idle*,
+  and contention that climbs steadily rather than tracking your typing.
+- **The HUD is not a free observer.** It costs render time and allocates (the frosted blend is per-cell and the
+  readout is rebuilt a few times a second). Measure with it off, or subtract it, before attributing a number to your
+  app.
 
 ## Checklist
 
@@ -210,7 +232,7 @@ Two caveats worth internalising:
 - [ ] Cheap and expensive sampling run on separate cadences.
 - [ ] The loop is cancellable, its task is retained, and its faults are observed.
 - [ ] Per-item failures are counted, not blanket-swallowed.
-- [ ] `exc/s` reads 0 and `locks` isn't climbing.
+- [ ] `exc/s` reads 0, and `locks` reads 0 while the app is idle.
 
 ## See also
 

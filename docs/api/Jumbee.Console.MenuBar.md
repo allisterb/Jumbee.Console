@@ -57,6 +57,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -86,8 +87,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -217,6 +216,32 @@ public MenuBar Add(string title, params MenuItem[] items)
 
  [MenuBar](Jumbee.Console.MenuBar.md)
 
+### <a id="Jumbee_Console_MenuBar_Add_System_String_System_Func_Jumbee_Console_MenuItem____"></a> Add\(string, Func<MenuItem\[\]\>\)
+
+Adds a top-level menu whose items are built by <code class="paramref">items</code> each time it opens. Returns
+    this for chaining.
+
+```csharp
+public MenuBar Add(string title, Func<MenuItem[]> items)
+```
+
+#### Parameters
+
+`title` string
+
+`items` Func<[MenuItem](Jumbee.Console.MenuItem.md)\[\]\>
+
+#### Returns
+
+ [MenuBar](Jumbee.Console.MenuBar.md)
+
+#### Remarks
+
+Use this whenever the menu reflects state that changes: <xref href="Jumbee.Console.MenuItem" data-throw-if-not-resolved="false"></xref> is immutable, so items passed
+to the other overload are fixed for the life of the bar and a <xref href="Jumbee.Console.MenuItem.Checked" data-throw-if-not-resolved="false"></xref> marker or an
+<xref href="Jumbee.Console.MenuItem.Enabled" data-throw-if-not-resolved="false"></xref> flag on one of them could never update. Building at open time costs a few
+allocations per click and keeps the menu honest with no extra state to synchronise.
+
 ### <a id="Jumbee_Console_MenuBar_GetHelpInfo"></a> GetHelpInfo\(\)
 
 The help shown for this control in the global help dialog (F1), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for no help.
@@ -263,8 +288,8 @@ protected override int IntrinsicWidth()
 
 #### Remarks
 
-Unlike <xref href="Jumbee.Console.Control.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> — a content height honored only when the parent is unbounded — an
-intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
+Unlike <xref href="Jumbee.Console.IScrollable.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> — a content height honored only when the parent is unbounded —
+an intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
 fixed extent (e.g. a vertical <xref href="Jumbee.Console.TextLabel" data-throw-if-not-resolved="false"></xref>, one column wide) so a docking/layout parent can't
 stretch them to fill the region.
 

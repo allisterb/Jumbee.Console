@@ -43,6 +43,53 @@ string CheckboxUnchecked { get; }
 
  string
 
+### <a id="Jumbee_Console_IGlyphTheme_File"></a> File
+
+The marker a <code>FileBrowser</code> draws before a file. Defaults to a blank of the same width as
+    <xref href="Jumbee.Console.IGlyphTheme.FolderClosed" data-throw-if-not-resolved="false"></xref>, so only folders carry a marker.
+
+```csharp
+string File { get; }
+```
+
+#### Property Value
+
+ string
+
+### <a id="Jumbee_Console_IGlyphTheme_FolderClosed"></a> FolderClosed
+
+The marker a <code>FileBrowser</code> draws before a folder. Defaults to <code>"▸"</code>.
+
+```csharp
+string FolderClosed { get; }
+```
+
+#### Property Value
+
+ string
+
+#### Remarks
+
+Should share a cell width with <xref href="Jumbee.Console.IGlyphTheme.File" data-throw-if-not-resolved="false"></xref> so names stay aligned down the listing.
+
+### <a id="Jumbee_Console_IGlyphTheme_MenuChecked"></a> MenuChecked
+
+The marker drawn against a checked <code>MenuItem</code>. Defaults to <code>"✓"</code> (override with
+    <code>"*"</code> for an ASCII terminal).
+
+```csharp
+string MenuChecked { get; }
+```
+
+#### Property Value
+
+ string
+
+#### Remarks
+
+Its width sets the marker column a menu level reserves once any of its items is checkable, so all
+    the labels in that level stay aligned.
+
 ### <a id="Jumbee_Console_IGlyphTheme_ProgressBar"></a> ProgressBar
 
 The glyphs a <code>ProgressBar</code> draws its bar with (colours come from <xref href="Jumbee.Console.IStyleTheme.ProgressBar" data-throw-if-not-resolved="false"></xref>).
@@ -105,6 +152,24 @@ string SelectionCaret { get; }
 #### Property Value
 
  string
+
+### <a id="Jumbee_Console_IGlyphTheme_SliderThumb"></a> SliderThumb
+
+The glyph a <code>Slider</code> draws its thumb with (colours come from <xref href="Jumbee.Console.IStyleTheme.Slider" data-throw-if-not-resolved="false"></xref>).
+    Defaults to <code>"█"</code>.
+
+```csharp
+string SliderThumb { get; }
+```
+
+#### Property Value
+
+ string
+
+#### Remarks
+
+Should be one cell wide: the thumb marks a single position on the track, and a wider glyph would
+    push the rest of the track out of alignment with the pointer.
 
 ### <a id="Jumbee_Console_IGlyphTheme_SwitchOff"></a> SwitchOff
 

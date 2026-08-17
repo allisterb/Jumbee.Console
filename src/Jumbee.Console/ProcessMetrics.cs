@@ -255,7 +255,18 @@ public sealed class ProcessMetrics : IDisposable
     public double ExceptionsPerSecond
         => TryWindow(out var o, out var n, out var ms) ? Math.Max(0, (n.Exceptions - o.Exceptions) / (ms / 1000.0)) : 0;
 
-    /// <summary>Total monitor lock contentions since process start — the no-lock dagger; 0 for the single-threaded UI.</summary>
+    /// <summary>Monitor lock contentions per second over the rolling window — the no-lock dagger; 0 for the
+    /// single-threaded UI.</summary>
+    /// <remarks>
+    /// A RATE, not a total, so it describes contention happening now. <see cref="LockContentions"/> only ever
+    /// climbs, so a handful picked up during startup reads as permanent trouble long after everything has settled.
+    /// </remarks>
+    public double LockContentionsPerSecond
+        => TryWindow(out var o, out var n, out var ms) ? Math.Max(0, (n.LockContentions - o.LockContentions) / (ms / 1000.0)) : 0;
+
+    /// <summary>Total monitor lock contentions since process start.</summary>
+    /// <remarks>Cumulative and never reset, so it cannot say whether contention is happening <em>now</em> — prefer
+    /// <see cref="LockContentionsPerSecond"/> for that.</remarks>
     public long LockContentions => Monitor.LockContentionCount;
 
     /// <summary>Cumulative number of generation-0 garbage collections since process start.</summary>
@@ -390,7 +401,8 @@ public sealed class ProcessMetrics : IDisposable
         double gcPauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
         long exceptions = Interlocked.Read(ref _exceptions);
         long workingSet = Environment.WorkingSet;                            // instantaneous gauge; cheap, no allocation
-        Push(new Snapshot(timestamp, cpuMs, allocated, gcPauseMs, exceptions, workingSet));
+        long lockContentions = Monitor.LockContentionCount;                  // cumulative; differenced over the window
+        Push(new Snapshot(timestamp, cpuMs, allocated, gcPauseMs, exceptions, workingSet, lockContentions));
     }
 
     /// <summary>Stops collection and releases resources.</summary>
@@ -474,7 +486,7 @@ public sealed class ProcessMetrics : IDisposable
     #endregion
 
     #region Types
-    private readonly struct Snapshot(long timestamp, double cpuMs, long allocated, double gcPauseMs, long exceptions, long workingSet)
+    private readonly struct Snapshot(long timestamp, double cpuMs, long allocated, double gcPauseMs, long exceptions, long workingSet, long lockContentions)
     {
         public readonly long Timestamp = timestamp;     // Stopwatch.GetTimestamp ticks (high resolution)
         public readonly double CpuMs = cpuMs;
@@ -482,6 +494,7 @@ public sealed class ProcessMetrics : IDisposable
         public readonly double GcPauseMs = gcPauseMs;
         public readonly long Exceptions = exceptions;
         public readonly long WorkingSet = workingSet;   // Environment.WorkingSet at sample time, in bytes
+        public readonly long LockContentions = lockContentions;
     }
     #endregion
 }

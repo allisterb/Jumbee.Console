@@ -49,6 +49,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -78,8 +79,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -374,7 +373,7 @@ protected override void OnMouseRelease(Position position)
 ### <a id="Jumbee_Console_DataTable_OnMouseWheel_ConsoleGUI_Space_Position_System_Int32_"></a> OnMouseWheel\(Position, int\)
 
 Handles a wheel notch over the control (<code class="paramref">delta</code>: negative up, positive down). Default
-scrolls the surrounding <xref href="Jumbee.Console.Control.Frame" data-throw-if-not-resolved="false"></xref> if there is one; override to consume the wheel directly.
+scrolls the nearest enclosing scrolling frame; override to consume the wheel directly.
 
 ```csharp
 protected override void OnMouseWheel(Position position, int delta)
@@ -385,6 +384,12 @@ protected override void OnMouseWheel(Position position, int delta)
 `position` Position
 
 `delta` int
+
+#### Remarks
+
+"Nearest enclosing" rather than just <xref href="Jumbee.Console.Control.Frame" data-throw-if-not-resolved="false"></xref>, because the control under the pointer is usually a
+child several levels inside the thing being scrolled — a button in a panel of framed sections has no frame of
+its own, and scrolling only its own would drop the notch.
 
 ### <a id="Jumbee_Console_DataTable_RemoveRow_System_Int32_"></a> RemoveRow\(int\)
 

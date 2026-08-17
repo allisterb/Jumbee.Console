@@ -193,25 +193,6 @@ Cancelling these stops the feeds without disposing the control — handy for pau
 control is hidden. Feeds are also cancelled automatically on <xref href="Jumbee.Console.Control.Dispose" data-throw-if-not-resolved="false"></xref>. Returns a copy, so
 iterating it never races the background feed threads.
 
-### <a id="Jumbee_Console_Control_FillsFrameViewport"></a> FillsFrameViewport
-
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, a wrapping <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> sizes this control to its visible
-viewport (a bounded height) instead of the frame's usual unbounded scroll height — so the control fills the
-frame and the frame never scrolls it. Default <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> (normal frame-scrolling behavior).
-
-```csharp
-protected virtual bool FillsFrameViewport { get; }
-```
-
-#### Property Value
-
- bool
-
-#### Remarks
-
-For controls that manage their own scrolling internally (e.g. a terminal emulator, which owns its
-scrollback); ballooning them to the scroll height would oversize them and push live content out of view.
-
 ### <a id="Jumbee_Console_Control_Focusable"></a> Focusable
 
 When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), this control can receive keyboard focus.
@@ -778,8 +759,8 @@ protected virtual int IntrinsicWidth()
 
 #### Remarks
 
-Unlike <xref href="Jumbee.Console.Control.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> — a content height honored only when the parent is unbounded — an
-intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
+Unlike <xref href="Jumbee.Console.IScrollable.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> — a content height honored only when the parent is unbounded —
+an intrinsic size is authoritative even under a finite parent. Override on adornment controls with a genuine
 fixed extent (e.g. a vertical <xref href="Jumbee.Console.TextLabel" data-throw-if-not-resolved="false"></xref>, one column wide) so a docking/layout parent can't
 stretch them to fill the region.
 
@@ -827,31 +808,6 @@ protected bool IsThemeOverridden(string property)
 
 A control's <xref href="Jumbee.Console.Control.ApplyTheme" data-throw-if-not-resolved="false"></xref> guards each themed field with this so a runtime theme switch re-themes
 only the properties the caller left at default.
-
-### <a id="Jumbee_Console_Control_MeasureHeight_System_Int32_"></a> MeasureHeight\(int\)
-
-The control's intrinsic content height in rows at the given <code class="paramref">width</code>, or 0 when it has no
-intrinsic height and should fill the space its parent gives it (the default).
-
-```csharp
-protected virtual int MeasureHeight(int width)
-```
-
-#### Parameters
-
-`width` int
-
-#### Returns
-
- int
-
-#### Remarks
-
-Consulted by <xref href="Jumbee.Console.Control.CalculateSize" data-throw-if-not-resolved="false"></xref> only when a parent leaves the height unbounded — i.e. inside a
-scrolling <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> — so the frame can size the control to its content and show an accurate
-scrollbar instead of a tiny thumb over ~1000 empty rows. Override on content controls (lists, editors,
-logs). A content change that alters the height must re-lay-out (<xref href="Jumbee.Console.Control.Initialize" data-throw-if-not-resolved="false"></xref>, not merely
-<xref href="Jumbee.Console.Control.Invalidate" data-throw-if-not-resolved="false"></xref>) so the frame re-measures.
 
 ### <a id="Jumbee_Console_Control_OnClick_ConsoleGUI_Space_Position_"></a> OnClick\(Position\)
 
@@ -956,7 +912,7 @@ protected virtual void OnMouseRelease(Position position)
 ### <a id="Jumbee_Console_Control_OnMouseWheel_ConsoleGUI_Space_Position_System_Int32_"></a> OnMouseWheel\(Position, int\)
 
 Handles a wheel notch over the control (<code class="paramref">delta</code>: negative up, positive down). Default
-scrolls the surrounding <xref href="Jumbee.Console.Control.Frame" data-throw-if-not-resolved="false"></xref> if there is one; override to consume the wheel directly.
+scrolls the nearest enclosing scrolling frame; override to consume the wheel directly.
 
 ```csharp
 protected virtual void OnMouseWheel(Position position, int delta)
@@ -967,6 +923,12 @@ protected virtual void OnMouseWheel(Position position, int delta)
 `position` Position
 
 `delta` int
+
+#### Remarks
+
+"Nearest enclosing" rather than just <xref href="Jumbee.Console.Control.Frame" data-throw-if-not-resolved="false"></xref>, because the control under the pointer is usually a
+child several levels inside the thing being scrolled — a button in a panel of framed sections has no frame of
+its own, and scrolling only its own would drop the notch.
 
 ### <a id="Jumbee_Console_Control_OnPaste_System_String_"></a> OnPaste\(string\)
 
@@ -1012,6 +974,28 @@ protected abstract void Render()
 #### Remarks
 
 Note that this does not actually draw the control on the console screen.
+
+### <a id="Jumbee_Console_Control_ScrollIntoView_System_Int32_System_Int32_"></a> ScrollIntoView\(int, int\)
+
+Scrolls the surrounding <xref href="Jumbee.Console.Control.Frame" data-throw-if-not-resolved="false"></xref> so content rows <code class="paramref">start</code> through
+<code class="paramref">start</code> + <code class="paramref">height</code> are visible. A no-op when unframed or already visible.
+
+```csharp
+protected void ScrollIntoView(int start, int height = 1)
+```
+
+#### Parameters
+
+`start` int
+
+`height` int
+
+#### Remarks
+
+Nothing scrolls on its own, so an <xref href="Jumbee.Console.IScrollable" data-throw-if-not-resolved="false"></xref> whose selection, caret or focus can move must call
+this when it does — otherwise the interesting row can sit outside the viewport with the cue drawn where it
+cannot be seen. Rows are in this control's own content coordinates, the space
+<xref href="Jumbee.Console.IScrollable.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> measures.
 
 ### <a id="Jumbee_Console_Control_SetAtomicProperty__1___0____0_System_Boolean_System_Func___0___0__System_Action___0___0__System_Boolean_System_String_"></a> SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)
 

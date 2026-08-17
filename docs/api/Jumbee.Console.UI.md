@@ -54,12 +54,56 @@ public static double AverageDrawTime { get; }
 
  double
 
+### <a id="Jumbee_Console_UI_AverageFrameLatency"></a> AverageFrameLatency
+
+Average end-to-end time (ms) from starting to render a frame to it being written to the terminal: the render,
+the wait for the previous write, and the write itself.
+
+```csharp
+public static double AverageFrameLatency { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+This is LATENCY, not throughput. The write runs concurrent with the next frame's render, so the frame rate is
+bounded by whichever side is slower, not by this sum — a latency of 3 ms does not mean a 333 fps ceiling.
+Summed per frame, not from separate averages, so it describes real frames rather than a blend of populations.
+
 ### <a id="Jumbee_Console_UI_AveragePaintTime"></a> AveragePaintTime
 
 Average time (ms) spent firing control <xref href="Jumbee.Console.UI.Paint" data-throw-if-not-resolved="false"></xref> handlers, over the recent sample window.
 
 ```csharp
 public static double AveragePaintTime { get; }
+```
+
+#### Property Value
+
+ double
+
+### <a id="Jumbee_Console_UI_AverageWriteTime"></a> AverageWriteTime
+
+Average time (ms) the actual terminal write took. Concurrent with the next frame's render, so it does NOT add
+to <xref href="Jumbee.Console.UI.AverageDrawTime" data-throw-if-not-resolved="false"></xref> — the throughput ceiling is whichever of the two is larger.
+
+```csharp
+public static double AverageWriteTime { get; }
+```
+
+#### Property Value
+
+ double
+
+### <a id="Jumbee_Console_UI_AverageWriteWaitTime"></a> AverageWriteWaitTime
+
+Average time (ms) a frame waited for the previous frame's write before its own could start.
+
+```csharp
+public static double AverageWriteWaitTime { get; }
 ```
 
 #### Property Value
@@ -226,6 +270,23 @@ Controls that show pop-ups — <xref href="Jumbee.Console.Select" data-throw-if-
 tests) that need to designate the overlay pop-ups show into without going through <xref href="Jumbee.Console.UI.Start(Jumbee.Console.ILayout%2cSystem.Int32%2cSystem.Int32%2cSystem.Int32%2cSystem.Boolean%2cConsoleGUI.Api.IConsole%2cJumbee.Console.IInputSource%2cSystem.Boolean)" data-throw-if-not-resolved="false"></xref>; the
 value must be the overlay that is actually being rendered as the root, or pop-ups won't be visible.</p>
 
+### <a id="Jumbee_Console_UI_PeakFrameLatency"></a> PeakFrameLatency
+
+The worst end-to-end frame latency (ms) in the recent window.
+
+```csharp
+public static double PeakFrameLatency { get; }
+```
+
+#### Property Value
+
+ double
+
+#### Remarks
+
+Available only because render and write are paired per frame; adding separate averages could never
+    yield a worst case.
+
 ### <a id="Jumbee_Console_UI_StyleTheme"></a> StyleTheme
 
 The active style theme. Defaults to <xref href="Jumbee.Console.DefaultStyleTheme" data-throw-if-not-resolved="false"></xref>.
@@ -242,6 +303,37 @@ public static IStyleTheme StyleTheme { get; set; }
 
 Controls capture their default colours/decorations from it. Assigning raises <xref href="Jumbee.Console.UI.ThemeChanged" data-throw-if-not-resolved="false"></xref>
 (on the UI thread), so every live control re-captures — i.e. assigning it is a runtime theme switch.
+
+### <a id="Jumbee_Console_UI_WriteQueueDepth"></a> WriteQueueDepth
+
+Frames rendered but not yet written to the terminal, right now — usually 0, since the queue drains
+    between frames. <xref href="Jumbee.Console.UI.WriteQueueDepthPeak" data-throw-if-not-resolved="false"></xref> is the one that shows a backlog.
+
+```csharp
+public static int WriteQueueDepth { get; }
+```
+
+#### Property Value
+
+ int
+
+### <a id="Jumbee_Console_UI_WriteQueueDepthPeak"></a> WriteQueueDepthPeak
+
+The most frames left waiting behind a terminal write over the recent window.
+
+```csharp
+public static int WriteQueueDepthPeak { get; }
+```
+
+#### Property Value
+
+ int
+
+#### Remarks
+
+Coarse: frames also queue for a thread-pool slot, so a small peak appears even when the write costs
+    nothing. <xref href="Jumbee.Console.UI.AverageWriteWaitTime" data-throw-if-not-resolved="false"></xref> is the reliable back-pressure signal — it measures time actually
+    spent blocked.
 
 ## Methods
 

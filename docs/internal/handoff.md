@@ -119,8 +119,9 @@ every neighbour differs. Two results worth remembering because they invert the i
 
 ### From the 0.1.10 documentation session, for context
 
-**0.1.10 was packed and committed** (`artifacts/` now holds 0.1.11; `ProjectAssemblyVersion` is `0.1.11`). That
-session was documentation-led and produced one breaking change:
+**0.1.10 was packed and committed** (`artifacts/` holds the 0.1.11 packages; `ProjectAssemblyVersion` has since
+moved to `0.2.0` for the scrolling/metrics release). That session was documentation-led and produced one breaking
+change:
 
 - **Breaking: eleven control events moved from `Action`/`Action<T>` to `EventHandler`/`EventHandler<T>`.** The same
   event name had different shapes on different controls (`TabPanel.SelectionChanged` was `Action<int>`,

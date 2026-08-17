@@ -13,7 +13,7 @@ Most take no focus or input; `Log` is the exception, since it scrolls. All live 
 | `Badge` | a short status pill on a filled background | text + padding, 1 row |
 | `Footer` | a key-hints bar | full width, 1 row |
 | `Log` | an append-only tail of styled/renderable entries | fills its cell |
-| `PerfHud` | frame timings and allocation, while developing | floats over the app |
+| `PerfHud` | render/write/latency timings and allocation, while developing | floats over the app |
 
 They are appearance-themed where it makes sense (bar/text styles come from the active
 [theme](../../GETTING-STARTED.md#7-styling-and-theming) and can be overridden per instance).
@@ -238,7 +238,8 @@ only when a frame redraws them.
 
 ## `PerfHud`
 
-A development overlay showing frame timings, allocation rate and lock contention, floating over the app.
+A development overlay floating over the app, showing render/write/latency timings, allocation rate and lock
+contention.
 
 ```csharp
 var hud = new PerfHud();
@@ -249,10 +250,14 @@ hud.RegisterToggle(UI.HotKeys.CtrlF12);    // toggle it with a key
 Counters are read directly from `Process`/`GC`/`Monitor` and differenced across refreshes, so nothing has to be
 sampling for it to work, and it refreshes itself a few times a second while shown.
 
-> **The `locks` counter measures contention, not correctness.** It's cumulative, not a rate. The dangerous
-> threading bug — unsynchronized writes from a background thread — produces **zero** contention and still corrupts
-> your state. Read it to confirm you haven't introduced locking, never to prove your threading is right. See
-> [Live Data](Live%20Data.md).
+> **`render` and `write` overlap; `latency` is their sum and is not a frame budget.** `render` is UI-thread work,
+> ending when the ANSI bytes are built; `write` is the terminal write, which runs off-thread alongside the *next*
+> frame. Frame rate is bounded by whichever is slower, so `latency` tells you how stale the screen is, not what you
+> can afford. Full table in [Live Data](Live%20Data.md#measuring-it).
+
+> **The `locks` counter measures contention, not correctness.** The dangerous threading bug — unsynchronized writes
+> from a background thread — produces **zero** contention and still corrupts your state. Read it to confirm you
+> haven't introduced locking, never to prove your threading is right. See [Live Data](Live%20Data.md).
 
 ## Putting it together
 

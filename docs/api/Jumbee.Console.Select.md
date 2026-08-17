@@ -57,6 +57,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -86,8 +87,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -168,6 +167,26 @@ public Color Background { get; set; }
 
  [Color](Jumbee.Console.Color.md)
 
+### <a id="Jumbee_Console_Select_FitContent"></a> FitContent
+
+Whether the collapsed control is drawn only as wide as its widest option — the same width as the dropdown —
+instead of filling whatever width its layout offers. Default <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.
+
+```csharp
+public bool FitContent { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+The default suits a form, where a field filling its column is the convention and the <code>▼</code> sits at the
+right edge under the ones above it. Set this in a narrow panel of mixed controls, where a full-width block
+of colour for a three-word choice reads as far heavier than the choice is — and where the collapsed control
+not matching the list it opens is itself a little jarring.
+
 ### <a id="Jumbee_Console_Select_Foreground"></a> Foreground
 
 The text colour of the collapsed control.
@@ -227,6 +246,25 @@ public SelectPopupPosition PopupPosition { get; set; }
 #### Property Value
 
  [SelectPopupPosition](Jumbee.Console.SelectPopupPosition.md)
+
+### <a id="Jumbee_Console_Select_RendersOwnFocus"></a> RendersOwnFocus
+
+When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, this control indicates keyboard focus in its own way (e.g. a button's fill
+change, a tab's underline, an editor's cursor), so the base class does <em>not</em> paint the themed default
+focus tint over it.
+
+```csharp
+protected override bool RendersOwnFocus { get; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+Override and return <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> on controls with their own focus styling; the
+default (<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) gives unstyled focusable controls an automatic, always-visible focus cue.
 
 ### <a id="Jumbee_Console_Select_SelectedIndex"></a> SelectedIndex
 
@@ -316,6 +354,25 @@ protected override IEnumerable<Segment> Render(RenderOptions options, int maxWid
 #### Returns
 
  IEnumerable<Segment\>
+
+### <a id="Jumbee_Console_Select_SetOptions_System_Collections_Generic_IEnumerable_System_String__"></a> SetOptions\(params IEnumerable<string\>\)
+
+Replaces the options, keeping the current value selected if it is still among them (otherwise the
+    first, or nothing when the list is empty). Re-sizes the control to the new widest option.
+
+```csharp
+public void SetOptions(params IEnumerable<string> options)
+```
+
+#### Parameters
+
+`options` IEnumerable<string\>
+
+#### Remarks
+
+For a drop-down over a list that changes at runtime — files that have been loaded, devices that
+    have appeared. Raises <xref href="Jumbee.Console.Select.SelectionChanged" data-throw-if-not-resolved="false"></xref> only if the selected <em>value</em> actually changes,
+    so a rebuild that keeps the current choice is silent.
 
 ### <a id="Jumbee_Console_Select_SelectionChanged"></a> SelectionChanged
 

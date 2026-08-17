@@ -470,6 +470,19 @@ SelectionStyle SelectionStyle { get; }
 
  [SelectionStyle](Jumbee.Console.SelectionStyle.md)
 
+### <a id="Jumbee_Console_IStyleTheme_Slider"></a> Slider
+
+The part styles a <code>Slider</code> composes (label, track fill/empty, thumb, value readout). The thumb
+    glyph comes from <xref href="Jumbee.Console.IGlyphTheme.SliderThumb" data-throw-if-not-resolved="false"></xref>. Defaults to <xref href="Jumbee.Console.SliderStyle.Default" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+SliderStyle Slider { get; }
+```
+
+#### Property Value
+
+ [SliderStyle](Jumbee.Console.SliderStyle.md)
+
 ### <a id="Jumbee_Console_IStyleTheme_Success"></a> Success
 
 The style for success messages and indicators.

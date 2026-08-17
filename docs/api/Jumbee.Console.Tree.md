@@ -6,7 +6,7 @@ Assembly: Jumbee.Console.dll
 Displays a hierarchical list of items in a tree layout.
 
 ```csharp
-public class Tree : RenderableControl, IFocusable
+public class Tree : RenderableControl, IFocusable, IScrollable
 ```
 
 #### Inheritance
@@ -19,7 +19,8 @@ Control ←
 
 #### Implements
 
-[IFocusable](Jumbee.Console.IFocusable.md)
+[IFocusable](Jumbee.Console.IFocusable.md), 
+[IScrollable](Jumbee.Console.IScrollable.md)
 
 #### Inherited Members
 
@@ -57,6 +58,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -86,8 +88,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -581,6 +581,27 @@ protected static TreeGuide GetSpectreConsoleTreeGuide(TreeGuide guide)
 
  TreeGuide
 
+### <a id="Jumbee_Console_Tree_MeasureHeight_System_Int32_"></a> MeasureHeight\(int\)
+
+The control's content height in rows at the given <code class="paramref">width</code> — the frame's scroll range.
+
+```csharp
+public virtual int MeasureHeight(int width)
+```
+
+#### Parameters
+
+`width` int
+
+#### Returns
+
+ int
+
+#### Remarks
+
+Measure the content, not the viewport: a list returns its item count, a text control its wrapped row count.
+Returning the visible height instead defeats the purpose, leaving a scrollbar that never moves.
+
 ### <a id="Jumbee_Console_Tree_OnClick_ConsoleGUI_Space_Position_"></a> OnClick\(Position\)
 
 Called on a press+release on this control (relative position).
@@ -671,6 +692,46 @@ protected override IEnumerable<Segment> Render(RenderOptions options, int maxWid
 
  IEnumerable<Segment\>
 
+### <a id="Jumbee_Console_Tree_SelectNode_Jumbee_Console_Tree_TreeNode_"></a> SelectNode\(TreeNode\)
+
+Moves the selection to <code class="paramref">node</code>, clearing the previous selection, scrolling it into view and
+raising <xref href="Jumbee.Console.Tree.SelectionChanged" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public void SelectNode(Tree.TreeNode node)
+```
+
+#### Parameters
+
+`node` [Tree](Jumbee.Console.Tree.md).[TreeNode](Jumbee.Console.Tree.TreeNode.md)
+
+#### Remarks
+
+Does nothing if the node is not currently visible — it is under a collapsed ancestor, or it has been
+    removed. Expand its ancestors first (see <xref href="Jumbee.Console.Tree.SetExpanded(Jumbee.Console.Tree.TreeNode%2cSystem.Boolean)" data-throw-if-not-resolved="false"></xref>) when driving the tree from elsewhere,
+    such as a search field or a path.
+
+### <a id="Jumbee_Console_Tree_SetExpanded_Jumbee_Console_Tree_TreeNode_System_Boolean_"></a> SetExpanded\(TreeNode, bool\)
+
+Expands or collapses <code class="paramref">node</code> the way the keyboard and mouse do — raising
+<xref href="Jumbee.Console.Tree.NodeExpanding" data-throw-if-not-resolved="false"></xref> first when it is about to open.
+
+```csharp
+public void SetExpanded(Tree.TreeNode node, bool expanded)
+```
+
+#### Parameters
+
+`node` [Tree](Jumbee.Console.Tree.md).[TreeNode](Jumbee.Console.Tree.TreeNode.md)
+
+`expanded` bool
+
+#### Remarks
+
+Prefer this over setting <xref href="Jumbee.Console.Tree.TreeNode.Expanded" data-throw-if-not-resolved="false"></xref> directly whenever a
+    <xref href="Jumbee.Console.Tree.NodeExpanding" data-throw-if-not-resolved="false"></xref> handler is attached; the property is the raw state and does not announce
+    itself.
+
 ### <a id="Jumbee_Console_Tree_ContextMenuOpening"></a> ContextMenuOpening
 
 Raised just before <xref href="Jumbee.Console.Tree.ContextMenu" data-throw-if-not-resolved="false"></xref> is shown for a right-clicked node, with that node (now
@@ -689,6 +750,37 @@ public event EventHandler<Tree.TreeNode>? ContextMenuOpening
 Use it to tailor the menu to the node, or read <xref href="Jumbee.Console.Tree.SelectedNode" data-throw-if-not-resolved="false"></xref> from the menu's own item
     handlers.
 
+### <a id="Jumbee_Console_Tree_FocusRowChanged"></a> FocusRowChanged
+
+Raised when the control's point of interest — a selected item, a caret — moves, carrying the content rows it
+now occupies. The wrapping <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> subscribes and scrolls them into view.
+
+```csharp
+public event EventHandler<RowSpan>? FocusRowChanged
+```
+
+#### Event Type
+
+ EventHandler<[RowSpan](Jumbee.Console.RowSpan.md)\>?
+
+#### Remarks
+
+<p>
+Declare it as a plain field-like event and raise it wherever the selection moves:
+
+<pre><code class="lang-csharp">public event EventHandler&lt;RowSpan&gt;? FocusRowChanged;
+private void Select(int i) { _index = i; FocusRowChanged?.Invoke(this, new RowSpan(RowOf(i))); }</code></pre>
+
+Written that way the compiler reports <code>CS0067</code> if it is never raised, which is the mistake worth
+catching: a control that says it has a moving selection and then leaves it to scroll off screen.
+</p>
+<p>
+The default implementation does nothing, so a control with no moving point of interest — a document viewer,
+a panel of static text — simply omits it. Scrolls that are not selection moves (following new output to the
+bottom, restoring a saved position) are not what this is for; call
+<xref href="Jumbee.Console.ControlFrame.ScrollIntoView(System.Int32%2cSystem.Int32)" data-throw-if-not-resolved="false"></xref> directly instead.
+</p>
+
 ### <a id="Jumbee_Console_Tree_NodeActivated"></a> NodeActivated
 
 Raised when a leaf node (one with no children) is activated — double-clicked, or Enter/Space pressed
@@ -701,6 +793,26 @@ public event EventHandler<Tree.TreeNode>? NodeActivated
 #### Event Type
 
  EventHandler<[Tree](Jumbee.Console.Tree.md).[TreeNode](Jumbee.Console.Tree.TreeNode.md)\>?
+
+### <a id="Jumbee_Console_Tree_NodeExpanding"></a> NodeExpanding
+
+Raised just before a node with children is expanded — by the keyboard, by a click on its disclosure glyph,
+or by a double-click on its label.
+
+```csharp
+public event EventHandler<Tree.TreeNode>? NodeExpanding
+```
+
+#### Event Type
+
+ EventHandler<[Tree](Jumbee.Console.Tree.md).[TreeNode](Jumbee.Console.Tree.TreeNode.md)\>?
+
+#### Remarks
+
+This is the hook for a tree too large to build up front (a file system, a remote hierarchy): populate the
+node's real children here. Give the unexpanded node one placeholder child so it renders as a parent and can
+be opened at all — a node with no children is a leaf, and nothing will ever ask it to expand — then replace
+that placeholder when this fires.
 
 ### <a id="Jumbee_Console_Tree_SelectionChanged"></a> SelectionChanged
 

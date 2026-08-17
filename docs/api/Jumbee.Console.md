@@ -149,6 +149,11 @@ A handle to a running background feed started by <xref href="Jumbee.Console.Cont
 Cancel it to stop the feed; await <xref href="Jumbee.Console.FeedHandle.Completion" data-throw-if-not-resolved="false"></xref> (or <xref href="Jumbee.Console.FeedHandle.StopAsync" data-throw-if-not-resolved="false"></xref>) to know the in-flight tick
 has finished — for safely disposing a resource the feed's producer reads.
 
+ [FileBrowser](Jumbee.Console.FileBrowser.md)
+
+A two-pane file chooser: a lazily-populated directory <xref href="Jumbee.Console.Tree" data-throw-if-not-resolved="false"></xref> on the left, the current directory's
+contents in a <xref href="Jumbee.Console.ListBox" data-throw-if-not-resolved="false"></xref> on the right, a path field above and a filter drop-down below.
+
  [FocusInputEvent](Jumbee.Console.FocusInputEvent.md)
 
 Terminal focus gained/lost (DEC mode 1004).
@@ -306,8 +311,9 @@ A bracketed-paste payload, delivered as one event so it is never re-interpreted 
 
  [PerfHud](Jumbee.Console.PerfHud.md)
 
-A translucent "glass" HUD showing live UI telemetry — frame draw/paint times (µs), CPU, working set, allocation
-rate and, the headline for a no-lock design, monitor lock contentions — floating over the app.
+A translucent "glass" HUD showing live UI telemetry — render, terminal-write and queue-wait times (µs), CPU,
+working set, allocation rate and, the headline for a no-lock design, monitor lock contentions — floating over
+the app.
 
  [Plot](Jumbee.Console.Plot.md)
 
@@ -380,6 +386,12 @@ A vertical list of independently-checkable options (multi-select).
  [SelectionStylesExtensions](Jumbee.Console.SelectionStylesExtensions.md)
 
 Turns a <xref href="Jumbee.Console.SelectionStyle" data-throw-if-not-resolved="false"></xref> into the prefix + text style a control applies to its selected item.
+
+ [Slider](Jumbee.Console.Slider.md)
+
+A single-row draggable value control: an optional <xref href="Jumbee.Console.Slider.Label" data-throw-if-not-resolved="false"></xref>, a track filled to <xref href="Jumbee.Console.Slider.Value" data-throw-if-not-resolved="false"></xref>
+between <xref href="Jumbee.Console.Slider.Minimum" data-throw-if-not-resolved="false"></xref> and <xref href="Jumbee.Console.Slider.Maximum" data-throw-if-not-resolved="false"></xref>, and an optional numeric readout — e.g.
+<code>Gravity ████▌      9.80</code>.
 
  [Sparkline](Jumbee.Console.Sparkline.md)
 
@@ -558,6 +570,10 @@ The per-part <xref href="Jumbee.Console.Style" data-throw-if-not-resolved="false
 filled and empty portions of the bar (<xref href="Jumbee.Console.ProgressBarStyle.Fill" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.ProgressBarStyle.Track" data-throw-if-not-resolved="false"></xref>), and the three optional
 readouts — <xref href="Jumbee.Console.ProgressBarStyle.Percentage" data-throw-if-not-resolved="false"></xref>, <xref href="Jumbee.Console.ProgressBarStyle.Time" data-throw-if-not-resolved="false"></xref> and <xref href="Jumbee.Console.ProgressBarStyle.Spinner" data-throw-if-not-resolved="false"></xref>.
 
+ [RowSpan](Jumbee.Console.RowSpan.md)
+
+A run of content rows: <code class="paramref">Start</code> and the <code class="paramref">Height</code> rows following it.
+
  [ScrollBarGlyphs](Jumbee.Console.ScrollBarGlyphs.md)
 
 The glyphs (no colours) a control frame's vertical scrollbar draws for each part: the moving thumb, the track
@@ -567,6 +583,12 @@ behind it, and the two end arrows.
 
 The per-part <xref href="Jumbee.Console.Style" data-throw-if-not-resolved="false"></xref> (foreground/background/decoration, no glyph) a control frame applies to its
 vertical scrollbar.
+
+ [SliderStyle](Jumbee.Console.SliderStyle.md)
+
+The per-part <xref href="Jumbee.Console.Style" data-throw-if-not-resolved="false"></xref> a <code>Slider</code> composes: the <xref href="Jumbee.Console.SliderStyle.Label" data-throw-if-not-resolved="false"></xref>, the filled and empty
+portions of the track (<xref href="Jumbee.Console.SliderStyle.Fill" data-throw-if-not-resolved="false"></xref>/<xref href="Jumbee.Console.SliderStyle.Track" data-throw-if-not-resolved="false"></xref>), the draggable <xref href="Jumbee.Console.SliderStyle.Thumb" data-throw-if-not-resolved="false"></xref>, and the
+numeric <xref href="Jumbee.Console.SliderStyle.Value" data-throw-if-not-resolved="false"></xref> readout.
 
  [Style](Jumbee.Console.Style.md)
 
@@ -603,6 +625,11 @@ Common interface for Jumbee.Console layout classes: a 2-D grid of focusable cell
  [IPty](Jumbee.Console.IPty.md)
 
 A pseudo-terminal session: a child process attached to a PTY, exposing its stdin/stdout as streams.
+
+ [IScrollable](Jumbee.Console.IScrollable.md)
+
+A control whose content can be taller than the space it is given, and which therefore wants its
+<xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> to scroll it.
 
  [IStyleTheme](Jumbee.Console.IStyleTheme.md)
 
@@ -654,6 +681,10 @@ Which button dismissed a <xref href="Jumbee.Console.Dialog" data-throw-if-not-re
  [DockedControlPlacement](Jumbee.Console.DockedControlPlacement.md)
 
 Which edge a <xref href="Jumbee.Console.DockPanel" data-throw-if-not-resolved="false"></xref> pins its docked control to.
+
+ [FileBrowserMode](Jumbee.Console.FileBrowserMode.md)
+
+What a <xref href="Jumbee.Console.FileBrowser" data-throw-if-not-resolved="false"></xref> is asking the user to choose.
 
  [FocusStyle](Jumbee.Console.FocusStyle.md)
 

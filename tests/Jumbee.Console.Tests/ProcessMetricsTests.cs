@@ -21,6 +21,41 @@ public class ProcessMetricsTests
 
         m.Sample();   // a single sample is still not a window
         Assert.Equal(0, m.AllocatedBytesPerSecond);
+        Assert.Equal(0, m.LockContentionsPerSecond);
+    }
+
+    // Lock contention is reported as a RATE. The lifetime total only ever climbs, so a few contentions during startup
+    // used to leave the HUD's dagger red for the rest of the run on a completely quiet UI.
+    [Fact]
+    public void LockContentionRate_OverAQuietWindow_DoesNotReportTheLifetimeTotal()
+    {
+        // Force real contention FIRST, so there is a lifetime total to wrongly inherit. Without this the assertion
+        // is vacuous: a process with zero contentions reads zero either way, and the bug hides.
+        Contend();
+        var m = new ProcessMetrics(windowMs: 1000);
+        Assert.True(m.LockContentions > 0, "the test failed to create contention, so it proves nothing");
+
+        m.Sample();
+        Thread.Sleep(100);   // ...then a quiet window with no contention in it
+        m.Sample();
+
+        // Reporting the total over this window would read at least 10/s (one contention over 100 ms) and in practice
+        // far more. The difference over a quiet window is 0.
+        Assert.True(m.LockContentionsPerSecond < 5,
+            $"a quiet window should not inherit the {m.LockContentions} lifetime contentions, "
+            + $"but read {m.LockContentionsPerSecond:F1}/s");
+    }
+
+    // One thread holds the lock while another blocks on it — a guaranteed Monitor contention.
+    private static void Contend()
+    {
+        var gate = new object();
+        using var holding = new ManualResetEventSlim();
+        var other = new Thread(() => { lock (gate) { holding.Set(); Thread.Sleep(60); } }) { IsBackground = true };
+        other.Start();
+        holding.Wait();
+        lock (gate) { }
+        other.Join();
     }
 
     [Fact]

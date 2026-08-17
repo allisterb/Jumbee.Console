@@ -3,8 +3,9 @@
 Namespace: [Jumbee.Console](Jumbee.Console.md)  
 Assembly: Jumbee.Console.dll  
 
-A translucent "glass" HUD showing live UI telemetry — frame draw/paint times (µs), CPU, working set, allocation
-rate and, the headline for a no-lock design, monitor lock contentions — floating over the app.
+A translucent "glass" HUD showing live UI telemetry — render, terminal-write and queue-wait times (µs), CPU,
+working set, allocation rate and, the headline for a no-lock design, monitor lock contentions — floating over
+the app.
 
 ```csharp
 public sealed class PerfHud : GlassPanel, IFocusable

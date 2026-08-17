@@ -82,6 +82,27 @@ public Action? Action { get; init; }
 
  Action?
 
+### <a id="Jumbee_Console_MenuItem_Checked"></a> Checked
+
+The item's check state, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> (the default) for an item that is not
+    checkable.
+
+```csharp
+public bool? Checked { get; init; }
+```
+
+#### Property Value
+
+ bool?
+
+#### Remarks
+
+A menu level containing any checkable item reserves a marker column across <em>all</em> its rows, so labels
+stay aligned whether or not anything is currently checked — which is why this is nullable rather than a plain
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">bool</a>: <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> means "checkable, currently off" and reserves the column,
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> means "not that kind of item". Use it for a mode a menu both sets and reports (which
+renderer is live, say). The glyph comes from <xref href="Jumbee.Console.IGlyphTheme.MenuChecked" data-throw-if-not-resolved="false"></xref>.
+
 ### <a id="Jumbee_Console_MenuItem_Enabled"></a> Enabled
 
 Whether the item is selectable; disabled items are shown muted and skipped.

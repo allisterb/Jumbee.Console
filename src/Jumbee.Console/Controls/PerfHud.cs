@@ -71,7 +71,10 @@ public sealed class PerfHud : GlassPanel
         // row (the worst frame in the window — a resize/paste burst).
         // Named "render", not "frame": it is the UI-thread work that ENDS when the ANSI bytes are built. The write to
         // the terminal is the separate "write" row below, and the two overlap — see the note there.
-        double renderUs = m.RenderTimeMsAvg * 1000.0;
+        // Averaged over the frames that actually DREW, not over all frames. An idle frame costs almost nothing, so
+        // including them scales the number down by the redraw rate — and then "render" no longer adds up with the
+        // write/wait rows into the latency below it, which is confusing precisely when the numbers matter.
+        double renderUs = m.RenderTimeMsDrawnAvg * 1000.0;
         double renderPeakUs = m.RenderTimeMsPeak * 1000.0;
         double busy = m.BusyPercentAvg;
         double busyPeak = m.BusyPercentPeak;
@@ -90,7 +93,9 @@ public sealed class PerfHud : GlassPanel
         double allocKb = m.AllocatedBytesPerFrame / 1024.0;
         double allocPeakKb = m.PeakAllocatedBytesPerFrame / 1024.0;
         double exc = m.ExceptionsPerSecond;
-        long locks = m.LockContentions;
+        // A rate, not the lifetime total: the total only ever climbs, so a few contentions during startup left the
+        // dagger showing red for the rest of the run even on a completely quiet UI.
+        double locks = m.LockContentionsPerSecond;
         // The terminal write happens off the render loop, so none of the numbers above include it. It runs CONCURRENT
         // with the next frame, so it doesn't add to "render" — the throughput ceiling is whichever is larger. queue is
         // the frames rendered but not yet written: 1 is healthy, a climbing depth means the terminal is the limiter
@@ -134,8 +139,9 @@ public sealed class PerfHud : GlassPanel
         Row("mem", $"[#e8f0ff]{memMb,5:F1} MB[/] [grey50]/ {memPeakMb:F0}[/]");
         Row("alloc", $"[#e8f0ff]{allocKb,5:F1} KB/f[/] [grey50]/ {allocPeakKb:F0}[/]");
         Row("exc/s", exc > 0 ? $"[bold #ff6b6b]{exc,5:F0}[/]" : "[#e8f0ff]    0[/]");
-        // The dagger: a no-lock UI design holds contention at zero. Green 0 when true, red count otherwise.
-        Row("locks", locks == 0 ? "[bold #7CFC00]0 ✓[/]" : $"[bold #ff6b6b]{locks}[/]");
+        // The dagger: a no-lock UI design holds contention at zero. Green 0 when true, red rate otherwise — and it
+        // returns to green once contention stops, which a lifetime total never could.
+        Row("locks", locks <= 0 ? "[bold #7CFC00]0 ✓[/]" : $"[bold #ff6b6b]{locks,5:F1}/s[/]");
 
         rowCount = rows;
         return new S.Panel(g)

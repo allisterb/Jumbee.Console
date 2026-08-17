@@ -134,6 +134,8 @@
       href: Jumbee.Console.DocumentClosingEventArgs.md
     - name: FeedHandle
       href: Jumbee.Console.FeedHandle.md
+    - name: FileBrowser
+      href: Jumbee.Console.FileBrowser.md
     - name: FocusInputEvent
       href: Jumbee.Console.FocusInputEvent.md
     - name: Footer
@@ -220,6 +222,8 @@
       href: Jumbee.Console.SelectionList.md
     - name: SelectionStylesExtensions
       href: Jumbee.Console.SelectionStylesExtensions.md
+    - name: Slider
+      href: Jumbee.Console.Slider.md
     - name: Sparkline
       href: Jumbee.Console.Sparkline.md
     - name: SpectreControl<T>
@@ -303,10 +307,14 @@
       href: Jumbee.Console.ProgressBarGlyphs.md
     - name: ProgressBarStyle
       href: Jumbee.Console.ProgressBarStyle.md
+    - name: RowSpan
+      href: Jumbee.Console.RowSpan.md
     - name: ScrollBarGlyphs
       href: Jumbee.Console.ScrollBarGlyphs.md
     - name: ScrollBarStyle
       href: Jumbee.Console.ScrollBarStyle.md
+    - name: SliderStyle
+      href: Jumbee.Console.SliderStyle.md
     - name: Style
       href: Jumbee.Console.Style.md
     - name: TitleStyle
@@ -324,6 +332,8 @@
       href: Jumbee.Console.ILayout.md
     - name: IPty
       href: Jumbee.Console.IPty.md
+    - name: IScrollable
+      href: Jumbee.Console.IScrollable.md
     - name: IStyleTheme
       href: Jumbee.Console.IStyleTheme.md
     - name: ITheme
@@ -347,6 +357,8 @@
       href: Jumbee.Console.DialogResult.md
     - name: DockedControlPlacement
       href: Jumbee.Console.DockedControlPlacement.md
+    - name: FileBrowserMode
+      href: Jumbee.Console.FileBrowserMode.md
     - name: FocusStyle
       href: Jumbee.Console.FocusStyle.md
     - name: Justify

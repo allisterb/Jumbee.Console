@@ -466,7 +466,7 @@ public void OnPaste(string text)
 
 ### <a id="Jumbee_Console_ControlFrame_Relayout"></a> Relayout\(\)
 
-Re-runs the frame's child layout — re-reads the wrapped control's <xref href="Jumbee.Console.Control.FillsFrameViewport" data-throw-if-not-resolved="false"></xref> and
+Re-runs the frame's child layout — re-checks whether the wrapped control is <xref href="Jumbee.Console.IScrollable" data-throw-if-not-resolved="false"></xref> and
 re-establishes its size limits.
 
 ```csharp
@@ -477,7 +477,7 @@ public void Relayout()
 
 Needed after a change that alters how the child should be sized but does not itself change the child's size
 (so no redraw bubbles up to trigger a relayout): e.g. swapping a composite's content between a scrollable
-control and a fill-to-viewport one.
+control and a non-scrolling one.
 
 ### <a id="Jumbee_Console_ControlFrame_Scroll_System_Int32_"></a> Scroll\(int\)
 
@@ -490,6 +490,29 @@ public void Scroll(int n)
 #### Parameters
 
 `n` int
+
+### <a id="Jumbee_Console_ControlFrame_ScrollIntoView_System_Int32_System_Int32_"></a> ScrollIntoView\(int, int\)
+
+Scrolls the minimum amount needed to bring content rows <code class="paramref">start</code> through
+<code class="paramref">start</code> + <code class="paramref">height</code> into the viewport. A no-op when they are already visible.
+
+```csharp
+public void ScrollIntoView(int start, int height = 1)
+```
+
+#### Parameters
+
+`start` int
+
+`height` int
+
+#### Remarks
+
+The rows are in the wrapped control's own content coordinates — the same space
+<xref href="Jumbee.Console.IScrollable.MeasureHeight(System.Int32)" data-throw-if-not-resolved="false"></xref> measures. Call it when a selection, caret or focus moves; a control
+with more content than viewport has no other way to keep the interesting row on screen (nothing scrolls
+automatically). A span taller than the viewport aligns to its top rather than its bottom, so the first row
+stays visible.
 
 ### <a id="Jumbee_Console_ControlFrame_OnFocus"></a> OnFocus
 

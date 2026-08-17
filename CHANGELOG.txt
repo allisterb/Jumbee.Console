@@ -1,3 +1,142 @@
+0.2.0
+-----
+ADDED
+
+  * IScrollable - the opt-in that makes a framed control scroll. A ControlFrame owns the viewport, the
+    scrollbar and the offset; the control's side of the bargain is one honest answer, "how tall is my content
+    at this width", which is now IScrollable.MeasureHeight. Implemented by ListBox, Tree, TextEditor,
+    TextPanel, CodeEditor, MarkdownViewer, AsciiDocViewer and MermaidViewer.
+
+  * IScrollable.FocusRowChanged, with the RowSpan struct it carries. A control with a moving point of
+    interest - a selected item, a caret - raises it when that point moves, and the enclosing frame scrolls the
+    rows into view. It has a do-nothing default implementation, so a viewer with nothing to report simply
+    omits it. Declared as a plain field-like event, the compiler reports CS0067 if it is never raised, which
+    catches the mistake worth catching: a control that claims a moving selection and then lets it scroll off
+    screen.
+
+  * ControlFrame.ScrollIntoView(start, height) and the protected Control.ScrollIntoView, replacing three
+    private copies of the same clamp in ListBox, Tree and CodeEditor. Scrolls the minimum needed, does nothing
+    when the rows are already visible, and aligns a span taller than the viewport to its top.
+
+  * A frame now reveals a newly focused descendant automatically. Tab into a tall sidebar and the frame
+    scrolls the focused control into view with no code in the composite: the row is recovered by walking the
+    drawing-context chain, so it reads the layout's real positions and cannot drift from them the way
+    arithmetic in a composite would.
+
+  * Terminal-write telemetry. The console write runs off the render loop, so frame time never included it and
+    nothing reported it at all. UI.AverageWriteTime, AverageWriteWaitTime, WriteQueueDepth/Peak,
+    AverageFrameLatency and PeakFrameLatency now do, fed by ConsoleManager's Emit and paired back to their own
+    frame by ordinal. PerfHud gained write, wait and latency rows.
+
+  * ConsoleManager.AdoptSize and IConsole.AdoptSize (defaulted to a no-op), separating "follow the size the
+    terminal reported" from "command the terminal to a size" - see the resize fix below.
+
+  * ProcessMetrics.RenderTimeMsDrawnAvg, FrameLatencyMsAvg/Peak, LockContentionsPerSecond, RecordWrite and
+    ConsoleManager.ResetOutputTelemetry.
+
+CHANGED
+
+  * BREAKING: Control.FillsFrameViewport is removed, and frame scrolling is now opt-in rather than opt-out.
+    Previously a frame gave EVERY child an unbounded height unless it set FillsFrameViewport, and a control
+    that overrode neither that nor MeasureHeight resolved to the 1000-row size clamp - a scrollbar with a
+    thumb too small to draw over ~1000 rows of blank space, with nothing thrown, nothing logged, the content
+    drawn correctly at the top, and a snapshot of the visible area passing. The wrong answer was the one you
+    got by doing nothing.
+
+    To migrate:
+
+        Was                                          Now
+        --------------------------------------------------------------------------------
+        override FillsFrameViewport => true          delete the override (it is the default)
+        override MeasureHeight, wanted scrolling     implement IScrollable
+        neither, but relied on frame scrolling       implement IScrollable
+
+    A control that implemented neither and did not want scrolling needs no change. A third-party control that
+    relied on the old implicit default stops scrolling rather than scrolling wrongly, which is the better
+    direction to fail, but it is a real break.
+
+  * BREAKING: Control.MeasureHeight moved from a protected virtual to IScrollable.MeasureHeight, and is public
+    on the implementing control. It is deliberately not an explicit interface implementation: those are not
+    virtual, so the first subclass wanting its own measurement would have had to re-declare the interface.
+
+  * Control.OnMouseWheel's default now scrolls the nearest ENCLOSING scrolling frame, not just Frame. The
+    control under the pointer is almost never the one being scrolled - a button inside a panel of framed
+    sections has no frame of its own - so a wheel notch over it used to be dropped entirely.
+
+  * Slider takes the wheel only when it has focus, or when nothing enclosing it can scroll. A standalone
+    slider behaves as before; one inside a scrolling panel now passes the notch through instead of making the
+    panel nearly unscrollable and changing a value the pointer was only passing over.
+
+  * PerfHud: the frame row is renamed render and now averages the frames that actually drew (the old figure
+    was diluted by cheap idle frames, so it did not add up with the write/wait rows); locks is a contention
+    RATE over the rolling window rather than the lifetime total, so it returns to zero once contention stops;
+    the timing rows are grouped together; and the panel derives its height from the rows it emits rather than
+    a hand-kept constant that silently clipped the last metric when it fell behind.
+
+FIXED
+
+  * Tree reported no content height, so a framed Tree scrolled over the 1000-row clamp rather than its own
+    rows - a sliver of a thumb, and a scroll range with nothing in most of it. It had been scrolling by
+    accident for as long as it has existed, which is why nothing caught it; the test asserting that navigation
+    scrolls passed for the wrong reason. Tree now reports its real row count.
+
+  * A framed DataTable drew a dead scroll track and lost its own bottom border. It owns its viewport and draws
+    its own scrollbar, but declared neither of the old opt-outs, so the frame gave it the unbounded height,
+    took a column for a scrollbar whose thumb was too small to render, and clipped the table's last row out of
+    reach - the wheel is consumed by the table, so nothing could scroll it back. Framing a table for a border
+    and a title is the common case and now works.
+
+  * Tree's scroll-into-view lacked the guard ListBox had for a node taller than the viewport, so navigating to
+    one scrolled past its own first row and pushed the just-selected node off the top. Both now share one
+    implementation.
+
+  * Control.Dispose leaked the frame's UI.FocusChanged subscription. The Frame setter attached the frame to
+    both UI.ThemeChanged and UI.FocusChanged; Dispose detached only the first, so every framed control ever
+    created kept handling focus moves for the life of the process.
+
+  * ConsoleManager no longer commands the terminal in response to a terminal resize. AdjustBufferSize called
+    Resize, whose StandardConsole setter drives SetBufferSize/SetWindowSize - and those can fail or clamp
+    silently, so the size read back differed again next frame and the whole UI re-laid-out every frame. That
+    feedback loop is why AnsiTerminalConsole existed to route around it. Observing a resize now adopts it; the
+    console still syncs its own scroll buffer, so a full-screen UI keeps a host scrollbar off the app.
+
+  * The legacy console no longer collapses to a single cell. StandardConsole's Size setter shrank the window
+    to 1x1 as an intermediate step before resizing the buffer, and SafeConsole swallows failures - so if
+    either following call failed, the window was simply left at 1x1 and the app looked like it had vanished
+    while the process kept running. It now shrinks only to the target size.
+
+  * ChatPrompt is one row tall in a plain layout cell, and one column wider inside a frame. It reported its
+    single row as an IScrollable content height, which is honoured only under an unbounded parent, so unframed
+    it filled its cell; and being scrollable cost it a column of every frame's interior for a scrollbar that
+    could never appear. It states the row as an intrinsic height instead.
+
+EXAMPLES
+
+  * The 3D sandbox model viewer's sidebar scrolls, so it stays usable on a short terminal. It also gained a
+    "Scale All" slider that drives the three axis sliders together, a Reset in each of the Scale and Shear
+    sections (each undoing only its own section - the whole-transform reset is still Model > Reset transform
+    and the 0 key), and the mouse-wheel zoom direction is corrected: wheel up now zooms in.
+
+  * The agent harness demo's task list stopped round-tripping every style through markup text. It built a
+    markup STRING with Style.ToMarkup()/Color.ToMarkup() and let Markup parse it straight back through the
+    tokenizer, style parser and hex-colour parser - 57% of the whole demo's allocations. Emitting styled
+    Segments directly, and computing the pane height arithmetically rather than rendering it to count lines,
+    cut the demo's total allocations from ~482k to ~123k and its per-frame allocation by roughly half.
+
+DOCS
+
+  * New "Scrolling" section in docs/controls/Control Model.md - the canonical recipe, in the guide someone
+    framing a control actually opens rather than filed under composites. It names the failure mode outright
+    ("a control that doesn't implement IScrollable is sized to the viewport and never scrolled") and covers
+    the two things a frame will not do for you: focus within a control, and the column the scrollbar costs.
+
+  * The PerfHud counter table in docs/controls/Live Data.md is rewritten for the new metrics, with a section
+    on why latency is not a frame budget: render and write overlap, so throughput is bounded by whichever is
+    slower while latency is their sum.
+
+  * New internal design note at docs/internal/Scrolling.md recording why the old default was the broken one,
+    why the focus row is an event rather than a polled property, and what CS0067 does and does not enforce.
+
 0.1.11
 ------
 ADDED

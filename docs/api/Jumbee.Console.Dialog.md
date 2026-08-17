@@ -66,6 +66,7 @@ Control ←
 [Control.OnClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnDoubleClick\(Position\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnDoubleClick\_ConsoleGUI\_Space\_Position\_), 
 [Control.OnMouseWheel\(Position, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnMouseWheel\_ConsoleGUI\_Space\_Position\_System\_Int32\_), 
+[Control.ScrollIntoView\(int, int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ScrollIntoView\_System\_Int32\_System\_Int32\_), 
 [Control.CaptureMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CaptureMouse), 
 [Control.ReleaseMouse\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ReleaseMouse), 
 [Control.OnPaste\(string\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_OnPaste\_System\_String\_), 
@@ -95,8 +96,6 @@ Control ←
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
 [Control.CalculateSize\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_CalculateSize), 
-[Control.MeasureHeight\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_MeasureHeight\_System\_Int32\_), 
-[Control.FillsFrameViewport](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_FillsFrameViewport), 
 [Control.IntrinsicWidth\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicWidth), 
 [Control.IntrinsicHeight\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_IntrinsicHeight), 
 [Control.ClampWidth\(int\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ClampWidth\_System\_Int32\_), 
@@ -190,25 +189,6 @@ public Dialog(string title, string message, DialogButtons buttons = DialogButton
 
 ## Properties
 
-### <a id="Jumbee_Console_Dialog_FillsFrameViewport"></a> FillsFrameViewport
-
-When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, a wrapping <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> sizes this control to its visible
-viewport (a bounded height) instead of the frame's usual unbounded scroll height — so the control fills the
-frame and the frame never scrolls it. Default <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> (normal frame-scrolling behavior).
-
-```csharp
-protected override bool FillsFrameViewport { get; }
-```
-
-#### Property Value
-
- bool
-
-#### Remarks
-
-For controls that manage their own scrolling internally (e.g. a terminal emulator, which owns its
-scrollback); ballooning them to the scroll height would oversize them and push live content out of view.
-
 ### <a id="Jumbee_Console_Dialog_FocusChild"></a> FocusChild
 
 The focus target while the dialog is open: the current stop (custom content or the button bar).
@@ -300,31 +280,6 @@ Sizes the internal content layout to fill the composite's current area after ini
 ```csharp
 protected override void Control_OnInitialization()
 ```
-
-### <a id="Jumbee_Console_Dialog_MeasureHeight_System_Int32_"></a> MeasureHeight\(int\)
-
-The control's intrinsic content height in rows at the given <code class="paramref">width</code>, or 0 when it has no
-intrinsic height and should fill the space its parent gives it (the default).
-
-```csharp
-protected override int MeasureHeight(int width)
-```
-
-#### Parameters
-
-`width` int
-
-#### Returns
-
- int
-
-#### Remarks
-
-Consulted by <xref href="Jumbee.Console.Control.CalculateSize" data-throw-if-not-resolved="false"></xref> only when a parent leaves the height unbounded — i.e. inside a
-scrolling <xref href="Jumbee.Console.ControlFrame" data-throw-if-not-resolved="false"></xref> — so the frame can size the control to its content and show an accurate
-scrollbar instead of a tiny thumb over ~1000 empty rows. Override on content controls (lists, editors,
-logs). A content change that alters the height must re-lay-out (<xref href="Jumbee.Console.Control.Initialize" data-throw-if-not-resolved="false"></xref>, not merely
-<xref href="Jumbee.Console.Control.Invalidate" data-throw-if-not-resolved="false"></xref>) so the frame re-measures.
 
 ### <a id="Jumbee_Console_Dialog_Message_System_String_System_String_System_Action_"></a> Message\(string, string, Action?\)
 

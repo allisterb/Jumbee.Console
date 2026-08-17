@@ -53,7 +53,7 @@ drawing.
 | Show activity with no known duration | `Spinner`, or `ProgressBar.IsIndeterminate` |
 | Show a key-hints bar along the bottom | `Footer` |
 | Show large numeric readouts | `Digits` |
-| Show frame timings and allocation while developing | `PerfHud` |
+| Show render, terminal-write and latency timings and allocation while developing | `PerfHud` |
 | Float a translucent panel over the app | `GlassPanel` |
 | **Navigation and commands** | |
 | Give the user a button to press | `Button` (`Button.Primary` / `Button.Secondary` for the themed roles) |
