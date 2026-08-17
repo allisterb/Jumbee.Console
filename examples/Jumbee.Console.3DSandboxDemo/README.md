@@ -10,7 +10,7 @@ Three renderers draw the same scene, cycled live with `v`:
 |---|---|---|---|
 | **wireframe** | projected edges on a `Canvas`, braille 2×4 sub-cells | painter's sort, whole bodies | one colour per body |
 | **solid** | z-buffered triangles on half-block `▀` cells | per sub-pixel | flat, per triangle, directional light |
-| **shaded** | as solid | per sub-pixel | per **pixel**: point light, specular, silhouettes, contact darkening |
+| **shaded** | as solid | per sub-pixel | per **pixel**: point light, specular, silhouettes, ambient occlusion |
 
 The half-block surface gives **twice the terminal's vertical resolution** — each cell carries two independently
 coloured sub-pixels — so the solid renderers draw at `width × 2·height` with true colour throughout.
@@ -37,6 +37,66 @@ through it — naming a file only decides which one opens first.
 > first display would move that pause into the middle of cycling, and a stall mid-interaction reads as a hang where
 > a stall at startup reads as loading. Point `obj` at a single file's directory, or a directory of small models, if
 > you would rather not wait.
+
+## Colour
+
+The viewer's **Colour** drop-down recolours the model, and it is one setting for all three renderers: every one
+of them tints through the same palette, so the wireframe's edges and the two shaded renderers' surfaces follow it
+together.
+
+Its rows are a swatch in the colour itself beside the name, which is what `Select`'s renderable options exist for —
+a text option gets one style for the whole row, so it could not colour the block differently from the label.
+
+## Shaded detail
+
+Everything belonging to the shaded renderer — edge style and the two lighting dials — greyed out under the other
+two, which draw none of it.
+
+**Half-Lambert light** (off by default) spreads the unlit half of an object across the low shade levels instead of
+collapsing it to black, and pays for that with contrast on the lit side. With only seven quantised levels that is
+an expensive trade, and the lit surface is usually what you are looking at. Mean contrast between neighbouring lit
+cells on the bunny:
+
+| | contrast |
+|---|---:|
+| solid | 11.5 |
+| shaded, wrap **on** | 9.0 |
+| shaded, wrap **off** (default) | 14.3 |
+
+Turn it **on** for a scene where the dark side matters more than the lit one — a sandbox of tumbling bodies under
+an orbiting camera, which is the case it was written for. It also emits ~12% fewer ANSI bytes a frame, because
+compressing the range makes neighbouring cells land on the same level more often.
+
+**Occlusion** is screen-space ambient occlusion. Per sub-pixel it takes the depth gradient, samples a ring of eight
+neighbours, and counts how many sit nearer than a flat surface through that point would predict — so it darkens
+creases and where surfaces meet, and leaves a steeply receding flat surface alone. The slider is the strength
+multiplier: `1 − strength × occluded/8`, so 1.0 sends a fully-enclosed sub-pixel to black and 0 skips the pass.
+
+It does the opposite of what you might expect: turning it *down* flattens the picture (contrast 9.0 → 7.7 at zero,
+and 26 distinct shade levels collapse to 5), because it multiplies the quantised levels by a continuous per-cell
+factor and hands back gradation the quantiser threw away.
+
+It is not a shadow — it only knows what is in the depth buffer, so an occluder off-screen or behind the camera
+contributes nothing. Real shadows would need a second depth pass from the light.
+
+## Mesh detail, under the wireframe
+
+The wireframe cannot draw every edge of a loaded model — a 6,300-triangle teapot has ~9,500 — so it draws a sample,
+and three dials decide which sample. The viewer puts them in a **Mesh detail** panel; the sandbox folds them into
+**Render**.
+
+They configure the wireframe, so they keep their values — and keep showing them — while the solid or shaded
+renderer is drawing; those rasterise every triangle and are unaffected. Both the sidebar controls and the Render
+menu entries grey out while that is the case.
+
+| control | | cost |
+|---|---|---|
+| **Even over screen** | Spreads the budget evenly over the *screen* rather than over the model's triangle list. Matters for assets whose detail holds most of the triangles while their flat panels hold most of the area — the reference plane draws its engines as a dense speckle and its wings nearly bare with this off. Makes no difference to an evenly tessellated model. | roughly free at typical sizes; ~25% on a 250k-triangle model |
+| **Scan** | How many triangles are examined per frame. Lower is faster and starts leaving regions of a big model undrawn; models smaller than the cap are unaffected by it entirely. | the main lever — 5k roughly halves the frame cost of a large model |
+| **Detail** | How much gets drawn per unit of screen area. Higher is denser. | scales the line-drawing work, but not the scan, so it moves less than you would expect on a big model |
+
+Defaults are tuned for the models in `media/models`. Drop **Scan** to `5k` first if you want speed; that is where
+the time goes on a dense mesh.
 
 ## Keys
 

@@ -38,6 +38,11 @@ public sealed class SidebarPanel : CompositeControl
         renderer.SelectionChanged += (_, _) => Push(() => view.SetRenderer(view.Renderers[renderer.SelectedIndex]));
         edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
+        occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
+        stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
+        scanCap.SelectionChanged += (_, _) =>
+            Push(() => view.SetScanCap(WireframeRenderer.ScanCapChoices[scanCap.SelectedIndex].Value));
+        density.ValueChanged += (_, v) => Push(() => view.SetMeshDensity(SubPixelsOf((float)v)));
         shape.SelectionChanged += (_, _) => Push(() => view.Spawn.Shape = (BodyShape)shape.SelectedIndex);
         mesh.SelectionChanged += (_, _) => Push(SelectMesh);
         size.ValueChanged += (_, v) => Push(() => view.Spawn.Scale = (float)v);
@@ -72,7 +77,20 @@ public sealed class SidebarPanel : CompositeControl
     public const int Columns = 32;
 
     /// <summary>The rows the spaced layout needs. Below this the sidebar drops to the compact one.</summary>
-    public const int SpacedRows = 45;
+    /// <remarks>
+    /// <para>
+    /// Add a control and this has to move with it, or the bottom section is silently clipped — which is what the
+    /// mesh dials and the occlusion slider each did to the camera pad. It is the sum of the section heights
+    /// in <see cref="BuildSections"/> plus two rows of frame each, and there is nothing that derives it for you.
+    /// </para>
+    /// <para>
+    /// The compact layout has a floor of its own that no constant expresses: below a <b>40-row terminal</b> the
+    /// camera pad is clipped even compact (it was 36 before any of these controls). Verify BOTH tiers with the
+    /// harness's <c>--shell 200xH</c>, which asserts the pad is on screen — a stale value here shows up only just
+    /// above the threshold, where the spaced layout is chosen and then does not fit.
+    /// </para>
+    /// </remarks>
+    public const int SpacedRows = 53;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -137,6 +155,16 @@ public sealed class SidebarPanel : CompositeControl
             renderer.SelectedIndex = IndexOfRenderer();
             edges.SelectedIndex = (int)(view.Edges ?? SilhouetteStyle.None);
             wrapLighting.IsChecked = view.WrapLighting ?? false;
+            occlusion.Value = view.OcclusionStrength ?? 0f;
+            // Both belong to the shaded renderer alone, so they grey out under the other two exactly as the mesh
+            // dials do under anything but the wireframe.
+            edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
+            stratify.IsChecked = view.Stratify ?? false;
+            scanCap.SelectedIndex = IndexOfScanCap();
+            density.Value = DetailOf(view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
+            // Greyed out under a renderer that draws every triangle, rather than left live-but-inert: they still
+            // report the wireframe's real settings, and Enabled is what says "not while this renderer is drawing".
+            stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
             shape.SelectedIndex = (int)spawn.Shape;
             mesh.SelectedIndex = spawn.MeshId >= 0 ? spawn.MeshId : 0;
             size.Value = spawn.Scale;
@@ -180,6 +208,16 @@ public sealed class SidebarPanel : CompositeControl
         return 0;
     }
 
+    // Falls back to the default's slot rather than 0 when the active renderer has no scan cap, so switching to the
+    // shaded renderer does not park the drop-down on "5k" and then apply that on the way back.
+    private int IndexOfScanCap()
+    {
+        var cap = view.ScanCap ?? WireframeRenderer.DefaultScanCap;
+        for (var i = 0; i < WireframeRenderer.ScanCapChoices.Length; i++)
+            if (WireframeRenderer.ScanCapChoices[i].Value == cap) return i;
+        return Array.FindIndex(WireframeRenderer.ScanCapChoices, c => c.Value == WireframeRenderer.DefaultScanCap);
+    }
+
     // Read from the registry rather than handed a fixed list: models can be loaded while the app is running, and
     // RefreshMeshes puts the new ones in the drop-down without rebuilding the panel.
     private static string[] MeshNames() => Meshes.RegisteredCount == 0
@@ -216,8 +254,13 @@ public sealed class SidebarPanel : CompositeControl
         var gap = spaced ? 1 : 0;
         return new VerticalStackPanel(
             new Section("Scene", new VerticalStackPanel(status, counts, clock), 3),
+            // The wireframe's three mesh-sampling dials live here rather than in a section of their own, and the
+            // reason is purely that a section costs two rows of frame: with them split out, a 40-row terminal
+            // clipped the camera pad off the bottom even in the compact layout.
+            // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
+            // a large model is examined and does nothing to a model below that cap.
             new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                wrapLighting), 3 + (2 * gap)),
+                wrapLighting, occlusion, stratify, density, Labelled("Scan", scanCap)), 7 + (6 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale), 5 + (4 * gap)),
@@ -263,7 +306,16 @@ public sealed class SidebarPanel : CompositeControl
 
 
     private static Slider Param(string label, float min, float max, float value, string format = "F2") =>
-        new Slider(min, max, value, label) { LabelWidth = 8, ValueFormat = format };
+        // 9 cells, the width of the longest label ("Occlusion"). Every slider reserves the same, so the tracks line
+        // up down the panel — LabelWidth is exact, not a minimum, so a longer label would be ellipsized instead.
+        new Slider(min, max, value, label) { LabelWidth = 9, ValueFormat = format };
+
+    // Detail is the reciprocal of the renderer's sub-pixels-per-triangle -- see WireframeRenderer.DetailFromSubPixels
+    // for why. It lives there rather than here so this panel and the viewer's agree on what a given number means.
+    private static float DetailOf(float subPixelsPerTriangle) =>
+        WireframeRenderer.DetailFromSubPixels(subPixelsPerTriangle);
+
+    private static float SubPixelsOf(float detail) => WireframeRenderer.SubPixelsFromDetail(detail);
     #endregion
 
     #region Fields
@@ -276,7 +328,21 @@ public sealed class SidebarPanel : CompositeControl
 
     private readonly Select renderer;
     private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
-    private readonly Switch wrapLighting = new Switch("Wrap lighting", isOn: true);
+    private readonly Switch wrapLighting = new Switch("Half-Lambert light");
+
+    // The shaded renderer's screen-space ambient occlusion. Named for what it is rather than for the field behind
+    // it (ShadedRenderer.OcclusionStrength): it samples a depth ring per sub-pixel and darkens by how much of that
+    // ring sits nearer than a flat surface would, which is AO, not a contact fudge.
+    private readonly Slider occlusion = Param("Occlusion", 0f, 1f, ShadedRenderer.DefaultOcclusionStrength, "F2");
+    private readonly Switch stratify = new Switch("Even over screen", isOn: true);
+    private readonly Select scanCap =
+        new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };
+
+    // Labelled by what it DOES rather than by its unit: the underlying value is sub-pixels per triangle, so
+    // smaller is denser, and a slider that draws less as you push it right is a small cruelty. Inverted at the
+    // boundary instead -- see the density handlers.
+    private readonly Slider density = Param("Detail", WireframeRenderer.MinDetail, WireframeRenderer.MaxDetail,
+        DetailOf(WireframeRenderer.DefaultSubPixelsPerTriangle), "F1");
 
     private readonly Select shape = new Select("box", "sphere", "mesh") { FitContent = true };
     private Select mesh = new Select("(none)") { FitContent = true };

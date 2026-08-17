@@ -70,10 +70,113 @@ excerpts, not library snippets), so it is not machine-checked — see the open q
    chunks missing, and the missing chunk moved as the camera orbited. The lesson generalises past this renderer:
    **when a thinning step has a fixed output size, every measure of output volume is right by construction and only
    the distribution can be wrong** — so lit-cell counts, byte counts and bounding boxes all pass. The harness now
-   has an occupancy-grid check with front-facing ground truth (89% correct vs 60% buggy); the bounding-box version
-   I wrote first scored 93% with the bug reintroduced.
+   has an occupancy-grid check with front-facing ground truth; the bounding-box version written first scored 93%
+   with the bug reintroduced.
+
+   **A third bug, and the most general one** (follow-up 3 in the plan doc): `plane.obj` still had gaps. Not the
+   file format — its winding audits clean — but **non-uniform tessellation**. Its detail holds most of the
+   triangles while its wings hold most of the area, so an evenly-spaced sample of the triangle *list* is not an
+   even sample of the *screen*. Pass 2 now stratifies by screen bucket. Worth knowing: the intuitive fix, weighting
+   by projected area, fixes the plane and **regresses the dragon** (95% → 86%) — all four candidate strategies were
+   measured before choosing. Pass 1's stride is now bounded by an absolute `ScanCap = 40_000` rather than a
+   multiple of the budget, because a budget-relative stride left 25 of the plane's 116 occupied buckets with no
+   candidate at all.
+
+   The harness check now runs over **two** subjects, and that is deliberate: a uniformly tessellated model is blind
+   to the density bug by construction. Measured states — correct 96%/95%, even-by-count 96%/**90%** (only the plane
+   moves), early-exit ~60%/~60%; threshold 0.93. The grid resolution had to be raised to see the density bug at
+   all; at the coarser setting that exposed the region bug it passed at 100% either way.
+
+   **A fourth bug, the mirror of the second** (follow-up 4): stratification's first form used a fixed quota of
+   `budget / buckets`, which sparse buckets cannot spend — so a zoomed teapot drew 57% of its budget and came out
+   *thinner* than before. Bug 2 had the right total and the wrong distribution; this one has the right distribution
+   and the wrong total, and **no check that measures only one of the two sees both**. Now round-robin.
+
+   **All three knobs are settings now**, which is the honest outcome — each is a trade, not a right answer.
+   `WireframeRenderer.Stratify` / `.ScanCap` / `.SubPixelsPerTriangle`, surfaced through `SceneView` on the shaded
+   renderer's existing pattern (null under a renderer that has none), driven from the Render panel and menu. Scan
+   is the real perf lever (plane 1.73 → 0.67 ms at 5k); stratification is near-free except on the dragon.
+
+   Adding them cost **3 rows of sidebar**, and both layout tiers had to be re-measured: `SpacedRows` 45 → 51, and
+   the *compact* floor moved from a 36-row terminal to 39. Neither is derived from anything — `--shell 200xH` is
+   the only thing that catches a clipped camera pad.
+
+   **There are TWO sidebars** — `SidebarPanel` (sandbox) and `ModelSidebarPanel` (the `obj` viewer) — and wiring a
+   renderer control into one leaves the other without it. Worth remembering because the viewer is the scene these
+   particular dials matter in. The viewer's panel is `IScrollable` with `MeasureHeight` summed from its sections,
+   so it takes a new `Section` without clipping; the sandbox's is a fixed two-tier stack that does not.
+
+   **This surfaced a library gap, now closed.** `Switch`, `Select` and `Slider` had no disabled state, so a sidebar
+   could not grey out a control that does not currently apply — a `null`-to-`false` fallback reads as OFF, which is
+   a lie. **`Enabled` now exists on `ToggleButton` (so `Checkbox`/`RadioButton`/`Switch`), `Select` and `Slider`**,
+   with a themed `DisabledStyle` defaulting to `IStyleTheme.TextDisabled`; both sidebars use it. The dials still
+   read and write the wireframe wherever it sits in the renderer list, so they keep reporting the truth, and
+   `SceneView.MeshDialsApply` drives both the menu's `Enabled` and the sidebar's.
+
+   **`Select` now takes `IRenderable` options too** (`SelectOption`, plus `Items`/`SelectedItem`/`Tag`), mirroring
+   `ListBox` and `Tree`. Driven by wanting a colour swatch beside a name in the viewer's new **Colour** drop-down.
+   Markup in a string could not do it: `ListBox` renders string items through `Markup` so the *drop-down* would
+   have worked, but `Select`'s closed row emits a single `Segment` — one style for the whole row, tags shown
+   literally. Both halves are separate render paths and both needed the work. Text options are untouched, markup
+   included (still literal), which is the reason this went in rather than a markup flag.
+
+   Two traps found while doing it, both caught by existing tests rather than by reasoning: routing the constructors
+   through `SetOptions` **auto-selected the first option and lost the placeholder** (construction is not runtime
+   replacement — `Load` is now separate); and `SelectionChanged` was guarded on the text being non-null, so a
+   `Select` of renderables would never have raised it at all.
+
+   Demo side needed no renderer change: every renderer already tints through `Palette.For`, so the viewer's colour
+   is just `ModelScene.ColorKey` indexing the (now named) `Palette.Named`.
+
+   **"Solid looks more detailed than shaded" is wrap lighting, not AO** — worth recording because the intuitive
+   answer is wrong. Mean contrast between neighbouring lit cells on the bunny: solid **11.5**, shaded default
+   **9.0**, shaded with wrap off **14.3**, shaded with contact 0 **7.7**. So removing the contact/AO pass makes it
+   *flatter*, not sharper (it multiplies the quantised levels by a continuous per-cell factor, so it hands back
+   gradation the 7-level quantiser removed — 26 distinct levels become 5 without it). `OcclusionStrength` (renamed from `ContactStrength`) is now a
+   settable dial as asked, and `WrapLighting` — which was reachable only from the sandbox — is now in the viewer
+   too, which is where you actually compare renderers on one model.
+
+   **`WrapLighting` now defaults to OFF**, reversing the M2 decision. Nothing measured back then was wrong; the
+   case was made on the *sandbox*, where tumbling bodies and a free camera make the dark side constant, and it does
+   not transfer to the *viewer*, where one asset is framed and its lit surface is the subject. Cost of the flip,
+   re-measured: **+12% ANSI bytes** (17,034 → 19,112 at 200×50), against the +40–60% local contrast that reads as
+   detail. Both sidebars, both menus and `w` still toggle it. Sections regrouped so every renderer-specific control
+   sits under that renderer's name: **Shaded detail** (Edges + the two lighting dials) and **Wireframe mesh
+   detail**, leaving Render for what applies to all three.
+
+   Also fixed a **pre-existing harness false alarm**: `the shade ramp is quantised` bounded a size-dependent count
+   with a fixed `< 120`, so it passed at the default 100×34 (105 pairs) and failed under `--perf 200x50` (127) —
+   reading as a renderer regression that was never there. Bound is now 400, which still catches the continuum it
+   is actually guarding against.
+
+   Design note worth keeping: **a disabled control stays settable in code and keeps showing its value.** Only the
+   user-input paths are blocked. A disabled control that blanked its value would be no better than hiding it, and
+   the whole reason to disable rather than hide is to say "this is real, just not from here". The focus half could
+   not be an override — navigation collects candidates by `Control.Focusable`, which is not virtual — so
+   `RenderableControl.ApplyEnabledToFocus` clears it and restores whatever it was, which is why a deliberately
+   unfocusable control survives a disable/enable round trip. Covered by `tests/…/EnabledTests.cs` (24 tests,
+   verified non-vacuous by removing the guards: 16 fail).
 5. **Vendor a model, or keep pointing at `reference/`?** Unchanged. The demo ships only a generated torus knot.
    If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
+6. **Should `WireframeRenderer.MaxTriangles` scale with the Detail dial?** *Deferred — the current behaviour ships
+   and performs fine.* The 1,200 ceiling was written as a cost guard when the density was a fixed constant, and it
+   now bites before the top half of the user-facing slider does, on every model that fills the frame:
+
+   | Detail | 1 | 2 (default) | 4 | 8 |
+   |---|---:|---:|---:|---:|
+   | bunny (4,968 tris) | 422 | 844 | 1,689 → **1,200** | 3,379 → **1,200** |
+   | teapot (6,320) | 545 | 1,090 | 2,181 → **1,200** | 4,363 → **1,200** |
+   | dragon (249,882) | 577 | 1,155 | 2,311 → **1,200** | 4,622 → **1,200** |
+
+   So Detail 4 and Detail 8 are the same picture, and going from 2 to 8 asks for 4× and gets +4%. The lower half of
+   the dial works. Someone turning Detail *up* is explicitly asking to spend more, so a ceiling derived from the
+   dial (rather than a constant) would make the control honest across its range; the cost would rise as asked.
+7. **The dragon needs a different primitive, not a bigger budget.** *Deferred, and it is the real ceiling on the
+   wireframe.* Median projected size of a front-facing triangle with the model filling a 200×50 viewport: bunny
+   **1.46 cells**, teapot **0.84**, dragon **0.20**. A fifth of a cell lights one sub-pixel, so a dragon triangle
+   draws as a dot rather than an edge and 1,155 dots read as a stipple. Coverage is already 97–99% — nothing is
+   missing, the primitive is simply below the resolution of the medium, and more of them only makes denser dots.
+   The fix is edges that *span* many triangles — silhouette/crease extraction, or the convex hull (question 4).
 
 ## Where things stand — the 3D sandbox
 

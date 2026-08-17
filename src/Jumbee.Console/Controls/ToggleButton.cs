@@ -73,6 +73,25 @@ public abstract class ToggleButton : RenderableControl
 
     /// <summary>Style merged across the row while hovered (typically a background). Defaults to <see cref="IStyleTheme.Hover"/>.</summary>
     public Style HoverStyle { get => _hoverStyle; set => SetAtomicProperty(ref _hoverStyle, value, themeOverride: true); }
+
+    /// <summary>
+    /// Whether the control responds to the user. A disabled toggle draws in <see cref="DisabledStyle"/>, ignores
+    /// clicks and keys, and is skipped by Tab.
+    /// </summary>
+    /// <remarks>
+    /// It still reports its state truthfully: <see cref="IsChecked"/> and <see cref="Toggle"/> keep working, so a
+    /// panel can show what a setting <em>is</em> while the user is not in a position to change it. That is the
+    /// whole point of having this rather than hiding the control — a switch drawn in the off position because it
+    /// does not currently apply is indistinguishable from one that is genuinely off.
+    /// </remarks>
+    public bool Enabled
+    {
+        get => _enabled;
+        set => SetAtomicProperty(ref _enabled, value, watch: (_, on) => ApplyEnabledToFocus(on));
+    }
+
+    /// <summary>Style for the indicator and label while disabled. Defaults to <see cref="IStyleTheme.TextDisabled"/>.</summary>
+    public Style DisabledStyle { get => _disabledStyle; set => SetAtomicProperty(ref _disabledStyle, value, themeOverride: true); }
     #endregion
 
     #region Methods
@@ -88,6 +107,7 @@ public abstract class ToggleButton : RenderableControl
         if (!IsThemeOverridden(nameof(AccentStyle))) _accentStyle = UI.StyleTheme.TextAccent;
         if (!IsThemeOverridden(nameof(MutedStyle))) _mutedStyle = UI.StyleTheme.TextMuted;
         if (!IsThemeOverridden(nameof(HoverStyle))) _hoverStyle = UI.StyleTheme.Hover;
+        if (!IsThemeOverridden(nameof(DisabledStyle))) _disabledStyle = UI.StyleTheme.TextDisabled;
     }
 
     /// <summary>Sets the on/off indicator glyphs (from the glyph theme), measures the indicator width from them,
@@ -108,7 +128,10 @@ public abstract class ToggleButton : RenderableControl
     {
         var indicator = _isChecked ? _accentStyle : _mutedStyle;
         var label = _labelStyle;
-        if (IsMouseOver) { indicator |= _hoverStyle; label |= _hoverStyle; }
+        // Disabled wins over hover, and suppresses it: a control that highlights under the pointer but does nothing
+        // when clicked is worse than one that plainly does not react.
+        if (!_enabled) indicator = label = _disabledStyle;
+        else if (IsMouseOver) { indicator |= _hoverStyle; label |= _hoverStyle; }
 
         yield return new Segment(_isChecked ? _on : _off, indicator);
 
@@ -118,16 +141,24 @@ public abstract class ToggleButton : RenderableControl
         yield return new Segment(text, label);
     }
 
+    // The three input paths all check Enabled; Toggle itself does not, so code can still set the state.
     /// <inheritdoc/>
-    protected override void OnClick(Position position) => Toggle();
+    protected override void OnClick(Position position)
+    {
+        if (_enabled) Toggle();
+    }
 
     /// <inheritdoc/>
     // A double-click is two presses; for a toggle that means two state changes (the same as clicking twice).
-    protected override void OnDoubleClick(Position position) => Toggle();
+    protected override void OnDoubleClick(Position position)
+    {
+        if (_enabled) Toggle();
+    }
 
     /// <inheritdoc/>
     protected override void OnInput(InputEvent inputEvent)
     {
+        if (!_enabled) return;
         if (inputEvent.Key.Key is ConsoleKey.Enter or ConsoleKey.Spacebar)
         {
             Toggle();
@@ -148,5 +179,7 @@ public abstract class ToggleButton : RenderableControl
     private Style _accentStyle;
     private Style _mutedStyle;
     private Style _hoverStyle;
+    private Style _disabledStyle;
+    private bool _enabled = true;
     #endregion
 }

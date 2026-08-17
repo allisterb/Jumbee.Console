@@ -431,6 +431,16 @@ Unexpected secondary benefit, measured: wrapping emits **16% fewer ANSI bytes** 
 Compressing the lit side into the upper half of the range means adjacent cells land on the same quantised level more
 often, so runs coalesce better — the M0.1 model predicting its own consequence.
 
+> **Follow-up (2026-08-17) — the default is now OFF, and the reasoning above was scene-specific.** Everything
+> measured here still holds; what changed is which side of the trade matters. The case for wrapping was made on the
+> *sandbox*, where seven tumbling bodies and a freely orbiting camera make the dark side a constant. The **model
+> viewer** is the opposite: one asset, deliberately framed, and what you are looking at is its lit surface. There,
+> wrapping spends the contrast that reads as detail — measured on the bunny, mean contrast between neighbouring lit
+> cells is **9.0 wrapped against 14.3 clamped**, with the flat renderer at **11.5**. That is the whole explanation
+> for the otherwise odd complaint that *the flat renderer looks sharper than the shaded one*: with wrapping on, it
+> genuinely was. The byte cost of the flip is real and smaller than the 16% above — **+12%** re-measured today
+> (17,034 → 19,112 at 200×50) — and both remain settable, from the sidebar and from `w`.
+
 **Also worth taking from that repo, but not a rendering technique:** OBJ/STL loading. `models/` has bunny (4,968
 faces), cow (5,804) and teapot (6,320) — all within budget — plus a 249,882-face dragon that is not. The value is
 that Box3D's `ConvexHull.FromPoints`/`Body.AddHull` and `CollisionMesh.FromTriangles`/`Body.AddMesh` would make a
@@ -634,6 +644,73 @@ solid and shaded renderers handle meshes well, and they are the ones meshes are 
 > occupancy grid whose ground truth is *front-facing* geometry computed exhaustively: 89% covered with the code
 > correct against 60% with the bug back. Using all vertices instead of front-facing ones halves that separation to
 > 93 vs 88 — noise the size of the signal — because a hollow model has cells only back faces can reach.
+>
+> **Follow-up 3 — the plane, and the one that generalises past this renderer.** Every model looked right except
+> `plane.obj`, which kept large gaps at any zoom. Suspicion fell on the file format (it is the only model with
+> quad faces, `v/vt/vn` indices, and the Z-up banner). Wrong: a directed-edge audit showed its winding is perfectly
+> consistent — 243,612 opposite-paired edges, zero same-direction duplicates, zero boundary edges. The real cause
+> was **non-uniform tessellation**. Instrumenting the sampler per model:
+>
+> | model | tris | drawn | median drawn triangle | 95th pct | coverage |
+> |---|---:|---:|---:|---:|---:|
+> | bunny | 4,968 | 794 | 2.00 cells | 3.44 | 100% |
+> | cow | 5,804 | 1,080 | 1.37 | 3.66 | 100% |
+> | dragon | 249,882 | 1,155 | 0.27 | 0.52 | 95% |
+> | plane | 81,204 | 1,008 | **0.13** | **1.54** | **87%** |
+>
+> A 12× spread between median and 95th percentile against the bunny's 1.7×: the plane's detail (engines, gear,
+> panel lines) holds most of its TRIANGLES while its wings and fuselage hold most of its AREA. Striding the
+> triangle list samples evenly in triangle count, so the budget went on sub-pixel dots in the detail and left the
+> wings bare. **The general trap: an evenly-spaced sample of a list is only an even sample of the thing you care
+> about if the list is uniform in that thing.** Here the list is triangles and the thing is screen area.
+>
+> Four candidate fixes were measured rather than argued, which was worth it because the obvious one is wrong:
+>
+> | | bunny/teapot/cow | dragon | plane |
+> |---|---:|---:|---:|
+> | even by count (before) | 100% | 95% | 87% |
+> | weighted by projected area | 100% | **86%** | 91% |
+> | area, carry reduced modulo the share | 100% | 86% | **83%** |
+> | **stratified by screen bucket** | 100% | **100%** | **100%** |
+>
+> Area weighting is the intuitive fix and it *regresses the dragon*, because the carry left over from a large
+> triangle draws its list-neighbours in a run. Stratifying — bucket the visible faces by the screen cell their
+> centroid lands in, give each occupied bucket an equal quota — never regresses anything, and it needs no area
+> computation at all. Second finding: stratification alone was not enough, because pass 1's budget-relative stride
+> (26 on the plane) left 25 of 116 occupied buckets with no candidate to pick. The stride is now bounded by an
+> absolute `ScanCap = 40_000`, which is where the last model stops leaving empty buckets. Cost: dragon 1.0 → ~2.4 ms,
+> plane 0.34 → ~1.2 ms, sandbox unchanged at 0.19 ms for six bodies. Scanning everything is 4.9 ms on the dragon
+> and buys nothing more.
+>
+> **Follow-up 4 — the quota collapse, and the dials.** Stratification as first shipped used a fixed quota of
+> `budget / occupiedBuckets`. That is only spent by buckets holding at least that many candidates, and every
+> sparser bucket leaves its share unspent — so a zoomed-in teapot drew **57% of its budget** and came out thinner
+> than the even-by-count pick it replaced. This is the mirror image of the earlier bug and hides the same way:
+> there, the total was right and the distribution wrong; here the distribution is right and the total wrong.
+> Neither is visible to a check that measures only one of them. Fixed by handing the share out round-robin — a
+> counting sort into per-bucket runs, then round *r* takes the *r*-th candidate of every bucket still holding one,
+> with exhausted buckets swapped off a live list so the whole thing is O(drawn + buckets). Stratified now draws
+> *more* than un-stratified on the same model (teapot at zoom: 4,899 lit against 4,111), where before it drew less.
+>
+> All three knobs are now settings — `WireframeRenderer.Stratify`, `.ScanCap`, `.SubPixelsPerTriangle` — surfaced
+> through `SceneView` the way the shaded renderer's already are (null under a renderer that has no such thing,
+> setters that no-op), and driven from the Render panel and the Render menu. Measured trade at 200×50:
+>
+> | | teapot | plane | dragon |
+> |---|---|---|---|
+> | stratify on → off | 97% → 97% cover | **87% → 78%** | 97% → 94% |
+> | scan 40k → 5k | 0.71 → 0.57 ms | 1.73 → 0.67 ms | 2.72 → 2.05 ms |
+> | detail ×2 (40 → 20) | 1436 → 1457 lit | 595 → 615 | 585 → 592 |
+>
+> Scan is the real perf lever; stratification is close to free except on the dragon; detail moves less than you
+> would expect on a big model because it scales the drawing and not the scan.
+>
+> **One layout lesson, and it is the sidebar's old one again.** Three new controls pushed the camera pad off the
+> bottom at 50 rows, because `SpacedRows` is a hand-maintained constant that nothing derives. Raising it fixed the
+> spaced layout; putting the controls in their own `Section` then broke the *compact* layout too, since a section
+> costs two rows of frame — folding them into the existing Render section instead bought exactly those two rows
+> back. Net effect: the minimum terminal height for a complete sidebar went from 36 rows to 39. No constant
+> expresses that floor; `--shell 200xH` is the only thing that catches it.
 
 **Cost** with two meshes plus a sphere (200×50, orbiting camera):
 

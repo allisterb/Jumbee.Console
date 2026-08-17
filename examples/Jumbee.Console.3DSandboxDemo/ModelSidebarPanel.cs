@@ -27,6 +27,20 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
         spin.Changed += (_, on) => Push(() => model.SpinRate = on ? DefaultSpin : 0f);
         zUp.Changed += (_, on) => Push(() => model.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
+        color.SelectionChanged += (_, _) => Push(() => model.ColorKey = color.SelectedIndex);
+
+        // The shaded renderer's two lighting dials. Wrap was reachable only from the sandbox until now, which was
+        // the wrong way round: the viewer is where you compare renderers on one model, and wrap is the setting that
+        // explains most of why the shaded one looks softer than the flat one.
+        wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
+        occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
+
+        // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
+        // ONE loaded model filling the frame, which is exactly the case the thinning has to get right.
+        stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
+        scanCap.SelectionChanged += (_, _) =>
+            Push(() => view.SetScanCap(WireframeRenderer.ScanCapChoices[scanCap.SelectedIndex].Value));
+        density.ValueChanged += (_, v) => Push(() => view.SetMeshDensity(WireframeRenderer.SubPixelsFromDetail((float)v)));
 
         // The master slider drives all three axes to its own value, so it also pulls apart a non-uniform scale.
         scaleAll.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(-1, (float)v));
@@ -56,7 +70,20 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         sections =
         [
             new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
-            new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Edges", edges), spin), 5),
+            // Render keeps only what applies to ALL of them; everything that belongs to one renderer is grouped
+            // under that renderer's name below, so a greyed-out control is self-explanatory.
+            new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Colour", color), spin), 5),
+            // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
+            // the shaded renderer's, so they belong together.
+            new Section("Shaded detail", Spaced(Labelled("Edges", edges), wrapLighting, occlusion), 5),
+            // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
+            // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
+            // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
+            // title saying so is cheaper than working out why.
+            //
+            // Detail sits above Scan because it is the one that changes what you see: Scan only sets a ceiling on
+            // how much of a large model is looked at, and does nothing at all to a model below that ceiling.
+            new Section("Wireframe mesh detail", Spaced(stratify, density, Labelled("Scan", scanCap)), 5),
             new Section("Scale", Spaced(scaleAll, scaleX, scaleY, scaleZ, Row(resetScale, null)), 9),
             new Section("Shear", Spaced(shearX, shearZ, Row(resetShear, null)), 5),
             new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows),
@@ -73,6 +100,10 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     #endregion
 
     #region Methods
+    /// <summary>Which colour option the swatch drop-down is showing. For tests: asserts the widget follows the
+    /// model rather than the other way round.</summary>
+    internal int SelectedColourIndex => color.SelectedIndex;
+
     /// <summary>The stacked height of every section, so an enclosing frame scrolls the panel when the terminal is
     /// too short for it.</summary>
     /// <remarks>
@@ -99,7 +130,18 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         {
             renderer.SelectedIndex = IndexOfRenderer();
             edges.SelectedIndex = (int)(view.Edges ?? SilhouetteStyle.None);
+            stratify.IsChecked = view.Stratify ?? false;
+            scanCap.SelectedIndex = IndexOfScanCap();
+            density.Value = WireframeRenderer.DetailFromSubPixels(
+                view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
+            // Greyed out under a renderer that draws every triangle. They keep reporting the wireframe's real
+            // settings; Enabled is what says "not while this renderer is drawing".
+            stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
             spin.IsChecked = model.SpinRate != 0f;
+            color.SelectedIndex = model.ColorKey;
+            wrapLighting.IsChecked = view.WrapLighting ?? false;
+            occlusion.Value = view.OcclusionStrength ?? 0f;
+            edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
             // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
@@ -129,6 +171,23 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             if (ReferenceEquals(view.Renderers[i], view.Renderer)) return i;
         return 0;
     }
+
+    // Parks on the default's slot rather than 0 when the active renderer has no scan cap, so switching to shaded
+    // does not leave the drop-down showing "5k" and then apply that on the way back.
+    private int IndexOfScanCap()
+    {
+        var cap = view.ScanCap ?? WireframeRenderer.DefaultScanCap;
+        for (var i = 0; i < WireframeRenderer.ScanCapChoices.Length; i++)
+            if (WireframeRenderer.ScanCapChoices[i].Value == cap) return i;
+        return Array.FindIndex(WireframeRenderer.ScanCapChoices, c => c.Value == WireframeRenderer.DefaultScanCap);
+    }
+
+    // A block in the colour itself, then its name — the swatch reads faster than any name does, and having both
+    // means the drop-down is still usable where the two hues are close.
+    private static SelectOption ColorOption((string Name, Color Color) entry) =>
+        new(new Spectre.Console.Markup(
+            $"[#{entry.Color.R:x2}{entry.Color.G:x2}{entry.Color.B:x2}]███[/] {entry.Name}"))
+        { Tag = entry.Color };
 
     private static TextLabel Line(string text, Color color) =>
         new(TextLabelOrientation.Horizontal, text, color) { Focusable = false, Height = 1 };
@@ -194,6 +253,19 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     private readonly Select renderer;
     private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
     private readonly Switch spin = new Switch("Turntable", isOn: true);
+
+    // Renderable options rather than text: the row is a swatch in the colour itself plus its name, which needs two
+    // styles on one row — a text option gets one, and the closed control does not parse markup.
+    private readonly Select color = new Select([.. Palette.Named.Select(ColorOption)]) { FitContent = true };
+
+    private readonly Switch wrapLighting = new Switch("Half-Lambert light");
+    private readonly Slider occlusion = Axis("Occlusion", 0f, 1f, ShadedRenderer.DefaultOcclusionStrength);
+
+    private readonly Switch stratify = new Switch("Even over screen", isOn: true);
+    private readonly Select scanCap =
+        new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };
+    private readonly Slider density = Axis("Detail", WireframeRenderer.MinDetail, WireframeRenderer.MaxDetail,
+        WireframeRenderer.DetailFromSubPixels(WireframeRenderer.DefaultSubPixelsPerTriangle));
 
     private readonly Slider scaleAll = Axis("Scale All", ModelScene.MinScale, ModelScene.MaxScale, 1f);
     private readonly Slider scaleX = Axis("Scale X", ModelScene.MinScale, ModelScene.MaxScale, 1f);

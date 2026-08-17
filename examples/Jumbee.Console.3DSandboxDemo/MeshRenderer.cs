@@ -65,7 +65,7 @@ public abstract class MeshRenderer : ISceneRenderer
         DrawGround();
         for (var i = 0; i < snapshot.Count; i++) DrawBody(snapshot, i);
 
-        // Any depth post-process runs here, once the buffer is complete: silhouettes and contact darkening can only
+        // Any depth post-process runs here, once the buffer is complete: silhouettes and ambient occlusion can only
         // be found after every surface has been resolved against every other one.
         PostProcess();
         surface.EndFrame();

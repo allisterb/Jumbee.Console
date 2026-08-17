@@ -109,11 +109,38 @@ public abstract class RenderableControl : Control, IRenderable
         // Spectre will look at the Profile.Width which comes from the IConsole.Size (BufferConsole.Size)
         ansiConsole.Write(this);
     }
+
+    /// <summary>
+    /// Applies the focus consequences of an interactive control's <c>Enabled</c> state: a disabled control leaves
+    /// the Tab order, and gives up focus if it currently holds it.
+    /// </summary>
+    /// <remarks>
+    /// Shared because it is the half of "disabled" that cannot be expressed by an override: focus navigation
+    /// collects candidates by <see cref="Control.Focusable"/>, which is not virtual, so leaving the Tab order means
+    /// actually clearing it. The caller's own setting is remembered and restored, so a control deliberately made
+    /// unfocusable does not silently become focusable by being disabled and enabled again.
+    /// </remarks>
+    protected void ApplyEnabledToFocus(bool enabled)
+    {
+        if (enabled)
+        {
+            Focusable = _focusableWhenEnabled;
+        }
+        else
+        {
+            _focusableWhenEnabled = Focusable;
+            Focusable = false;
+            if (IsFocused) UnFocus();
+        }
+    }
     #endregion
 
     #region Fields
     // True when the wrapped renderable must be re-rendered into consoleBuffer on the next paint. Set by Invalidate
     // (content/size/theme changes); cleared after a render. Starts true so the first paint renders.
     private bool _contentDirty = true;
+
+    // What Focusable was before this control was disabled. See ApplyEnabledToFocus.
+    private bool _focusableWhenEnabled = true;
     #endregion
 }

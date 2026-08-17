@@ -44,7 +44,9 @@ public static class SceneMenu
             // rather than hidden — a menu whose length changes under you is harder to learn than one that greys out.
             .. EdgeItems(view),
             MenuItem.Separator,
-            new MenuItem("Wrap lighting", () => view.SetWrapLighting(!(view.WrapLighting ?? false)))
+            .. MeshDetailItems(view),
+            MenuItem.Separator,
+            new MenuItem("Half-Lambert lighting", () => view.SetWrapLighting(!(view.WrapLighting ?? false)))
             {
                 Checked = view.WrapLighting ?? false,
                 Enabled = view.WrapLighting is not null,
@@ -114,6 +116,14 @@ public static class SceneMenu
             }),
             MenuItem.Separator,
             .. EdgeItems(view),
+            new MenuItem("Half-Lambert lighting", () => view.SetWrapLighting(!(view.WrapLighting ?? false)))
+            {
+                Checked = view.WrapLighting ?? false,
+                Enabled = view.WrapLighting is not null,
+                Shortcut = "w",
+            },
+            MenuItem.Separator,
+            .. MeshDetailItems(view),
         ]);
 
         bar.Add("View", () =>
@@ -136,5 +146,23 @@ public static class SceneMenu
                 Checked = view.Edges == style,
                 Enabled = view.Edges is not null,
             });
+
+    // The wireframe's mesh-sampling dials, greyed out under the renderers that draw every triangle -- same rule as
+    // the edge styles. The density slider has no menu form: a continuous value does not belong in a menu, and the
+    // sidebar owns it.
+    private static IEnumerable<MenuItem> MeshDetailItems(SceneView view) =>
+    [
+        new MenuItem("Mesh: even over screen", () => view.SetStratify(!(view.Stratify ?? false)))
+        {
+            Checked = view.Stratify ?? false,
+            Enabled = view.MeshDialsApply,
+        },
+        .. WireframeRenderer.ScanCapChoices.Select(choice =>
+            new MenuItem("Mesh scan: " + choice.Label, () => view.SetScanCap(choice.Value))
+            {
+                Checked = view.ScanCap == choice.Value,
+                Enabled = view.MeshDialsApply,
+            }),
+    ];
     #endregion
 }

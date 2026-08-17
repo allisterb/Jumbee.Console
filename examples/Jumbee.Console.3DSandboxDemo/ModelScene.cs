@@ -76,6 +76,20 @@ public sealed class ModelScene : ISceneSource
     /// <summary>Continuous turntable spin, in radians per second; 0 holds still.</summary>
     public float SpinRate { get; set; } = 0.35f;
 
+    /// <summary>Which entry of <see cref="Palette.Named"/> the model is drawn in. Every renderer tints through the
+    /// palette, so this one index recolours the wireframe and the two shaded renderers alike.</summary>
+    public int ColorKey
+    {
+        get => colorKey;
+        set
+        {
+            var next = ((value % Palette.Named.Length) + Palette.Named.Length) % Palette.Named.Length;
+            if (next == colorKey) return;
+            colorKey = next;
+            Rebuild();
+        }
+    }
+
     /// <summary>How far the model is raised so its underside rests on the ground plane — and so the height its
     /// middle sits at, which is where a camera should look.</summary>
     public float Elevation { get; private set; }
@@ -288,7 +302,7 @@ public sealed class ModelScene : ISceneSource
         snapshot.Positions[0] = new Vector3(0, Elevation, 0);
         snapshot.Rotations[0] = Quaternion.Identity;
         snapshot.HalfExtents[0] = new Vector3(ViewRadius);
-        snapshot.ColorKeys[0] = 1;
+        snapshot.ColorKeys[0] = colorKey;
         snapshot.Awake[0] = true;
         snapshot.AwakeCount = 1;
         (snapshot.LocalTransforms ??= new Matrix4x4[1])[0] = transform * Matrix4x4.CreateScale(ViewScale);
@@ -317,5 +331,6 @@ public sealed class ModelScene : ISceneSource
     private readonly SceneSnapshot snapshot;
     private float spin;
     private ModelUpAxis upAxis = ModelUpAxis.Y;
+    private int colorKey = 1;   // Mint, the colour the viewer has always opened in
     #endregion
 }

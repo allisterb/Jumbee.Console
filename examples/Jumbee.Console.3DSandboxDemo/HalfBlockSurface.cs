@@ -202,7 +202,7 @@ public sealed class HalfBlockSurface : Control
     /// into it.
     /// </para>
     /// </remarks>
-    public void ApplyContactShading(float strength)
+    public void ApplyOcclusion(float strength)
     {
         if (strength <= 0f || PixelWidth < 5 || PixelHeight < 5) return;
 
@@ -220,7 +220,7 @@ public sealed class HalfBlockSurface : Control
                 var gy = (depth[i + PixelWidth] - depth[i - PixelWidth]) * 0.5f;
 
                 var occluded = 0;
-                foreach (var (ox, oy) in ContactRing)
+                foreach (var (ox, oy) in OcclusionRing)
                 {
                     var sx = x + ox;
                     var sy = y + oy;
@@ -230,11 +230,11 @@ public sealed class HalfBlockSurface : Control
                     if (sample <= 0) continue;   // background is infinitely far and occludes nothing
 
                     var predicted = d + (gx * ox) + (gy * oy);
-                    if (sample > predicted + (ContactBias * d)) occluded++;
+                    if (sample > predicted + (OcclusionBias * d)) occluded++;
                 }
 
                 if (occluded == 0) continue;
-                var factor = 1f - (strength * occluded / ContactRing.Length);
+                var factor = 1f - (strength * occluded / OcclusionRing.Length);
                 var c = color[i];
                 color[i] = new CColor((byte)(c.Red * factor), (byte)(c.Green * factor), (byte)(c.Blue * factor));
             }
@@ -310,10 +310,10 @@ public sealed class HalfBlockSurface : Control
 
     // Sampled at a couple of sub-pixels out: near enough to catch a contact seam, far enough not to just re-measure
     // the gradient it was estimated from. Sub-pixels are square, so this is a real circle on screen.
-    private static readonly (int X, int Y)[] ContactRing =
+    private static readonly (int X, int Y)[] OcclusionRing =
         [(3, 0), (-3, 0), (0, 3), (0, -3), (2, 2), (2, -2), (-2, 2), (-2, -2)];
 
-    private const float ContactBias = 0.02f;
+    private const float OcclusionBias = 0.02f;
 
     // Empty until the first BeginFrame sizes them; the bounds checks in TestAndSet/Render cover that window, so they
     // need no null handling on the per-sub-pixel hot path.

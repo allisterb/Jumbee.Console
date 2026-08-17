@@ -135,11 +135,88 @@ public sealed class SceneView : CompositeControl
     /// no lighting to wrap.</summary>
     public bool? WrapLighting => renderer is ShadedRenderer s ? s.WrapLighting : null;
 
-    /// <summary>Turns half-lambert wrapping on or off. A no-op under a renderer that does not light per pixel.</summary>
+    /// <summary>Turns half-Lambert lighting on or off. A no-op under a renderer that does not light per pixel.</summary>
     public void SetWrapLighting(bool wrap)
     {
         if (renderer is not ShadedRenderer shaded || shaded.WrapLighting == wrap) return;
         shaded.WrapLighting = wrap;
+        RendererChanged?.Invoke();
+    }
+
+    /// <summary>How hard the shaded renderer darkens creases and contacts, or <see langword="null"/> under a
+    /// renderer that has no such pass.</summary>
+    public float? OcclusionStrength => renderer is ShadedRenderer s ? s.OcclusionStrength : null;
+
+    /// <summary>Sets the contact-darkening strength; 0 disables the pass. See
+    /// <see cref="ShadedRenderer.OcclusionStrength"/>.</summary>
+    public void SetOcclusionStrength(float strength)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.OcclusionStrength == strength) return;
+        shaded.OcclusionStrength = strength;
+        RendererChanged?.Invoke();
+    }
+
+    // The wireframe's mesh-sampling dials.
+    //
+    // These read and write the WIREFRAME wherever it is in the renderer list, not "the active renderer if it
+    // happens to be the wireframe" -- which is how the shaded renderer's edge and lighting options work, and it
+    // would be wrong here. Those return null under another renderer so a widget can show a neutral state; but with
+    // no disabled state on Switch/Select/Slider, a null-to-false fallback does not read as "not applicable", it
+    // reads as OFF. Showing a switch off while the setting is on is a lie, and the settings genuinely do persist on
+    // the wireframe instance across a renderer swap. So the dials are always live and always truthful, and
+    // MeshDialsApply is what a MENU (which does have a disabled state) uses to grey them.
+
+    private WireframeRenderer? Wireframe
+    {
+        get
+        {
+            if (renderer is WireframeRenderer active) return active;
+            foreach (var candidate in renderers)
+            {
+                if (candidate is WireframeRenderer w) return w;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>Whether the mesh dials affect what is on screen right now — false when a renderer that draws every
+    /// triangle is active. They remain settable either way.</summary>
+    public bool MeshDialsApply => renderer is WireframeRenderer;
+
+    /// <summary>Whether the wireframe spreads a mesh's budget over the screen rather than over its triangle list,
+    /// or <see langword="null"/> when there is no wireframe renderer at all.</summary>
+    public bool? Stratify => Wireframe?.Stratify;
+
+    /// <summary>Turns screen stratification on or off. See <see cref="WireframeRenderer.Stratify"/> for the trade.</summary>
+    public void SetStratify(bool on)
+    {
+        if (Wireframe is not { } w || w.Stratify == on) return;
+        w.Stratify = on;
+        RendererChanged?.Invoke();
+    }
+
+    /// <summary>How many triangles of a mesh the wireframe examines per frame, or <see langword="null"/> when there
+    /// is no wireframe renderer at all.</summary>
+    public int? ScanCap => Wireframe?.ScanCap;
+
+    /// <summary>Sets the per-frame triangle scan ceiling. See <see cref="WireframeRenderer.ScanCap"/>.</summary>
+    public void SetScanCap(int cap)
+    {
+        if (Wireframe is not { } w || w.ScanCap == cap) return;
+        w.ScanCap = cap;
+        RendererChanged?.Invoke();
+    }
+
+    /// <summary>Screen area per drawn mesh triangle — lower draws more — or <see langword="null"/> when there is no
+    /// wireframe renderer at all.</summary>
+    public float? MeshDensity => Wireframe?.SubPixelsPerTriangle;
+
+    /// <summary>Sets the mesh draw density. See <see cref="WireframeRenderer.SubPixelsPerTriangle"/>.</summary>
+    public void SetMeshDensity(float subPixelsPerTriangle)
+    {
+        if (Wireframe is not { } w || w.SubPixelsPerTriangle == subPixelsPerTriangle) return;
+        w.SubPixelsPerTriangle = subPixelsPerTriangle;
         RendererChanged?.Invoke();
     }
 
@@ -350,7 +427,7 @@ public sealed class SceneView : CompositeControl
         .WithKey("c", "Clear every body")
         .WithKey("v", "Cycle renderer: wireframe (braille edges), solid (flat-shaded), shaded (point light + edges + AO)")
         .WithKey("e", "Shaded only: cycle silhouettes — off, ink outline, edge glyphs")
-        .WithKey("w", "Shaded only: half-lambert wrapping, which keeps the unlit side legible")
+        .WithKey("w", "Shaded only: half-Lambert lighting — rescues the unlit side, costs contrast on the lit one")
         .WithKey("u", "Show or hide the sidebar")
         .WithKey("+ / -", "Grow / shrink what gets spawned")
         .WithKey("] / [", "Raise / lower the launch speed");

@@ -64,7 +64,8 @@ var option = new RadioButton("Option A");
 | `IsChecked` | `bool` | The current state. Set it to change the control programmatically. |
 | `Changed` | `event EventHandler<bool>` | Raised with the new state whenever `IsChecked` changes. |
 | `Text` | `string` | The label. Changing it re-sizes the control. |
-| `Toggle()` | `void` | Flips the state (the same path a click takes). |
+| `Toggle()` | `void` | Flips the state (the same path a click takes). Works while disabled. |
+| `Enabled` | `bool` | Whether the user can change it. See [Disabling a control](#disabling-a-control-enabled). |
 
 ```csharp
 notify.Changed += (_, on) => status.Text = on ? "Notifications on" : "Notifications off";
@@ -273,6 +274,71 @@ var cb = new Checkbox("Custom")
 | `Slider` | `Style` (a `SliderStyle` of label/fill/track/thumb/value), `ThumbGlyph`, `HoverStyle`, `FocusedStyle` |
 
 Explicit values like these survive a runtime theme switch; everything you leave unset keeps following the theme.
+
+## Options that are more than text
+
+`Select`'s options are normally strings, but a row that needs more than one style — a colour swatch beside a name,
+an icon, two columns — can be an `IRenderable` instead, the same way `ListBox` and `Tree` take them.
+
+```csharp
+var mint = new Color(120, 200, 160);
+var coral = new Color(225, 130, 110);
+
+// Qualified, because an unqualified `using Spectre.Console` makes Color and Grid ambiguous with Jumbee's own.
+IRenderable Swatch(string name, Color c) =>
+    new Spectre.Console.Markup($"[#{c.R:x2}{c.G:x2}{c.B:x2}]███[/] {name}");
+
+var colour = new Select(
+    new SelectOption(Swatch("Mint", mint)) { Tag = mint },
+    new SelectOption(Swatch("Coral", coral)) { Tag = coral })
+{ FitContent = true };
+
+colour.SelectionChanged += (_, _) => Recolour((Color)colour.SelectedItem!.Tag!);
+```
+
+Three things follow from an option having no text, and they are the whole of what you need to know:
+
+- **`SelectedValue` is `null`.** Read `SelectedIndex`, or `SelectedItem.Tag` — which exists so a row maps back to
+  the value it stands for without a parallel array.
+- **`SelectionChanged` still fires**, with an empty payload. Guarding it on the text would mean a `Select` of
+  renderables never announced anything.
+- **A renderable is drawn on one row** — in the closed control and in the drop-down alike — so one that spans
+  several lines is clipped to its first.
+
+Text and renderable options can be mixed in one control; the width fits the widest of either.
+
+> **Markup in a *text* option is not parsed.** The closed control has never treated its value as markup and that has
+> not changed, so an option containing `[` stays literal. This is why a swatch needs a renderable rather than a
+> markup string: the drop-down would render it, and the closed row would show the tags.
+
+## Disabling a control: `Enabled`
+
+`Checkbox`, `RadioButton`, `Switch`, `Select` and `Slider` each carry an `Enabled` property. Setting it to `false`
+makes the control inert to the user — it ignores clicks, keys, drags and the wheel, drops out of the Tab order, and
+gives up focus if it held it — and draws it muted, in a `DisabledStyle` that defaults to the theme's
+`IStyleTheme.TextDisabled`.
+
+```csharp
+var quality = new Slider(1, 8, 2, "Detail");
+
+// Grey it out while the setting it drives is not the one in use.
+quality.Enabled = renderer.Name == "wireframe";
+```
+
+**A disabled control still reports its value, and code can still change it.** `IsChecked`, `SelectedIndex`, `Value`
+and `Toggle()` all keep working; only the *user* input paths are blocked. That is the point of disabling rather
+than hiding: a panel can say "this setting is real, and here is what it is, but not from here". A control that
+blanked its value while disabled would be no more use than an empty space — and one that silently fell back to a
+default would be worse, because an off switch that is merely *inapplicable* is indistinguishable from one that is
+genuinely off.
+
+A `Slider` keeps its handle where the value puts it, desaturated rather than blanked, so it still works as a
+readout. A `Select` keeps its background so it still reads as a control rather than as stray text. Neither shows a
+hover highlight while disabled — a control that lights up under the pointer and then does nothing is worse than
+one that plainly does not react.
+
+Disabling remembers whatever `Focusable` was, so a control you deliberately kept out of the Tab order does not
+quietly join it after a disable/enable round trip.
 
 ## Behaviour summary
 

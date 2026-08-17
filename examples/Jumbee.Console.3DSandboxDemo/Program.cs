@@ -17,7 +17,7 @@ using Jumbee.Console.SandboxDemo;
 //
 //   wireframe -- projected edges on a Canvas at braille resolution; painter's sort, no fill.
 //   solid     -- z-buffered flat-shaded triangles from a directional light; one colour per face.
-//   shaded    -- per-pixel point light with specular, plus silhouettes and contact darkening.
+//   shaded    -- per-pixel point light with specular, plus silhouettes and ambient occlusion.
 //
 // Threading (sandbox only) is the pattern from docs/controls/Live Data.md: the physics world, the body list and
 // every Box3D handle belong to the physics thread, which publishes one immutable SceneSnapshot per tick. The UI
@@ -163,7 +163,7 @@ static void OpenModelsDialog(SandboxShell.Viewer app) =>
 
 // The `obj` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
 // ground stays — it costs nothing and it earns its place, giving the model a sense of scale and somewhere for the
-// contact darkening to land, both of which a model floating in a void loses.
+// ambient occlusion to land, both of which a model floating in a void loses.
 static async Task<int> RunModelViewer(int startIndex)
 {
     if (Meshes.RegisteredCount == 0)

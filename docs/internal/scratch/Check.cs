@@ -333,15 +333,27 @@ else
     // And the thinned sample must cover the WHOLE model, not a prefix of its triangle list. This is the check that
     // would have caught drawing the bunny with its back half missing: every earlier check passed while a third to a
     // half of the mesh was never even considered, because the drawn TOTAL was right and only its extent was wrong.
-    // Measured against ground truth -- the analytically projected bounding box of the posed vertices -- so it is
-    // "the ink reaches as far as the geometry does", not a comparison with a previous render.
+    //
+    // Run over TWO subjects, and the second is the point. A uniformly tessellated model cannot fail the density
+    // half of this: it takes an authored asset, where detail geometry holds most of the triangles while flat
+    // panels hold most of the area, to catch a sampler that spends the budget evenly by triangle count. The
+    // reference plane is that asset -- 81k triangles whose wings are a tiny fraction of the list.
+    //
     // Rendered LARGER than the rest of these checks, and that is load-bearing. The budget follows on-screen area,
     // so at 100x34 the teapot gets ~190 triangles and a tenth of the frame can be legitimately blank just from the
     // sampling rate -- which swamps the signal (measured: 80% with the code correct against 84% with the bug, i.e.
     // backwards). At 240x80 it gets ~1,100 and blank means missing.
     const int CW = 240, CH = 80;
+    var planePath = @"C:\Projects\Jumbee.Console\media\models\plane.obj";
+    var subjects = new List<(string Name, int Id)> { (teapotId >= 0 ? "teapot" : "knot", meshId) };
+    if (File.Exists(planePath)) subjects.Add(("plane", Meshes.Register(ObjLoader.Load(planePath), "plane")));
+    else Console.WriteLine("  SKIP  plane.obj not found -- the non-uniform-tessellation subject");
+
+    foreach (var (subject, id) in subjects)
+    {
+    one.MeshIds[0] = id;
     var bare = new WireframeRenderer { GridHalfExtent = 0 };   // no floor grid, so the ink IS the body
-    var mesh = Meshes.Get(meshId);
+    var mesh = Meshes.Get(id);
     var worst = 1.0;
     foreach (var theta in new[] { 0f, MathF.PI / 3, MathF.PI / 2, 2f * MathF.PI / 3, MathF.PI })
     {
@@ -354,7 +366,7 @@ else
         // HOLE in the middle of the model, and a bounding box cannot see one -- the extremities still get drawn, so
         // the box comes out the right size while a third of the body is missing. (Learned the hard way: the first
         // version of this check passed with the bug deliberately reintroduced.)
-        const int G = 6;
+        const int G = 12;
         var inked = new bool[G, G];
         var wanted = new bool[G, G];
         for (var cy = 0; cy < rows.Length; cy++)
@@ -404,11 +416,19 @@ else
         worst = Math.Min(worst, got / Math.Max(1.0, want));
     }
 
-    // Threshold sits between the two measured states rather than at an aspiration: 89% with the code correct
-    // (a thinned sample will always miss a sliver-thin cell at the silhouette) against 60% with the early exit
-    // deliberately put back. Anything below 80% means a region of the model is not being drawn at all.
-    Check("the thinned sample leaves no holes, from every angle", worst > 0.80,
+    // Threshold sits between measured states, not at an aspiration. All three were measured by deliberately
+    // breaking the renderer and re-running, which is the only way to know a check is not vacuous:
+    //
+    //   correct                                     teapot 96%   plane 95%
+    //   pass 2 picking evenly by count              teapot 96%   plane 90%   <- the tessellation-density bug
+    //   pass 1 exiting early at the budget                        both ~60%   <- the missing-region bug
+    //
+    // 100% is not reachable: a thinned sample always misses some sliver-thin cell at the silhouette. Note the
+    // teapot is blind to the density bug -- it is uniformly tessellated, so only the plane's row moves. An
+    // earlier, coarser version of this grid (G = 6) could not see it either and passed at 100% both ways.
+    Check($"the thinned sample leaves no holes in the {subject}, from every angle", worst > 0.93,
         $"worst angle inks {worst:P0} of the cells the geometry occupies");
+    }
 }
 
 // Triangulation gets its own synthetic case: every model in the reference set is ALREADY triangulated, so loading
@@ -556,7 +576,12 @@ for (var y = 1; y < H - 3; y++)
 Check("it fills the viewport with half-blocks", half > (W - 2) * (H - 4) * 0.8, $"{half} cells");
 // The whole point of quantising the shade ramp: a handful of levels, not a continuum. If this ran into the hundreds
 // the renderer would be in the expensive column measured at M0.1 (7x the ANSI bytes).
-Check("the shade ramp is quantised", distinct.Count is > 2 and < 120, $"{distinct.Count} distinct fg/bg pairs");
+//
+// The bound is loose because the count GROWS WITH THE VIEWPORT -- a bigger frame shows more of the ground at more
+// distances, so more distinct fg/bg pairs even though the ramp itself has not changed: 105 at 100x34 against 127 at
+// 200x50. The old fixed 120 therefore passed at the harness default and failed under `--perf 200x50`, which reads
+// as a renderer regression and is not one. What it is really guarding against is a continuum, which is thousands.
+Check("the shade ramp is quantised", distinct.Count is > 2 and < 400, $"{distinct.Count} distinct fg/bg pairs");
 
 // Depth: with the camera outside the scene, every drawn sub-pixel must be in front of it, and the ground alone
 // cannot explain a body standing on it -- so check something is nearer than the ground plane directly behind it.
@@ -685,7 +710,7 @@ if (args.Contains("--perf"))
 
     Time("wireframe", new WireframeRenderer());
     Time("solid", new SolidRenderer());
-    Time("shaded", new ShadedRenderer { Edges = SilhouetteStyle.None, ContactStrength = 0f });
+    Time("shaded", new ShadedRenderer { Edges = SilhouetteStyle.None, OcclusionStrength = 0f });
     Time("shaded+ao", new ShadedRenderer { Edges = SilhouetteStyle.None });
     Time("shaded+ao+line", new ShadedRenderer { Edges = SilhouetteStyle.Line });
     Time("shaded+ao+glyph", new ShadedRenderer { Edges = SilhouetteStyle.Glyph });

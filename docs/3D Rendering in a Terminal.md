@@ -464,12 +464,25 @@ the number you thin it to:
 - **Thin by triangle, not by edge**, keeping each triangle's three edges together. Striding an edge list picks
   unrelated edges from all over the surface and each one lands as a floating segment. Whole triangles land as
   surface.
+- **Spend the budget evenly over the SCREEN, not over the triangle list.** Picking one triangle per so many
+  triangles assumes a model's triangles are spread evenly over its surface, and an authored asset's are not. The
+  reference plane is 81k triangles, but its detail — engines, gear, panel lines — holds most of the *triangles*
+  while its wings and fuselage hold most of the *area*. An even-by-count budget went almost entirely on sub-pixel
+  dots in the detail and left the wings bare: its median drawn triangle spanned 0.13 cells against the bunny's
+  2.00. Bucketing the visible faces by screen cell and giving each bucket a share makes the ink uniform whatever
+  the tessellation, without needing to know why a region is dense. The share has to be handed out **round-robin**
+  rather than as a fixed `budget / buckets` quota: a fixed quota is only spent by buckets that have that many
+  candidates, and every sparser bucket leaves its share unspent — which drew a zoomed-in teapot with 57% of its
+  budget, thinner than the even-by-count pick it replaced.
 - **Cull back faces first**, so the budget is spent on the half you can see and the silhouette survives. The test
   is `dot(cross(b-a, c-a), eye-a) > 0` — the world-space normal against the direction back to the eye, which stays
   correct under the shear and non-uniform scale the model viewer applies.
 
-The scan is bounded too: it walks an evenly spaced sample of about three triangles per one it expects to draw, so a
-250k-triangle dragon costs the same triangle tests as the bunny.
+The scan is bounded too, but by an **absolute** count (40,000 triangles) rather than by a multiple of the budget.
+What it has to guarantee is that no region of the model goes uncandidated — a screen bucket with no candidate is a
+hole however cleverly the budget is then spent — and a budget-relative stride does not guarantee that. On the plane
+it worked out at 26, which found candidates in only 91 of the 116 buckets the model covers. Scanning every triangle
+instead is exact but costs the 250k-triangle dragon 4.9 ms a frame against 1.0 ms, and buys nothing the cap does not.
 
 **Finding the visible faces and choosing which to draw have to be separate passes**, and this is the subtle part.
 The obvious single-pass version — stride forward, draw what survives the cull, stop once the budget is full — ends
@@ -479,16 +492,67 @@ half missing; the missing part moved as the camera orbited, because where the wa
 the cull happens to keep, which depends on the angle. Two passes — collect the front-facing triangles across the
 whole mesh, then spread the budget over what you collected — costs one reused `int[]` and nothing else.
 
-That failure is worth naming because of how it hides. The drawn *total* was always exactly the budget, so every
-measure of ink volume looked right; only the ink's *distribution* was wrong. A test comparing lit-cell counts, or
-even the model's on-screen bounding box, passes cleanly while a third of the body is absent — the extremities are
-still drawn, so the box is still the right size. Catching it needs an occupancy grid: divide the frame into coarse
-cells, compute which ones front-facing geometry actually occupies, and require the ink to reach them.
+Both failures are worth naming because of how they hide. The drawn *total* is always exactly the budget, so every
+measure of ink volume looks right; only the ink's *distribution* is wrong. A test comparing lit-cell counts, or even
+the model's on-screen bounding box, passes cleanly while a third of the body is absent — the extremities are still
+drawn, so the box is still the right size. Catching it needs an occupancy grid: divide the frame into cells, compute
+which ones front-facing geometry actually occupies, and require the ink to reach them.
 
-**Where it still falls down** is a mesh dense enough that a sampled triangle is smaller than a sub-pixel. The dragon
-reads as a correctly-shaped cloud rather than as a surface, because at 250k triangles over one viewport there is no
-budget at which whole triangles are also *visible* triangles. Drawing the convex hull's edges instead would give a
-genuine shape at 30–60 edges, and needs a hull implementation the physics engine does not expose.
+Two things about that grid turned out to matter, and both were found by deliberately re-breaking the renderer and
+re-running rather than by reasoning:
+
+- **Ground truth must be front-facing geometry, not all vertices.** A hollow model has cells only back faces can
+  reach, and the permanent shortfall they cause is the same size as the bug's.
+- **Resolution has to match the defect.** A grid coarse enough to expose the missing-region bug cleanly cannot see
+  the tessellation-density one at all — it passed at 100% either way. The density bug only separates at a finer
+  grid, where correct scores 95% and even-by-count scores 90%.
+
+And the subject matters as much as the metric: a uniformly tessellated model is **blind** to the density bug by
+construction. It takes an authored asset to catch it.
+
+### An aside: why the flat renderer can look sharper than the shaded one
+
+It is a fair thing to notice, and the intuitive culprit — the contact/AO pass — is the wrong one. Mean contrast
+between neighbouring lit cells on the bunny:
+
+| | distinct shade levels | contrast |
+|---|---:|---:|
+| solid | 5 | **11.5** |
+| shaded, wrap **on** | 26 | **9.0** |
+| shaded, wrap **off** (the default) | 34 | **14.3** |
+| shaded, contact 0 | 5 | 7.7 |
+
+The cause is **half-lambert wrapping**, whose whole trade is stated where it is defined: it rescues the unlit half
+of an object from collapsing into one black level, and pays contrast on the lit side to do it. With it off the
+shaded renderer is the sharper of the two — which is why it now ships off, at a cost of ~12% more ANSI bytes a
+frame. It is still one switch away (`w`, or the sidebar) for a scene where the dark side matters more, which is
+the case it was originally added for: a sandbox of tumbling bodies under a freely orbiting camera.
+
+The occlusion pass runs the other way from the guess: removing it *flattens* the image (9.0 → 7.7) and collapses 26
+distinct levels to 5, because it multiplies the quantised levels by a continuous per-cell factor and hands back
+gradation the quantiser had thrown away. Both are settings on `ShadedRenderer` (`WrapLighting`, `OcclusionStrength`).
+
+All three of these ended up as **settings** rather than constants, which is the honest outcome: each is a real
+trade rather than a right answer, and which way it should go depends on the model in front of you and on whether
+you are spending the frame on this or on something else. `WireframeRenderer` exposes `Stratify`, `ScanCap` and
+`SubPixelsPerTriangle`, and the demo's Render panel drives them.
+
+**Where it still falls down** is a mesh dense enough that a sampled triangle is smaller than a sub-pixel — and that
+is a limit of the *primitive*, not of the budget. Median projected size of a front-facing triangle with the model
+filling a 200×50 viewport:
+
+| model | triangles | median triangle |
+|---|---:|---:|
+| bunny | 4,968 | 1.46 cells |
+| teapot | 6,320 | 0.84 cells |
+| dragon | 249,882 | **0.20 cells** |
+
+A fifth of a cell lights one sub-pixel, so a dragon triangle draws as a *dot* rather than an edge, and a thousand
+dots read as a stipple. Coverage is already 97–99% — nothing is missing; drawing more triangles just makes denser
+dots, and you would have to draw essentially all 125k front-facing ones before they merged into a surface, at which
+point you have written the solid renderer. The fix is edges that **span** many triangles: silhouette and crease
+extraction, or the convex hull — a genuine shape at 30–60 edges, needing a hull implementation the physics engine
+does not expose.
 
 ### Solid — flat shaded, one directional light
 
@@ -535,10 +599,12 @@ protected override CColor ShadePixel(Vector3 world, Vector3 normal, Color tint)
 Three details are worth extracting.
 
 **Half-lambert wrapping.** `N·L * 0.5 + 0.5` instead of `max(0, N·L)`. Instead of clamping the unlit half to zero,
-it maps the full -1..1 range into 0..1. This is a hack with no physical justification, and it earns its place
-*specifically because a terminal has so few shade levels*: clamping sends every face turned past perpendicular to
-the same flat black, so the entire unlit half of an object collapses into one value and loses its shape. Wrapping
-spreads that half across the lower levels. The cost is contrast on the lit side.
+it maps the full -1..1 range into 0..1. This is a hack with no physical justification, and its whole argument is
+*that a terminal has so few shade levels*: clamping sends every face turned past perpendicular to the same flat
+black, so the entire unlit half of an object collapses into one value and loses its shape. Wrapping spreads that
+half across the lower levels. **The cost is contrast on the lit side, and it is the bigger effect** — which is why
+this ships *off*, as `ShadedRenderer.WrapLighting`. See the aside above for the numbers; the short version is that
+seven quantised levels are too few to give away half of, and the lit surface is what you are usually looking at.
 
 **The specular gate.** It tests `facing > 0` — the *raw* dot — not the wrapped value. Wrapping never returns zero
 for a merely-turned-away face, so gating on it would put highlights on surfaces pointing into shadow.
@@ -580,7 +646,7 @@ Both *brighten*. That is not arbitrary: a sleeping body is drawn at a third brig
 inherited its surface colour came out as the faintest possible mark on a dark background — present in the buffer,
 invisible on screen.
 
-#### Contact shading (AO on the cheap)
+#### Ambient occlusion, in screen space
 
 Real AO asks "how much of the sky can this point see", which needs to sample the surrounding geometry. The
 screen-space approximation asks a cheaper question of the depth buffer: **is anything sticking out in front of
@@ -594,10 +660,10 @@ not just the surface receding.
 var gx = (depth[i + 1] - depth[i - 1]) * 0.5f;   // exact screen-space gradient on a plane
 var gy = (depth[i + PixelWidth] - depth[i - PixelWidth]) * 0.5f;
 
-foreach (var (ox, oy) in ContactRing)
+foreach (var (ox, oy) in OcclusionRing)
 {
     var predicted = d + (gx * ox) + (gy * oy);
-    if (sample > predicted + (ContactBias * d)) occluded++;
+    if (sample > predicted + (OcclusionBias * d)) occluded++;
 }
 ```
 
@@ -605,7 +671,7 @@ That distinction — extrapolate, then compare — is what separates a corner fr
 which a naive depth comparison cannot do.
 
 Order matters in the post-process: **darken first, outline second**. Outlining last keeps edges at full brightness
-instead of having the contact pass mute the very lines that define the shape.
+instead of having the occlusion pass mute the very lines that define the shape.
 
 ---
 
@@ -843,7 +909,7 @@ Choosing between them:
 - **Many bodies, shape matters more than surface** → wireframe. It scales with body count in a way the solid
   renderers do not, and its representation of primitives is exact.
 - **General use** → solid. Cheapest by both measures, reads unambiguously as 3D, and its faceting suits the medium.
-- **A single subject you want to look good** → shaded. The gradient across a face and the contact darkening are
+- **A single subject you want to look good** → shaded. The gradient across a face and the ambient occlusion are
   what make an object look like it is *there*, and at 15% of a frame budget you can afford it for one model.
 
 ## Things that are absent, and what they would cost

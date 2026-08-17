@@ -136,6 +136,31 @@ public class Slider : RenderableControl
     /// <summary>Sets the label and the cells reserved for it, so sliders in a stack align.</summary>
     public Slider WithLabel(string label, int width = 0) { Label = label; LabelWidth = width; return this; }
 
+    /// <summary>
+    /// Whether the control responds to the user. A disabled slider draws its label, readout and track muted,
+    /// ignores keys, drags and the wheel, and is skipped by Tab.
+    /// </summary>
+    /// <remarks>
+    /// The handle stays where the value puts it rather than the track going blank — a slider that reports nothing
+    /// is not the same thing as one that reports a value you may not currently change. Setting
+    /// <see cref="Value"/> in code still works while disabled.
+    /// </remarks>
+    public bool Enabled
+    {
+        get => _enabled;
+        set => SetAtomicProperty(ref _enabled, value, watch: (_, on) =>
+        {
+            ApplyEnabledToFocus(on);
+            // Disabling mid-drag would otherwise leave the mouse captured by a control that no longer responds,
+            // which swallows every click until something else grabs it.
+            if (!on && _dragging) { _dragging = false; ReleaseMouse(); }
+        });
+    }
+
+    /// <summary>Style for the label and readout while disabled, and the colour the track is flattened toward.
+    /// Defaults to <see cref="IStyleTheme.TextDisabled"/>.</summary>
+    public Style DisabledStyle { get => _disabledStyle; set => SetAtomicProperty(ref _disabledStyle, value, themeOverride: true); }
+
     /// <inheritdoc/>
     protected override void ApplyTheme()
     {
@@ -143,6 +168,7 @@ public class Slider : RenderableControl
         if (!IsThemeOverridden(nameof(ThumbGlyph))) _thumbGlyph = UI.GlyphTheme.SliderThumb;
         if (!IsThemeOverridden(nameof(HoverStyle))) _hoverStyle = UI.StyleTheme.Hover;
         if (!IsThemeOverridden(nameof(FocusedStyle))) _focusedStyle = UI.StyleTheme.Focus;
+        if (!IsThemeOverridden(nameof(DisabledStyle))) _disabledStyle = UI.StyleTheme.TextDisabled;
     }
 
     // The label and readout carry the focus cue themselves (see Render), so the themed whole-control tint would
@@ -178,8 +204,17 @@ public class Slider : RenderableControl
 
         var text = _style.Label;
         var value = _style.Value;
-        if (IsMouseOver) { text |= _hoverStyle; value |= _hoverStyle; }
-        if (IsFocused) { text |= _focusedStyle; value |= _focusedStyle; }
+        // Disabled replaces the label/readout styles outright and suppresses both cues: a control that lights up
+        // under the pointer but does nothing when dragged is worse than one that plainly does not react.
+        if (!_enabled)
+        {
+            text = value = _disabledStyle;
+        }
+        else
+        {
+            if (IsMouseOver) { text |= _hoverStyle; value |= _hoverStyle; }
+            if (IsFocused) { text |= _focusedStyle; value |= _focusedStyle; }
+        }
 
         if (label.Length > 0) yield return new Segment(label, text);
         foreach (var segment in Track(trackWidth)) yield return segment;
@@ -189,6 +224,8 @@ public class Slider : RenderableControl
     /// <inheritdoc/>
     protected override void OnInput(InputEvent inputEvent)
     {
+        if (!_enabled) return;
+
         // Shift is the fine-adjust modifier, matching the rest of the library's nudge controls.
         var scale = (inputEvent.Key.Modifiers & ConsoleModifiers.Shift) != 0 ? 0.2 : 1;
         switch (inputEvent.Key.Key)
@@ -212,6 +249,7 @@ public class Slider : RenderableControl
     /// <inheritdoc/>
     protected override void OnMousePress(Position position)
     {
+        if (!_enabled) return;
         _dragging = true;
         CaptureMouse();
         SetFromX(position.X);
@@ -238,7 +276,9 @@ public class Slider : RenderableControl
     /// <inheritdoc/>
     protected override void OnMouseWheel(Position position, int delta)
     {
-        if (IsFocused || ControlFrame.FindScrollingFrame(this) is null) StepBy(delta > 0 ? -1 : 1);
+        // Disabled forwards rather than swallowing: a wheel notch over an inert slider in a scrolling sidebar
+        // should still scroll the sidebar.
+        if (_enabled && (IsFocused || ControlFrame.FindScrollingFrame(this) is null)) StepBy(delta > 0 ? -1 : 1);
         else base.OnMouseWheel(position, delta);
     }
 
@@ -296,6 +336,18 @@ public class Slider : RenderableControl
         var trackColor = _style.Track.ForegroundColor ?? DefaultTrack;
         var thumbColor = _style.Thumb.ForegroundColor ?? DefaultThumb;
 
+        // Disabled desaturates the track toward the disabled text colour rather than blanking it. The filled band
+        // and the handle stay distinguishable, so the control still REPORTS its value; it just stops inviting a
+        // drag. Flattened, not hidden: greying a slider until you cannot see where it is set makes it useless as a
+        // readout, which is most of what a disabled control is for.
+        if (!_enabled)
+        {
+            var muted = _disabledStyle.ForegroundColor ?? DefaultTrack;
+            fillColor = fillColor.Mix(muted, DisabledMix);
+            trackColor = trackColor.Mix(muted, DisabledMix);
+            thumbColor = muted;
+        }
+
         // The exact inverse of SetFromX, so the handle lands under the pointer that placed it.
         var handle = trackWidth <= 1 ? 0 : (int)Math.Round(Fraction * (trackWidth - 1));
         handle = Math.Clamp(handle, 0, trackWidth - 1);
@@ -333,6 +385,12 @@ public class Slider : RenderableControl
     private Style _focusedStyle;
 
     private bool _dragging;
+    private bool _enabled = true;
+    private Style _disabledStyle;
+
+    // How far the track's colours are pulled toward the disabled text colour. Enough to read as inert, short of
+    // flattening the filled band into the empty one — see Track.
+    private const double DisabledMix = 0.65;
     private int _trackStart;
     private int _trackWidth;
 
