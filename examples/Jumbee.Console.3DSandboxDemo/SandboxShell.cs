@@ -21,6 +21,8 @@ public static class SandboxShell
             // A wide, thin static slab centred under the origin, its top face at y = 0 so the floor grid the
             // renderer draws at y = 0 sits exactly on it.
             scene.AddStaticBox(new System.Numerics.Vector3(0, -0.5f, 0), new System.Numerics.Vector3(60, 1, 60));
+            // Where that top face is, so a dragged body is steered along the floor rather than through it.
+            scene.GroundY = 0f;
             populate(scene);
         });
 
@@ -41,7 +43,15 @@ public static class SandboxShell
             runner.Post(scene => scene.ApplyParameters(g, f, b, d));
         };
 
-        var sidebar = new SidebarPanel(view, parameters);
+        // Declared before the sidebar because the sidebar's Reset button runs it, and the menu's "Reset scene" and
+        // the r key run the same one — repopulating the world is this method's job, since only it holds populate.
+        void Reset()
+        {
+            view.Selected = null;
+            runner.Post(scene => { scene.ClearBodies(); populate(scene); });
+        }
+
+        var sidebar = new SidebarPanel(view, parameters, Reset);
         var footer = new SceneFooter(view);
 
         // The readouts report the snapshot that was actually DRAWN, not the newest one, so their body count and
@@ -54,12 +64,6 @@ public static class SandboxShell
         };
 
         _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
-
-        void Reset()
-        {
-            view.Selected = null;
-            runner.Post(scene => { scene.ClearBodies(); populate(scene); });
-        }
 
         var loadModel = onLoadModel ?? (() => { });
         var menu = SceneMenu.ForSandbox(view, runner, parameters, Reset, () => ToggleSidebar(sidebar), loadModel);

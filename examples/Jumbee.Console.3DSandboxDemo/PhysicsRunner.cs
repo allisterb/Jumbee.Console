@@ -206,6 +206,11 @@ public sealed class PhysicsScene : IDisposable
 
     /// <summary>Fixed steps taken since construction.</summary>
     public long StepCount { get; private set; }
+
+    /// <summary>The height of the walkable surface, in world units. A held body is never steered below it, and one
+    /// that falls <see cref="KillDepth"/> under it is destroyed. Set it to match whatever static floor the scene
+    /// builds; the default assumes a floor whose top face is at <c>y = 0</c>.</summary>
+    public float GroundY { get; set; }
     #endregion
 
     #region Methods
@@ -361,12 +366,13 @@ public sealed class PhysicsScene : IDisposable
             var i = IndexOf(id);
             // MoveTowards gives the body a real velocity for this step rather than teleporting it, so it shoves
             // the rest of the scene around properly on the way.
-            if (i >= 0) bodies[i].Handle.MoveTowards(grabTarget, bodies[i].Handle.Rotation, dt, wake: true);
+            if (i >= 0) bodies[i].Handle.MoveTowards(OnGround(bodies[i], grabTarget), bodies[i].Handle.Rotation, dt, wake: true);
             else grabbed = null;
         }
 
         world.Step(dt);
         StepCount++;
+        CullFallen();
     }
 
     /// <inheritdoc/>
@@ -374,6 +380,29 @@ public sealed class PhysicsScene : IDisposable
     #endregion
 
     #region Private methods
+    // A grab drags in the plane facing the camera, and that plane is tilted whenever the camera looks down at the
+    // scene -- so pulling the pointer toward the bottom of the screen pulls the body toward the camera AND under the
+    // floor. Nothing else stops it: a kinematic body is moved by us, not by the solver, so static geometry does not
+    // resist it. It sinks, and letting go either drops it out of the world or hands the solver a deeply penetrating
+    // body to eject at whatever speed depenetration implies. Keeping the target's lowest point on the floor removes
+    // both, and reads as the body sliding along the ground, which is what the gesture looks like anyway.
+    private Vector3 OnGround(in SandboxBody body, Vector3 target) =>
+        new(target.X, MathF.Max(target.Y, GroundY + body.HalfExtents.Y), target.Z);
+
+    // Anything thrown off the edge of the slab falls forever: out of sight within a second and still solved on every
+    // step after that. Drop it once it is unrecoverably gone, and drop the grab with it if that is what fell.
+    private void CullFallen()
+    {
+        var floor = GroundY - KillDepth;
+        for (var i = bodies.Count - 1; i >= 0; i--)
+        {
+            if (bodies[i].Handle.Position.Y >= floor) continue;
+            if (grabbed == bodies[i].Id) grabbed = null;
+            bodies[i].Handle.Destroy();
+            bodies.RemoveAt(i);
+        }
+    }
+
     private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity, int meshId = -1)
     {
         var id = ++nextId;
@@ -416,6 +445,9 @@ public sealed class PhysicsScene : IDisposable
     #region Fields
     // Vertex budget for a spawned mesh body's collision hull. Points beyond it are merged by the engine.
     private const int HullVertexBudget = 32;
+
+    // How far below GroundY a body has to fall before it is destroyed rather than simulated out of sight forever.
+    private const float KillDepth = 60f;
 
     private readonly PhysicsWorld world;
     private readonly List<SandboxBody> bodies = [];

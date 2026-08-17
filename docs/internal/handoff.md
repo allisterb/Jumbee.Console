@@ -1,23 +1,132 @@
-# Handoff — end of the M3 UI session (2026-08-14)
+# Handoff — wireframe mesh thinning, control settings, renderable Select, grab fixes (2026-08-17)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
 
 ## Next session starts here
 
-**The 3D sandbox is through M3.5**, committed up to `159f8b9`. Read
-[`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md) first — it carries a result section per milestone with the measured
-numbers and every finding, written as the work happened rather than recalled afterwards.
+**Committed, in two commits.** `de29352` "Fix bugs in wireframe renderer" carries the first half of the mesh-thinning
+arc (screen-area budget, whole triangles, backface culling, the two-pass draw, `Mesh.WireEdges` removed);
+`b37379f` "Add color control to 3D demo, add shaded renderer detail options" carries everything else — 22 files,
+including the two new test files. Verified at that point: build clean, 1034/1034 tests, doc snippets, the parked
+harness, and `--shell` at 40 / 50 / 56 rows plus the viewer.
+
+**Uncommitted after that:** two grab-gesture bugs the user hit by playing with the sandbox, plus three sidebar
+buttons they asked for — all in the demo only (`PhysicsRunner.cs`, `SceneView.cs`, `SandboxShell.cs`,
+`SidebarPanel.cs`), with ten new checks in the parked harness. Written up under *Two grab bugs* and *Three sidebar
+buttons* below.
+
+### Three sidebar buttons, and what they cost
+
+**Scene** now carries `Clear` and `Reset` (the `c` and `r` keys), **World** carries `Reset`
+(`SandboxParameters.Reset`, what the menu item calls). `SidebarPanel`'s constructor takes the reset action, because
+repopulating the world needs `populate`, which only `SandboxShell.BuildSandbox` holds — so the local `Reset` moved
+above the sidebar's construction and one function now serves the key, the menu item and the button.
+
+**Clear moved out of the Inspector rather than being duplicated.** Two identically-labelled buttons in a 32-column
+panel is a worse answer than one in the right place; the Inspector acts on the selection, which is what `Delete`
+does, and the menu already files "Clear bodies" under Scene.
+
+**The cost is two rows in each tier, and it moves both hand-maintained thresholds.** `SpacedRows` 53 → **57**, and
+the compact layout's undocumented floor 40 → **42 rows** — below that the camera pad is clipped even compact. Both
+were verified by sweeping `--shell 200xH` rather than spot-checked: 42 is the first height that passes, 40 and 41
+fail exactly as they should, and 57 is exact (a terminal of 60 gives the sidebar 57 and picks the spaced layout,
+which then fits with nothing to spare). This is the third session in a row those constants have bitten; if a fourth
+control lands here, making the sandbox sidebar scroll the way `ModelSidebarPanel` already does is probably cheaper
+than maintaining them.
+
+The harness clicks all four buttons at their labels' **screen cells** and asserts the effect on the scene and on the
+parameters — so a button that laid out at zero width fails there rather than passing on internal state.
+
+### Two grab bugs, fixed after those commits — both reported from play
+
+**Dragging a body toward the camera pushed it through the floor, and letting go lost it.** The drag plane faces the
+camera, so whenever the camera looks *down* at the scene that plane is tilted — and pulling the pointer toward the
+bottom of the screen aims below `y = 0`, not merely nearer. Nothing resisted: a grabbed body is **kinematic**, so it
+is moved by us and not by the solver, and static geometry does not stop it. It sank, and the release either dropped
+it out of the world or handed the solver a body penetrating the slab by several units to eject. Fixed by clamping
+the steered target to `GroundY + halfExtent.Y` (`PhysicsScene.OnGround`, applied in `Step` where the target is
+consumed), with `SandboxShell` now stating `GroundY = 0f` next to the slab it builds so the two cannot drift apart.
+
+**A short flick fired the body off the screen.** `ThrowVelocity` measured over the last *five pointer events* and
+divided by however long they happened to span, guarded only at 1 ms. A terminal reports the pointer in whole cells
+and in bursts, so two adjacent events are routinely several world units and a couple of milliseconds apart — and
+`distance / 2 ms` is a speed nothing on screen ever had, capped at a `MaxThrowSpeed` of 40 that was itself half the
+cannon `f` fires. Now measured over a **120 ms window of real time** ending at the release, divided by at least
+`MinThrowSeconds` (40 ms) so a two-event flick is bounded by how far it went rather than extrapolated from how
+briefly it took, and capped at 15. Plus the guard the old comment claimed and the code never had: a release **after
+the pointer stopped** now drops the body, because samples arrive only on movement and the last delta would otherwise
+still be sitting there waiting to be believed.
+
+**And one thing neither bug needed but both revealed:** a body that leaves the slab fell forever and was solved on
+every step for the life of the process. `CullFallen` destroys anything `KillDepth` (60) below `GroundY`.
+
+Verified: 74/74 in the parked harness over three consecutive runs, `--shell` at 40 / 50 / 56 rows. The four new
+checks are non-vacuous — reverting the three fixes fails exactly three of them (the buried body reads `y = -12.00`
+and the flick releases at **36.3** u/s). Two notes for whoever touches this next:
+
+- **The harness's own throw check is the extreme case by accident and that is the point.** A synthetic drag reports
+  every move in the same microsecond, which is precisely the input that used to imply an absurd speed. It also
+  perturbs the scene: the first version of it flicked a body off the table, which was then culled mid-`Settle` and
+  made the *pre-existing* delete check fail intermittently at `14 -> 12`. A `Settle(300)` after the throw lets
+  anything on its way out finish leaving before the counts below are read.
+- **A cull check passes vacuously if the posted command never ran**, since both outcomes leave the count unchanged.
+  It spawns two bodies, one either side of the kill plane, and expects `+1`.
+
+### What this session did
+
+Five arcs, in order. The 3D plan doc carries the full write-up for the first; the rest are below.
+
+1. **The wireframe drew loaded models as a dot cloud.** Four separate bugs, each hiding the next — see
+   *follow-ups 1–4* in [`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md), which is where the evidence lives. The
+   short version is in open question 4 below.
+2. **Those tradeoffs became settings** rather than tuned constants: `Stratify`, `ScanCap`, `SubPixelsPerTriangle`
+   on `WireframeRenderer`, surfaced through `SceneView` into both sidebars and both menus.
+3. **`Enabled` on `ToggleButton` / `Select` / `Slider`** (library), because a sidebar had no way to say "this
+   setting is real but not from here" without lying about its value.
+4. **`Select` takes `IRenderable` options** (library), for a colour swatch beside a name — which markup in a string
+   cannot do, because the closed control emits one `Segment` and never parsed markup.
+5. **Shaded lighting audited and re-defaulted**: `WrapLighting` now off, `ContactStrength` renamed to
+   `OcclusionStrength` and exposed as a dial.
 
 **Next: M4 — polish.** Colour modes (velocity / mass / sleep), motion trails, scene presets (stack, tower, pyramid,
-domino run, wrecking ball). Then M5 — ship: promote the harness, README, gallery entry, Docker target.
+domino run, wrecking ball). Then M5 — ship: promote the harness, README, gallery entry, Docker target. Open
+questions 6 and 7 (the Detail dial's ceiling, and the dragon needing a different primitive) are deferred by
+agreement — the current behaviour ships and performs fine.
 
-The demo now has a **complete mouse-driven UI**, which was the whole of M3 and more than the milestone originally
-scoped. Every keyboard action has a mouse route: a `MenuBar`, a 32-column sidebar (Scene / Render / Spawn / World /
-Inspector / Camera), a camera D-pad, and a runtime model loader. `SandboxShell` assembles both scenes so the
-headless harness drives the **real** shell rather than a rebuild of it.
+### The two library changes, in short
 
-**Seven library changes landed**, all driven by something the demo could not otherwise express:
+**`Enabled`** — on `ToggleButton` (so `Checkbox`/`RadioButton`/`Switch`), `Select` and `Slider`, each with a themed
+`DisabledStyle` defaulting to `IStyleTheme.TextDisabled`. Disabled means inert to the user, out of the Tab order,
+drawn muted, no hover cue. **It stays settable in code and keeps showing its value** — that is the point of
+disabling rather than hiding, and the easiest thing to regress. The focus half could not be an override
+(`Control.Focusable` is not virtual), so `RenderableControl.ApplyEnabledToFocus` clears it and restores whatever it
+was. 24 tests; verified non-vacuous by removing the guards (16 fail).
+
+**`Select` + `IRenderable`** — `SelectOption` is text *or* a renderable, mirroring `ListBoxItem`; plus `Items`,
+`SelectedItem` and `Tag`. Text options are untouched, markup included (still literal). Two traps, both caught by
+existing tests: routing the constructors through `SetOptions` auto-selected the first option and lost the
+placeholder, and `SelectionChanged` was guarded on the text so a renderable-only `Select` would never have raised
+it. 9 tests.
+
+### Where the 3D demo's UI stands
+
+Every keyboard action has a mouse route: a `MenuBar`, a 32-column sidebar, a camera D-pad, a runtime model loader.
+`SandboxShell` assembles both scenes so the headless harness drives the **real** shell rather than a rebuild of it.
+There are **two** sidebars and wiring one leaves the other untouched — `SidebarPanel` (sandbox, a fixed two-tier
+stack that *clips*) and `ModelSidebarPanel` (the `obj` viewer, `IScrollable` with `MeasureHeight` summed from its
+sections, so it *scrolls*). Sections are now grouped by which renderer owns them: **Render** for what applies to
+all three, **Shaded detail** (Edges + Half-Lambert light + Occlusion), **Wireframe mesh detail** (Even over screen
++ Detail + Scan).
+
+**The sidebar layout constants are hand-maintained and bit three times this session.** `SidebarPanel.SpacedRows` is
+now 53 and the compact tier's floor is a 40-row terminal; neither is derived from anything. A stale `SpacedRows`
+fails only in the narrow band just above the threshold, where the spaced layout is chosen and then does not fit —
+so sweep heights, don't spot-check one. `--shell 200xH` asserts the camera pad is on screen.
+
+### From the M3 UI session (2026-08-14), for context
+
+**Seven library changes landed** then, all driven by something the demo could not otherwise express:
 
 | Change | Why |
 |---|---|
@@ -53,109 +162,29 @@ excerpts, not library snippets), so it is not machine-checked — see the open q
    UI (layout, key↔widget agreement both ways, sidebar toggle, camera pad) and a `--sidebar` row dump. It has
    caught four shipped bugs. Still sources only at [`scratch/`](scratch/README.md), not wired into the solution.
    **This is the one that will rot.**
-4. ~~**Should the wireframe renderer draw a convex hull for mesh bodies?**~~ **Largely answered without the hull.**
-   The sparse cloud was three separable problems, not one: a flat 64-edge cap that ignored how big the body was on
-   screen, thinning by *edge* so every pick landed as a floating segment, and no backface culling so the far side
-   was interleaved with the near one. Fixing all three — a budget of one triangle per 40 sub-pixels of projected
-   area, whole triangles kept together, back faces culled — makes the bunny and the teapot read as themselves at
-   viewer size, and leaves sandbox bodies denser than before at a floor of 64 triangles. Costs 0.4 ms/frame for the
-   bunny at 200×50, 1.0 ms for the 250k-triangle dragon (which is dominated by the pre-existing per-vertex
-   transform, not the new work). **Still open for very dense meshes**: at 250k triangles a sampled triangle is
-   sub-pixel, so the dragon is a correctly-shaped cloud rather than a surface. That case is what hull edges would
-   actually fix, and Box3D still does not expose hull geometry.
+4. ~~**Should the wireframe renderer draw a convex hull for mesh bodies?**~~ **Answered without the hull, over four
+   bugs.** Full evidence in *follow-ups 1–4* of [`3D Sandbox Plan.md`](3D%20Sandbox%20Plan.md); what a mesh sampler
+   now does is a screen-area budget, whole triangles, back faces culled, an absolute `ScanCap`, and a round-robin
+   spend across screen buckets. What is worth carrying forward is not the fix but **how the bugs hid**:
 
-   **A second bug lived inside the first fix**, and it is the more interesting one — see follow-up 2 in the plan
-   doc. Finding visible faces and choosing which to draw in one pass ends the walk partway down the triangle list,
-   and OBJ index order is spatially coherent, so the tail of the model is never considered. Models drew with
-   chunks missing, and the missing chunk moved as the camera orbited. The lesson generalises past this renderer:
-   **when a thinning step has a fixed output size, every measure of output volume is right by construction and only
-   the distribution can be wrong** — so lit-cell counts, byte counts and bounding boxes all pass. The harness now
-   has an occupancy-grid check with front-facing ground truth; the bounding-box version written first scored 93%
-   with the bug reintroduced.
+   - **A thinning step with a fixed output size makes every measure of output *volume* right by construction.**
+     Lit-cell counts, byte counts and bounding boxes all passed while a third of the bunny was missing — the total
+     was correct and only the distribution was wrong. The extremities still get drawn, so even the on-screen
+     bounding box is the right size. Catching it needs an occupancy grid.
+   - **And the mirror of that.** The first stratification had the right distribution and the wrong total (a fixed
+     `budget / buckets` quota that sparse buckets cannot spend — a zoomed teapot drew 57% of its budget). **No
+     check that measures only one of the two sees both.**
+   - **Test subject and resolution are part of the test.** A uniformly tessellated model is blind to the
+     tessellation-density bug by construction, so the check runs over the teapot *and* the plane. A grid coarse
+     enough to expose the missing-region bug cannot see the density one at all — it passed at 100% either way.
+     Ground truth must be *front-facing* geometry: using all vertices halves the separation, because a hollow model
+     has cells only back faces reach. Thresholds sit between measured states, obtained by deliberately re-breaking
+     the renderer, never at an aspiration.
 
-   **A third bug, and the most general one** (follow-up 3 in the plan doc): `plane.obj` still had gaps. Not the
-   file format — its winding audits clean — but **non-uniform tessellation**. Its detail holds most of the
-   triangles while its wings hold most of the area, so an evenly-spaced sample of the triangle *list* is not an
-   even sample of the *screen*. Pass 2 now stratifies by screen bucket. Worth knowing: the intuitive fix, weighting
-   by projected area, fixes the plane and **regresses the dragon** (95% → 86%) — all four candidate strategies were
-   measured before choosing. Pass 1's stride is now bounded by an absolute `ScanCap = 40_000` rather than a
-   multiple of the budget, because a budget-relative stride left 25 of the plane's 116 occupied buckets with no
-   candidate at all.
-
-   The harness check now runs over **two** subjects, and that is deliberate: a uniformly tessellated model is blind
-   to the density bug by construction. Measured states — correct 96%/95%, even-by-count 96%/**90%** (only the plane
-   moves), early-exit ~60%/~60%; threshold 0.93. The grid resolution had to be raised to see the density bug at
-   all; at the coarser setting that exposed the region bug it passed at 100% either way.
-
-   **A fourth bug, the mirror of the second** (follow-up 4): stratification's first form used a fixed quota of
-   `budget / buckets`, which sparse buckets cannot spend — so a zoomed teapot drew 57% of its budget and came out
-   *thinner* than before. Bug 2 had the right total and the wrong distribution; this one has the right distribution
-   and the wrong total, and **no check that measures only one of the two sees both**. Now round-robin.
-
-   **All three knobs are settings now**, which is the honest outcome — each is a trade, not a right answer.
-   `WireframeRenderer.Stratify` / `.ScanCap` / `.SubPixelsPerTriangle`, surfaced through `SceneView` on the shaded
-   renderer's existing pattern (null under a renderer that has none), driven from the Render panel and menu. Scan
-   is the real perf lever (plane 1.73 → 0.67 ms at 5k); stratification is near-free except on the dragon.
-
-   Adding them cost **3 rows of sidebar**, and both layout tiers had to be re-measured: `SpacedRows` 45 → 51, and
-   the *compact* floor moved from a 36-row terminal to 39. Neither is derived from anything — `--shell 200xH` is
-   the only thing that catches a clipped camera pad.
-
-   **There are TWO sidebars** — `SidebarPanel` (sandbox) and `ModelSidebarPanel` (the `obj` viewer) — and wiring a
-   renderer control into one leaves the other without it. Worth remembering because the viewer is the scene these
-   particular dials matter in. The viewer's panel is `IScrollable` with `MeasureHeight` summed from its sections,
-   so it takes a new `Section` without clipping; the sandbox's is a fixed two-tier stack that does not.
-
-   **This surfaced a library gap, now closed.** `Switch`, `Select` and `Slider` had no disabled state, so a sidebar
-   could not grey out a control that does not currently apply — a `null`-to-`false` fallback reads as OFF, which is
-   a lie. **`Enabled` now exists on `ToggleButton` (so `Checkbox`/`RadioButton`/`Switch`), `Select` and `Slider`**,
-   with a themed `DisabledStyle` defaulting to `IStyleTheme.TextDisabled`; both sidebars use it. The dials still
-   read and write the wireframe wherever it sits in the renderer list, so they keep reporting the truth, and
-   `SceneView.MeshDialsApply` drives both the menu's `Enabled` and the sidebar's.
-
-   **`Select` now takes `IRenderable` options too** (`SelectOption`, plus `Items`/`SelectedItem`/`Tag`), mirroring
-   `ListBox` and `Tree`. Driven by wanting a colour swatch beside a name in the viewer's new **Colour** drop-down.
-   Markup in a string could not do it: `ListBox` renders string items through `Markup` so the *drop-down* would
-   have worked, but `Select`'s closed row emits a single `Segment` — one style for the whole row, tags shown
-   literally. Both halves are separate render paths and both needed the work. Text options are untouched, markup
-   included (still literal), which is the reason this went in rather than a markup flag.
-
-   Two traps found while doing it, both caught by existing tests rather than by reasoning: routing the constructors
-   through `SetOptions` **auto-selected the first option and lost the placeholder** (construction is not runtime
-   replacement — `Load` is now separate); and `SelectionChanged` was guarded on the text being non-null, so a
-   `Select` of renderables would never have raised it at all.
-
-   Demo side needed no renderer change: every renderer already tints through `Palette.For`, so the viewer's colour
-   is just `ModelScene.ColorKey` indexing the (now named) `Palette.Named`.
-
-   **"Solid looks more detailed than shaded" is wrap lighting, not AO** — worth recording because the intuitive
-   answer is wrong. Mean contrast between neighbouring lit cells on the bunny: solid **11.5**, shaded default
-   **9.0**, shaded with wrap off **14.3**, shaded with contact 0 **7.7**. So removing the contact/AO pass makes it
-   *flatter*, not sharper (it multiplies the quantised levels by a continuous per-cell factor, so it hands back
-   gradation the 7-level quantiser removed — 26 distinct levels become 5 without it). `OcclusionStrength` (renamed from `ContactStrength`) is now a
-   settable dial as asked, and `WrapLighting` — which was reachable only from the sandbox — is now in the viewer
-   too, which is where you actually compare renderers on one model.
-
-   **`WrapLighting` now defaults to OFF**, reversing the M2 decision. Nothing measured back then was wrong; the
-   case was made on the *sandbox*, where tumbling bodies and a free camera make the dark side constant, and it does
-   not transfer to the *viewer*, where one asset is framed and its lit surface is the subject. Cost of the flip,
-   re-measured: **+12% ANSI bytes** (17,034 → 19,112 at 200×50), against the +40–60% local contrast that reads as
-   detail. Both sidebars, both menus and `w` still toggle it. Sections regrouped so every renderer-specific control
-   sits under that renderer's name: **Shaded detail** (Edges + the two lighting dials) and **Wireframe mesh
-   detail**, leaving Render for what applies to all three.
-
-   Also fixed a **pre-existing harness false alarm**: `the shade ramp is quantised` bounded a size-dependent count
-   with a fixed `< 120`, so it passed at the default 100×34 (105 pairs) and failed under `--perf 200x50` (127) —
-   reading as a renderer regression that was never there. Bound is now 400, which still catches the continuum it
-   is actually guarding against.
-
-   Design note worth keeping: **a disabled control stays settable in code and keeps showing its value.** Only the
-   user-input paths are blocked. A disabled control that blanked its value would be no better than hiding it, and
-   the whole reason to disable rather than hide is to say "this is real, just not from here". The focus half could
-   not be an override — navigation collects candidates by `Control.Focusable`, which is not virtual — so
-   `RenderableControl.ApplyEnabledToFocus` clears it and restores whatever it was, which is why a deliberately
-   unfocusable control survives a disable/enable round trip. Covered by `tests/…/EnabledTests.cs` (24 tests,
-   verified non-vacuous by removing the guards: 16 fail).
+   **Still open for very dense meshes**, and this is the real ceiling: at 250k triangles a sampled triangle is
+   sub-pixel (median 0.20 cells against the bunny's 1.46), so the dragon is a correctly-shaped stipple rather than
+   a surface. More budget only makes denser dots. That is the case hull or silhouette/crease edges would fix, and
+   Box3D still does not expose hull geometry. See question 7.
 5. **Vendor a model, or keep pointing at `reference/`?** Unchanged. The demo ships only a generated torus knot.
    If any model is vendored, `THIRD-PARTY-NOTICES.TXT` needs it.
 6. **Should `WireframeRenderer.MaxTriangles` scale with the Detail dial?** *Deferred — the current behaviour ships

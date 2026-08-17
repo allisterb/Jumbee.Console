@@ -482,27 +482,48 @@ public sealed class SceneView : CompositeControl
         }
     }
 
-    // Throw velocity is measured from where the grab point actually went, not from the pointer delta: a release
-    // after a pause should drop the body, not fling it at whatever speed the last mouse event implied.
+    // Throw velocity is measured from where the grab point actually went, not from the pointer delta.
     private void RecordThrowSample(Vector3 point)
     {
         throwSamples.Enqueue((clock.Elapsed, point));
         while (throwSamples.Count > ThrowSampleCount) throwSamples.Dequeue();
     }
 
+    /// <summary>
+    /// The velocity a release hands back to the solver: how far the grab point travelled over a fixed window of real
+    /// time ending at the release.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A window of <em>time</em>, not of pointer events, is the whole point. A terminal reports the pointer in whole
+    /// cells and in bursts, so two adjacent events can be several world units and a couple of milliseconds apart;
+    /// dividing one by the other implies a speed nothing on screen ever had, which is what made a short flick fire
+    /// the body off the edge of the world.
+    /// </para>
+    /// <para>
+    /// Three guards, one per gesture that used to fling. A release <em>after</em> the pointer stopped drops the body,
+    /// because samples arrive only on movement and the last delta would otherwise still be sitting there waiting to
+    /// be believed. A gesture shorter than <see cref="MinThrowSeconds"/> is divided by that floor anyway, so it is
+    /// bounded by how far it went rather than extrapolated from how briefly it took. And the result is capped, both
+    /// because the solver deals badly with a body that crosses the world in one step and because a hand toss is not
+    /// the cannon that <c>f</c> fires.
+    /// </para>
+    /// </remarks>
     private Vector3 ThrowVelocity()
     {
         if (throwSamples.Count < 2) return Vector3.Zero;
 
         var samples = throwSamples.ToArray();
-        var (t0, p0) = samples[0];
         var (t1, p1) = samples[^1];
-        var seconds = (float)(t1 - t0).TotalSeconds;
-        if (seconds < 1e-3f) return Vector3.Zero;
+        if (clock.Elapsed - t1 > ThrowStaleAfter) return Vector3.Zero;
 
-        var velocity = (p1 - p0) / seconds;
-        // Cap it: a fast flick across a coarse terminal grid can imply an absurd speed, and the solver deals badly
-        // with a body that crosses the world in one step.
+        // Walk back to the oldest sample still inside the window, but always take at least one step: if the pointer
+        // was reporting more slowly than the window, the honest reading is that slow speed, not no throw at all.
+        var first = samples.Length - 2;
+        while (first > 0 && t1 - samples[first - 1].At <= ThrowWindow) first--;
+        var (t0, p0) = samples[first];
+
+        var velocity = (p1 - p0) / MathF.Max((float)(t1 - t0).TotalSeconds, MinThrowSeconds);
         var speed = velocity.Length();
         return speed > MaxThrowSpeed ? velocity * (MaxThrowSpeed / speed) : velocity;
     }
@@ -542,8 +563,16 @@ public sealed class SceneView : CompositeControl
     private const float OrbitStep = 0.08f;
     private const float ZoomStep = 0.1f;
     private const float DragPerCell = 0.02f;
-    private const float MaxThrowSpeed = 40f;
-    private const int ThrowSampleCount = 5;
+    // The ceiling on a thrown body, in world units per second. A hand toss, deliberately well under the cannon that
+    // f fires (SpawnSettings.MaxSpeed is 80): at 15 a body still crosses the visible scene in about a second.
+    private const float MaxThrowSpeed = 15f;
+    private const float MinThrowSeconds = 0.04f;
+    private const int ThrowSampleCount = 16;
+
+    // Long enough to average out the terminal's burstiness, short enough to measure the flick rather than the drag
+    // that preceded it. Stale is the pause before a release that should drop the body instead of throwing it.
+    private static readonly TimeSpan ThrowWindow = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan ThrowStaleAfter = TimeSpan.FromMilliseconds(160);
 
     // The on-screen radius a launched body should have on its first frame, in NDC. The viewport's Y half-span is the
     // cell aspect (~0.6 on a wide terminal), so 0.2 is about a third of the half-height -- clearly an object, not a

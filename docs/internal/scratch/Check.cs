@@ -206,6 +206,61 @@ var afterFall = Settle(60);
 Check("and it falls back under gravity", afterFall.Positions[afterFall.IndexOf(grabId)].Y < draggedPos.Y,
     $"{draggedPos.Y:F2} -> {afterFall.Positions[afterFall.IndexOf(grabId)].Y:F2}");
 
+// The drag plane faces the camera, so with the camera above the scene, dragging down the screen aims BELOW the
+// floor. A kinematic body is not stopped by static geometry, so without a clamp it sinks through and the release
+// either loses it or has the solver eject it. Aim well under the floor and expect it to sit ON the floor instead.
+var floorTop = 0.5f;   // half-height of the unit boxes above, so a box resting on y = 0 has its centre here
+runner.Post(s => s.BeginGrab(grabId));
+Settle(2);
+for (var i = 0; i < 20; i++)
+{
+    runner.Post(s => s.DragTo(grabId, new Vector3(from.X, -12f, from.Z)));
+    Settle(2);
+}
+
+var sunk = runner.Snapshot;
+var sunkIndex = sunk.IndexOf(grabId);
+Check("dragging a held body below the floor keeps it on the floor", sunkIndex >= 0 && sunk.Positions[sunkIndex].Y > floorTop - 0.05f,
+    sunkIndex < 0 ? "body was lost entirely" : $"y={sunk.Positions[sunkIndex].Y:F2}, floor is y={floorTop:F2}");
+
+runner.Post(s => s.ReleaseGrab(Vector3.Zero));
+var released = Settle(90);
+var releasedIndex = released.IndexOf(grabId);
+Check("and letting go there leaves it on the floor rather than under it",
+    releasedIndex >= 0 && released.Positions[releasedIndex].Y > floorTop - 0.05f,
+    releasedIndex < 0 ? "body was lost entirely" : $"y={released.Positions[releasedIndex].Y:F2}");
+
+// Off the edge of the slab and gone: still solved on every step forever unless something drops it. Two bodies, one
+// either side of the kill plane, so the check cannot pass by the posted command never having run at all.
+runner.Post(s => s.AddBox(new Vector3(0, -80f, 0), new Vector3(0.5f), 0));
+runner.Post(s => s.AddBox(new Vector3(0, 6f, 0), new Vector3(0.5f), 0));
+var culled = Settle(4);
+Check("a body that has fallen out of the world is destroyed, and only that one",
+    culled.Count == released.Count + 1, $"{released.Count} + 2 spawned -> {culled.Count}");
+
+// --- throw --------------------------------------------------------------------------------------------------
+// Through the REAL gesture, not PhysicsScene.ReleaseGrab: a synthetic drag reports every move in the same
+// microsecond, which is exactly the case that used to imply an absurd speed and fling the body off the screen.
+Console.WriteLine("\nthrow:");
+var settled = Settle(120);
+var throwProbe = settled.Ids[0];
+var throwIndex = settled.IndexOf(throwProbe);
+cameraView = view.Camera.GetView();
+renderer.Projection.TryProject(cameraView.Transform(settled.Positions[throwIndex]), out px, out py);
+vp = renderer.Viewport;
+var tCol = (int)Math.Round((px + 1f) / 2f * (vp.Width - 1));
+var tRow = (int)Math.Round((vp.CellAspect - py) / (2 * vp.CellAspect) * (vp.Height - 1));
+var buffer = ConsoleSnapshot.Render(root, W, H);
+var flicked = ConsoleSnapshot.Drag(buffer, tCol + 1, tRow + 1, tCol + 25, tRow - 8, steps: 6);
+var afterThrow = Settle(2);
+var throwSpeed = afterThrow.IndexOf(throwProbe) is var ti && ti >= 0 ? afterThrow.Velocities[ti].Length() : -1f;
+Check("a flick throws at a hand speed, not a muzzle speed", flicked && throwSpeed >= 0 && throwSpeed <= 15.5f,
+    $"drag reached the viewport: {flicked}, speed={throwSpeed:F1} (cap 15)");
+
+// Let the throw land and let anything it knocked off the table finish falling and be culled, so the counts the
+// sections below read are not racing a body still on its way out of the world.
+Settle(300);
+
 // --- delete and clear -------------------------------------------------------------------------------------------
 Console.WriteLine("\ndelete / clear:");
 var current = runner.Snapshot;

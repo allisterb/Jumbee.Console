@@ -24,8 +24,10 @@ namespace Jumbee.Console.SandboxDemo;
 public sealed class SidebarPanel : CompositeControl
 {
     #region Constructors
-    /// <summary>Builds the sidebar over <paramref name="view"/> and its <paramref name="parameters"/>.</summary>
-    public SidebarPanel(SceneView view, SandboxParameters parameters)
+    /// <summary>Builds the sidebar over <paramref name="view"/> and its <paramref name="parameters"/>.
+    /// <paramref name="resetScene"/> is what the <c>r</c> key and the menu's <c>Reset scene</c> do — repopulating the
+    /// world is the shell's job, not the panel's, so it arrives as an action.</summary>
+    public SidebarPanel(SceneView view, SandboxParameters parameters, Action resetScene)
     {
         this.view = view;
         this.parameters = parameters;
@@ -57,6 +59,8 @@ public sealed class SidebarPanel : CompositeControl
         fire.Activated += (_, _) => view.Launch();
         delete.Activated += (_, _) => view.DeleteSelected();
         clear.Activated += (_, _) => view.ClearScene();
+        reset.Activated += (_, _) => resetScene();
+        resetWorld.Activated += (_, _) => parameters.Reset();
 
         camera = new CameraPad(view.Camera, () => UI.SetFocus(view));
 
@@ -84,13 +88,13 @@ public sealed class SidebarPanel : CompositeControl
     /// in <see cref="BuildSections"/> plus two rows of frame each, and there is nothing that derives it for you.
     /// </para>
     /// <para>
-    /// The compact layout has a floor of its own that no constant expresses: below a <b>40-row terminal</b> the
-    /// camera pad is clipped even compact (it was 36 before any of these controls). Verify BOTH tiers with the
-    /// harness's <c>--shell 200xH</c>, which asserts the pad is on screen — a stale value here shows up only just
-    /// above the threshold, where the spaced layout is chosen and then does not fit.
+    /// The compact layout has a floor of its own that no constant expresses: below a <b>42-row terminal</b> the
+    /// camera pad is clipped even compact (36 before any of these controls, 40 before the Scene and World buttons).
+    /// Verify BOTH tiers with the harness's <c>--shell 200xH</c>, which asserts the pad is on screen — a stale value
+    /// here shows up only just above the threshold, where the spaced layout is chosen and then does not fit.
     /// </para>
     /// </remarks>
-    public const int SpacedRows = 53;
+    public const int SpacedRows = 57;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -253,7 +257,12 @@ public sealed class SidebarPanel : CompositeControl
     {
         var gap = spaced ? 1 : 0;
         return new VerticalStackPanel(
-            new Section("Scene", new VerticalStackPanel(status, counts, clock), 3),
+            // Hand-built rather than Stack'd for the same reason the Inspector is: the three readout lines are one
+            // block of text, so the gap belongs only before the buttons. Clear and Reset are the c and r keys — the
+            // two scene-wide actions, in the section the menu also files them under.
+            new Section("Scene", spaced
+                ? new VerticalStackPanel(status, counts, clock, Spacer(), Row(clear, reset))
+                : new VerticalStackPanel(status, counts, clock, Row(clear, reset)), 4 + gap),
             // The wireframe's three mesh-sampling dials live here rather than in a section of their own, and the
             // reason is purely that a section costs two rows of frame: with them split out, a 40-row terminal
             // clipped the camera pad off the bottom even in the compact layout.
@@ -263,12 +272,14 @@ public sealed class SidebarPanel : CompositeControl
                 wrapLighting, occlusion, stratify, density, Labelled("Scan", scanCap)), 7 + (6 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
-            new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale), 5 + (4 * gap)),
+            new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale, Row(resetWorld)),
+                6 + (5 * gap)),
             // Hand-built rather than Stack'd: its first two rows are one readout, so the gap belongs only before
-            // the buttons.
+            // the button. Delete alone — it acts on the selection, which is what an inspector is for; Clear acts on
+            // the whole scene and lives up in Scene beside Reset.
             new Section("Inspector", spaced
-                ? new VerticalStackPanel(selection, motion, Spacer(), Row(delete, clear))
-                : new VerticalStackPanel(selection, motion, Row(delete, clear)), 3 + gap),
+                ? new VerticalStackPanel(selection, motion, Spacer(), Row(delete))
+                : new VerticalStackPanel(selection, motion, Row(delete)), 3 + gap),
             // Never spaced: the pad's buttons are one control, and a gap through the middle of a D-pad reads as two.
             new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows));
     }
@@ -301,6 +312,10 @@ public sealed class SidebarPanel : CompositeControl
     private static ILayout Row(Button left, Button right) =>
         new Grid([1], [Columns / 2 - 2, Columns / 2 - 2], [[left, right]]);
 
+    // One button on a two-button row, so a lone action lines up with the left-hand column everywhere else.
+    private static ILayout Row(Button only) =>
+        new Grid([1], [Columns / 2 - 2, Columns / 2 - 2], [[only, Spacer()]]);
+
     private static Button Action(string text) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Columns / 2 - 3 } };
 
@@ -325,6 +340,8 @@ public sealed class SidebarPanel : CompositeControl
     private readonly TextLabel status = Line("RUN", HeadingColor);
     private readonly TextLabel counts = Line("", TextColor);
     private readonly TextLabel clock = Line("", MutedColor);
+    private readonly Button clear = Action("Clear");
+    private readonly Button reset = Action("Reset");
 
     private readonly Select renderer;
     private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
@@ -356,11 +373,11 @@ public sealed class SidebarPanel : CompositeControl
     private readonly Slider bounce = Param("Bounce", 0f, 1f, 0.3f);
     private readonly Slider drag = Param("Drag", 0f, 4f, 0f);
     private readonly Slider timeScale = Param("Time", 0.05f, 4f, 1f);
+    private readonly Button resetWorld = Action("Reset");
 
     private readonly TextLabel selection = Line("no selection", TextColor);
     private readonly TextLabel motion = Line("", MutedColor);
     private readonly Button delete = Action("Delete");
-    private readonly Button clear = Action("Clear");
 
     private readonly CameraPad camera;
 

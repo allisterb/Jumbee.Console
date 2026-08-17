@@ -220,6 +220,64 @@ internal static class ShellChecks
                 $"{view.Camera.Distance:F1}");
         }
 
+        // The four button routes to actions that otherwise need a key or the menu. Clicked at their labels' screen
+        // cells, so a button that laid out at zero width (the HorizontalStackPanel trap) fails here rather than
+        // passing on internal state.
+        Console.WriteLine("\nscene and world buttons:");
+        Draw();
+        var btnBuffer = ConsoleSnapshot.Render(root, width, height);
+        var btnRows = ConsoleSnapshot.ToLines(btnBuffer);
+        var sceneButtons = Array.FindIndex(btnRows, l => l.Contains("Clear") && l.Contains("Reset"));
+        Check("Scene carries Clear and Reset on one row", sceneButtons > 0,
+            sceneButtons < 0 ? "not found" : $"row {sceneButtons}");
+
+        if (sceneButtons > 0)
+        {
+            ConsoleSnapshot.Click(btnBuffer, btnRows[sceneButtons].IndexOf("Clear", StringComparison.Ordinal), sceneButtons);
+            Settle(app.Runner, 6);
+            Check("clicking Clear empties the scene, as c does", app.Runner.Snapshot.Count == 0,
+                $"{app.Runner.Snapshot.Count} bodies");
+
+            Draw();
+            btnBuffer = ConsoleSnapshot.Render(root, width, height);
+            btnRows = ConsoleSnapshot.ToLines(btnBuffer);
+            ConsoleSnapshot.Click(btnBuffer, btnRows[sceneButtons].IndexOf("Reset", StringComparison.Ordinal), sceneButtons);
+            Settle(app.Runner, 6);
+            Check("and clicking Reset rebuilds it, as r does", app.Runner.Snapshot.Count == 11,
+                $"{app.Runner.Snapshot.Count} bodies");
+        }
+
+        // The World section's Reset is a second button reading "Reset" -- located by section rather than by label,
+        // since the Scene row and the camera pad both carry one too.
+        Draw();
+        btnBuffer = ConsoleSnapshot.Render(root, width, height);
+        btnRows = ConsoleSnapshot.ToLines(btnBuffer);
+        var worldTitle = Array.FindIndex(btnRows, l => l.Contains("World"));
+        var inspectorTitle = Array.FindIndex(btnRows, l => l.Contains("Inspector"));
+        var worldReset = -1;
+        for (var y = worldTitle + 1; worldTitle > 0 && y < inspectorTitle; y++)
+        {
+            if (btnRows[y].Contains("Reset")) { worldReset = y; break; }
+        }
+
+        Check("World carries a Reset button", worldReset > 0, worldReset < 0 ? "not found" : $"row {worldReset}");
+        if (worldReset > 0)
+        {
+            app.Parameters.Drag = 2f;   // gravity and bounce are already off their defaults, from the checks above
+            Draw();
+            btnBuffer = ConsoleSnapshot.Render(root, width, height);
+            btnRows = ConsoleSnapshot.ToLines(btnBuffer);
+            ConsoleSnapshot.Click(btnBuffer, btnRows[worldReset].IndexOf("Reset", StringComparison.Ordinal), worldReset);
+            Check("clicking it restores every world default, as the menu item does",
+                Math.Abs(app.Parameters.Gravity - 9.8f) < 1e-4f && Math.Abs(app.Parameters.Bounce - 0.3f) < 1e-4f &&
+                app.Parameters.Drag == 0f,
+                $"g={app.Parameters.Gravity:F2} bounce={app.Parameters.Bounce:F2} drag={app.Parameters.Drag:F2}");
+
+            Draw();
+            Check("and the sliders follow it back", SliderReads(root, width, height, "Gravity", 9.8f) &&
+                SliderReads(root, width, height, "Drag", 0f));
+        }
+
         Console.WriteLine("\nsidebar toggle:");
         SandboxShell.ToggleSidebar(app.Sidebar);
         _ = ConsoleSnapshot.ToText(root, width, height);
