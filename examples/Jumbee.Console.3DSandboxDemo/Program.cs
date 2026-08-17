@@ -29,14 +29,16 @@ using ShellType = Jumbee.Console.SandboxDemo.SandboxShell.ShellType;
 // are read by Run between shells — never while one is running — so neither needs marshalling.
 ShellType? pending = null;
 var viewerStart = 0;
+var scannedModelsFolder = false;
 
 var modelPath = new Argument<string?>("path")
 {
     Arity = ArgumentArity.ZeroOrOne,
     Description = "An .obj file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
-                  "cycle through it; naming a file just decides which one opens first. Defaults to the current " +
-                  "directory. NOTE: models are parsed before the UI appears, so a directory holding large ones " +
-                  "pauses at startup (a 250k-triangle model takes ~600ms; a 6k-triangle one takes ~4ms).",
+                  "cycle through it; naming a file just decides which one opens first. With no path, a 'models' " +
+                  "folder in the current directory is used if there is one, and otherwise the viewer opens on its " +
+                  "generated torus knot. NOTE: models are parsed before the UI appears, so a directory holding " +
+                  "large ones pauses at startup (a 250k-triangle model takes ~600ms; a 6k-triangle one takes ~4ms).",
 };
 
 // An OPTION on the root, not a positional argument: a positional there would be inherited by the `obj` subcommand
@@ -57,6 +59,7 @@ objCommand.SetAction(async (parse, ct) =>
 {
     var start = LoadModelDirectory(parse.GetValue(modelPath));
     if (start < 0) return 1;
+    scannedModelsFolder = true;   // this IS the scan, whether or not a path narrowed it
 
     // The generated knot goes last, so it is always reachable with '[' / ']' even when a directory was given, and
     // so the viewer still has something to show if the directory turns out to hold no models at all.
@@ -97,8 +100,24 @@ async Task<int> Run(ShellType shell, int startIndex)
         if (code != 0 || pending is not { } next) return code;
 
         shell = next;
-        startIndex = viewerStart;
+        startIndex = next == ShellType.ModelViewer ? OpenModelsFolder(viewerStart) : viewerStart;
     }
+}
+
+// Switching INTO the viewer from a sandbox that was launched without the obj verb: nothing has looked at the models
+// folder, because only that verb does at startup — so the viewer arrived with just the generated knot even with a
+// folder full of models sitting right there. Look now, once: repeated switches must not re-parse a directory that
+// takes ~750 ms, and models loaded this way stay in the registry, spawnable back in the sandbox.
+int OpenModelsFolder(int fallback)
+{
+    if (scannedModelsFolder) return fallback;
+    scannedModelsFolder = true;
+
+    var before = Meshes.RegisteredCount;
+    var start = LoadModelDirectory(null);
+    // LoadModelDirectory returns the index PAST the registry when it finds nothing, so "did anything load" has to be
+    // asked of the registry rather than inferred from that index.
+    return start >= 0 && Meshes.RegisteredCount > before ? start : fallback;
 }
 
 // Loads every model the path resolved to, returning the index to open on, or -1 on a reported failure.

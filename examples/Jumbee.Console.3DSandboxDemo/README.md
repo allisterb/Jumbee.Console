@@ -31,6 +31,10 @@ dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- --model
 `obj` takes **one** path, a file *or* a directory. Either way the whole directory is loaded and `[` / `]` cycle
 through it — naming a file only decides which one opens first.
 
+With **no path** it looks for a `models` folder in the current directory and loads that; with no such folder it opens
+on the generated torus knot. It never loads the working directory itself — picking up whatever `.obj` files happen to
+be sitting next to you is a surprise, and there is always a mesh to fall back on.
+
 Whichever you launch, **Scene ▸ Switch to model viewer** (and **Model ▸ Switch to sandbox** coming back) moves
 between the two without leaving the process. Loaded models are kept, so nothing is re-parsed, and the viewer opens on
 whichever model you were last looking at — or, coming from the sandbox, on whatever the spawn drop-down was set to.

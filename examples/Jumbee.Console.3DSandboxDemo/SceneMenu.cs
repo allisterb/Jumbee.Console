@@ -36,6 +36,7 @@ public static class SceneMenu
             {
                 Enabled = switchScene is not null,
             },
+            MenuItem.Separator,
             new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
         ]);
 
@@ -93,6 +94,15 @@ public static class SceneMenu
     {
         var bar = new MenuBar();
 
+        // Scene first and named the same as the sandbox's, holding the two items that are about the APP rather than
+        // about the model — so switching and quitting are in the same place in both scenes.
+        bar.Add("Scene", () =>
+        [
+            new MenuItem("Switch to sandbox", switchScene ?? (() => { })) { Enabled = switchScene is not null },
+            MenuItem.Separator,
+            new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
+        ]);
+
         bar.Add("Model", () =>
         [
             new MenuItem("Open…", openModels) { Shortcut = "o" },
@@ -111,9 +121,6 @@ public static class SceneMenu
                 Checked = model.UpAxis == ModelUpAxis.Z,
                 Shortcut = "a",
             },
-            MenuItem.Separator,
-            new MenuItem("Switch to sandbox", switchScene ?? (() => { })) { Enabled = switchScene is not null },
-            new MenuItem("Quit", UI.Stop) { Shortcut = "q" },
         ]);
 
         bar.Add("Render", () =>

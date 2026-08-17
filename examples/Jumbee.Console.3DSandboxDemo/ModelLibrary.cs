@@ -18,18 +18,26 @@ public static class ModelLibrary
     /// Resolves a file, a directory, or nothing into the set of models to load and the one to show first.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A named file does <b>not</b> narrow the set — the whole directory is loaded and the named file merely decides
     /// where cycling starts. The useful unit for a viewer is the directory: one you have to restart to see the next
     /// asset is a worse tool than one you step through with a keypress.
+    /// </para>
+    /// <para>
+    /// With no path, the only place looked at is a <c>models</c> folder beside the working directory. Not the working
+    /// directory itself: scooping up whatever <c>.obj</c> files happen to be next to you is a surprise, and the app
+    /// always has its generated mesh, so finding nothing is a perfectly good outcome rather than a failure.
+    /// </para>
     /// </remarks>
     public static ModelSet Resolve(string? path, string? currentDirectory = null)
     {
-        string directory;
+        string? directory;
         string? named = null;
 
         if (string.IsNullOrWhiteSpace(path))
         {
-            directory = currentDirectory ?? Directory.GetCurrentDirectory();
+            directory = DefaultDirectory(currentDirectory ?? Directory.GetCurrentDirectory());
+            if (directory is null) return new ModelSet([], 0, null);
         }
         else if (Directory.Exists(path))
         {
@@ -68,5 +76,27 @@ public static class ModelLibrary
 
         return new ModelSet(files, start, null);
     }
+    #endregion
+
+    #region Private methods
+    // Matched case-insensitively by enumerating rather than by probing "models" directly: Directory.Exists is
+    // case-insensitive on Windows and not on Linux, and the demo ships in a Linux container.
+    private static string? DefaultDirectory(string currentDirectory)
+    {
+        if (!Directory.Exists(currentDirectory)) return null;
+
+        foreach (var candidate in Directory.EnumerateDirectories(currentDirectory))
+        {
+            if (string.Equals(Path.GetFileName(candidate), DefaultDirectoryName, StringComparison.OrdinalIgnoreCase))
+                return candidate;
+        }
+
+        return null;
+    }
+    #endregion
+
+    #region Fields
+    /// <summary>The folder looked for beside the working directory when no path is given.</summary>
+    public const string DefaultDirectoryName = "models";
     #endregion
 }

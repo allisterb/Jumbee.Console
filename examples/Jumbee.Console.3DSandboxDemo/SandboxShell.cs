@@ -54,6 +54,11 @@ public static class SandboxShell
         }
 
         var sidebar = new SidebarPanel(view, parameters, Reset);
+        // A borderless frame purely to scroll, exactly as the viewer's sidebar is wrapped: each section already draws
+        // its own border, so the frame contributes only the scrollbar column and the reveal-on-focus that walks Tab
+        // down the panel. The panel still picks a compact layout in a short terminal — scrolling is what catches the
+        // terminals too short even for that, which used to clip the camera pad off the bottom with no way back.
+        sidebar.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
         var footer = new SceneFooter(view);
 
         // The readouts report the snapshot that was actually DRAWN, not the newest one, so their body count and

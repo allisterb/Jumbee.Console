@@ -73,6 +73,12 @@ internal static class ShellChecks
             Check("the viewer sidebar shows the model", viewerLines.Any(l => l.Contains(v.Model.Name)), v.Model.Name);
             Check("and its scale sliders", viewerLines.Any(l => l.Contains("Scale X")));
             Check("and its shear sliders", viewerLines.Any(l => l.Contains("Shear X")));
+            // Scene leads in BOTH scenes and holds the same two app-level items, so switching and quitting are in
+            // the same place whichever one you are in.
+            Check("the viewer's menu bar leads with Scene, then Model",
+                viewerLines[0].IndexOf("Scene", StringComparison.Ordinal) is var s && s >= 0 &&
+                viewerLines[0].IndexOf("Model", StringComparison.Ordinal) > s,
+                viewerLines[0].Trim());
 
             v.Model.SetScaleAxis(1, 2.4f);
             v.Model.SetShear(0.7f, 0f);
@@ -189,8 +195,30 @@ internal static class ShellChecks
         var padBuffer = ConsoleSnapshot.Render(root, width, height);
         var padRows = ConsoleSnapshot.ToLines(padBuffer);
         var padRow = Array.FindIndex(padRows, l => l.Contains('◄') && l.Contains('►'));
-        Check("the pad is drawn under the other panels", padRow > 0 && padRows.Take(padRow).Any(l => l.Contains("Inspector")),
-            padRow < 0 ? "not found" : $"row {padRow}");
+        var content = app.Sidebar.MeasureHeight(SidebarPanel.Columns);
+        var viewport = app.Sidebar.Frame?.ViewportSize.Height ?? 0;
+
+        // The pad is LAST in the stack, so it is the section a viewport too short for the whole panel loses first.
+        // Which of the two claims applies is decided by the geometry, not by the height being tested: above the
+        // compact layout's needs it must be drawn, below them it must be reachable by scrolling. Asserting only the
+        // first would fail on a short terminal for the right reason, and asserting only the second would pass on a
+        // tall one without ever proving the pad is on screen.
+        if (padRow < 0 && app.Sidebar.Frame is { } scrollFrame && content > viewport)
+        {
+            scrollFrame.ScrollIntoView(content - CameraPad.Rows - 2, CameraPad.Rows + 2);
+            Draw();
+            padBuffer = ConsoleSnapshot.Render(root, width, height);
+            padRows = ConsoleSnapshot.ToLines(padBuffer);
+            padRow = Array.FindIndex(padRows, l => l.Contains('◄') && l.Contains('►'));
+            Check($"the pad is off screen at {height} rows but the sidebar scrolls to it",
+                padRow > 0, $"content {content} in a {viewport}-row viewport -> row {padRow}");
+        }
+        else
+        {
+            Check("the pad is drawn under the other panels",
+                padRow > 0 && padRows.Take(padRow).Any(l => l.Contains("Inspector")),
+                padRow < 0 ? "not found" : $"row {padRow}");
+        }
 
         if (padRow > 0)
         {
@@ -218,6 +246,11 @@ internal static class ShellChecks
             ConsoleSnapshot.Click(padBuffer, padRows[zoomRow].IndexOf("Reset", StringComparison.Ordinal), zoomRow);
             Check("and Reset restores the camera", Math.Abs(view.Camera.Distance - 20f) < 0.01f,
                 $"{view.Camera.Distance:F1}");
+
+            // Back to the top: on a short terminal the scroll above pushed the Scene section off screen, and every
+            // check below reads the panel by finding its text in the rendered rows.
+            app.Sidebar.Frame?.ScrollIntoView(0, 1);
+            Draw();
         }
 
         // The four button routes to actions that otherwise need a key or the menu. Clicked at their labels' screen

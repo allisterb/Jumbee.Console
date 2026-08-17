@@ -21,7 +21,7 @@ namespace Jumbee.Console.SandboxDemo;
 /// newest one — so the numbers always describe the picture beside them.
 /// </para>
 /// </remarks>
-public sealed class SidebarPanel : CompositeControl
+public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 {
     #region Constructors
     /// <summary>Builds the sidebar over <paramref name="view"/> and its <paramref name="parameters"/>.
@@ -80,19 +80,12 @@ public sealed class SidebarPanel : CompositeControl
     /// <summary>The width the sidebar occupies when docked.</summary>
     public const int Columns = 32;
 
-    /// <summary>The rows the spaced layout needs. Below this the sidebar drops to the compact one.</summary>
+    /// <summary>The viewport rows the spaced layout needs. Below this the sidebar drops to the compact one; below
+    /// what <em>that</em> needs, the enclosing frame scrolls.</summary>
     /// <remarks>
-    /// <para>
-    /// Add a control and this has to move with it, or the bottom section is silently clipped — which is what the
-    /// mesh dials and the occlusion slider each did to the camera pad. It is the sum of the section heights
-    /// in <see cref="BuildSections"/> plus two rows of frame each, and there is nothing that derives it for you.
-    /// </para>
-    /// <para>
-    /// The compact layout has a floor of its own that no constant expresses: below a <b>42-row terminal</b> the
-    /// camera pad is clipped even compact (36 before any of these controls, 40 before the Scene and World buttons).
-    /// Verify BOTH tiers with the harness's <c>--shell 200xH</c>, which asserts the pad is on screen — a stale value
-    /// here shows up only just above the threshold, where the spaced layout is chosen and then does not fit.
-    /// </para>
+    /// A stale value here is now a cosmetic bug rather than a silent one: it picks the roomy layout in a viewport
+    /// that cannot hold it, and the frame scrolls instead of clipping. It used to decide whether the bottom section
+    /// existed at all. Still worth keeping honest — the harness's <c>--shell 200xH</c> sweeps both tiers.
     /// </remarks>
     public const int SpacedRows = 57;
 
@@ -101,9 +94,14 @@ public sealed class SidebarPanel : CompositeControl
     /// <inheritdoc/>
     protected override bool TabNavigatesChildren => true;
 
-    // Roomy when there is room, compact when there is not. The alternative is what the spaced layout does on its
-    // own in a short terminal: the Inspector — and with it Delete and Clear — is quietly clipped off the bottom,
-    // which reads as the panel not existing rather than as the window being small.
+    // Roomy when there is room, compact when there is not — so a short terminal shows the whole panel rather than
+    // making you scroll for the camera pad. Scrolling is the backstop under that, not the first answer.
+    //
+    // Measured against the FRAME'S VIEWPORT, not this control's own ActualHeight, and that is not a detail: inside a
+    // scrolling frame a control is laid out at the height IScrollable.MeasureHeight reports, so ActualHeight becomes
+    // the content height and the comparison turns into "is the spaced layout at least as tall as the spaced layout".
+    // It latches on the first answer and the tier never changes again, at any terminal size, silently. The viewport
+    // comes from the frame's own size, which the parent decides, so nothing here feeds back into it.
     //
     // Guarded on the mode actually changing, not on the height: this runs on every re-layout, and calling
     // SetContent from inside one that hasn't changed anything is how a layout starts chasing its own tail.
@@ -111,7 +109,10 @@ public sealed class SidebarPanel : CompositeControl
     protected override void Control_OnInitialization()
     {
         base.Control_OnInitialization();
-        var wanted = ActualHeight >= SpacedRows;
+        var rows = Frame?.ViewportSize.Height ?? ActualHeight;
+        if (rows <= 0) return;   // before the first real layout; deciding from 0 would rebuild twice for nothing
+
+        var wanted = rows >= SpacedRows;
         if (wanted == spaced || rebuilding) return;
 
         rebuilding = true;
@@ -147,6 +148,20 @@ public sealed class SidebarPanel : CompositeControl
         try { mesh.SetOptions(MeshNames()); }
         finally { syncing = false; }
         Refresh();
+    }
+
+    /// <summary>The stacked height of every section, so an enclosing frame scrolls the panel when its viewport is
+    /// too short even for the compact layout.</summary>
+    /// <remarks>
+    /// Summed from the sections rather than written down, because a total goes stale the moment one changes size —
+    /// and under-reporting does not merely clip the tail, it collapses the last sections to zero height. This is what
+    /// makes <see cref="SpacedRows"/> merely cosmetic: getting the tier wrong now costs a scroll, not a section.
+    /// </remarks>
+    public int MeasureHeight(int width)
+    {
+        var rows = 0;
+        foreach (var section in sections) rows += section.OuterRows;
+        return rows;
     }
 
     /// <summary>Re-reads every widget's value from the state it mirrors.</summary>
@@ -256,7 +271,8 @@ public sealed class SidebarPanel : CompositeControl
     private ILayout BuildSections(bool spaced)
     {
         var gap = spaced ? 1 : 0;
-        return new VerticalStackPanel(
+        sections =
+        [
             // Hand-built rather than Stack'd for the same reason the Inspector is: the three readout lines are one
             // block of text, so the gap belongs only before the buttons. Clear and Reset are the c and r keys — the
             // two scene-wide actions, in the section the menu also files them under.
@@ -281,7 +297,10 @@ public sealed class SidebarPanel : CompositeControl
                 ? new VerticalStackPanel(selection, motion, Spacer(), Row(delete))
                 : new VerticalStackPanel(selection, motion, Row(delete)), 3 + gap),
             // Never spaced: the pad's buttons are one control, and a gap through the middle of a D-pad reads as two.
-            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows));
+            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows),
+        ];
+
+        return new VerticalStackPanel([.. sections]);
     }
 
     // The items stacked, with a blank row between each when spaced — one fewer spacer than items, so a section
@@ -385,6 +404,7 @@ public sealed class SidebarPanel : CompositeControl
     private const int LabelColumn = 9;
 
     private SceneSnapshot? drawn;
+    private Section[] sections = [];
     private bool syncing;
     private bool spaced = true;
     private bool rebuilding;
@@ -407,6 +427,10 @@ public sealed class SidebarPanel : CompositeControl
             this.WithFrame(borderStyle: BorderStyle.Rounded, borderFgColor: BorderColor)
                 .WithTitle(title, new TitleStyle(TitlePos.TopLeft, TitleBorderStyle.Inline));
         }
+
+        // The rows this section occupies in the stack: its content plus the frame's top and bottom border. An inline
+        // title lives IN the top border row, so it costs nothing extra.
+        public int OuterRows => Height + 2;
 
         protected override bool TabNavigatesChildren => true;
     }

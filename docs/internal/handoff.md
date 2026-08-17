@@ -14,8 +14,44 @@ harness, and `--shell` at 40 / 50 / 56 rows plus the viewer.
 **Then `2464d4f` "Fix sandbox physics bugs, add UI controls"** — two grab-gesture bugs the user hit by playing with
 the sandbox, and three sidebar buttons they asked for. Both written up below.
 
-**Uncommitted after that:** **switching between the two scenes without leaving the process** — the only one of the
-three that reached the library, and the only one with a behaviour change in `CHANGELOG.txt`. Written up next.
+**Then `6212d36` "Support switching scenes from menus"** — **switching between the two scenes without leaving the
+process**, the only one of the three that reached the library and the only one with a behaviour change in
+`CHANGELOG.txt`. Written up next.
+
+**Uncommitted after that**, four follow-ups on it:
+
+- The viewer got a **`Scene` menu** of its own, leading the bar and holding Switch and Quit, so those two live in the
+  same place in both scenes.
+- **`obj` with no path** now looks for a `models` folder beside the working directory instead of scanning the working
+  directory itself, falling back to the generated knot. `ModelLibrary.DefaultDirectoryName` names the folder, and the
+  match *enumerates* rather than probing `Directory.Exists`, which is case-insensitive on Windows and not on Linux,
+  where the demo's container runs.
+- **That scan now also happens when switching into the viewer from the UI**, which is what the user actually hit: only
+  the `obj` verb looked at the folder, so a sandbox launched without it switched into a viewer holding nothing but
+  the generated knot. `Program.OpenModelsFolder` does it **once** per process — a directory of the reference models
+  is ~750 ms to parse and switching back and forth must not pay that twice — and what it loads stays in the registry,
+  so those models become spawnable back in the sandbox too.
+- **The sandbox sidebar scrolls**, like the viewer's: `SidebarPanel` is `IScrollable` with `MeasureHeight` summed from
+  its sections, wrapped in the same borderless frame. See below — the tier logic needed one non-obvious change.
+
+### The sandbox sidebar scrolls, and the trap in making it
+
+`SpacedRows` is demoted rather than deleted: the panel still picks the compact layout in a short terminal, because
+seeing the whole panel beats scrolling for the camera pad. Scrolling is the **backstop** under that, so a stale
+`SpacedRows` now costs a scroll instead of a section, and the undocumented compact floor (42 rows, and 40 and 36
+before it) is gone — the harness passes at every height from **34** rows up, where the old floor was 42, and the app
+itself renders and scrolls correctly at 30.
+
+**The trap: the tier must be measured against the FRAME'S VIEWPORT, not the panel's `ActualHeight`.** Inside a
+scrolling frame a control is laid out at the height `IScrollable.MeasureHeight` reports (`Control.CalculateSize`
+honours it when the parent leaves the height unbounded), so `ActualHeight` becomes the *content* height and
+`ActualHeight >= SpacedRows` degenerates into "is the spaced layout at least as tall as the spaced layout". It
+latches on the first answer and the tier never changes again, at any terminal size, silently. `ControlFrame.ViewportSize`
+is the real visible height and cannot feed back, since the frame is sized by its parent.
+
+**And one in the harness, worth remembering as a class:** the camera-pad check now scrolls to the pad when the
+viewport is too short for it — and that scroll left every *later* check reading a panel scrolled past the section it
+was looking for. A test that changes the state it shares with the tests after it has to put it back.
 
 ### Switching shells in one process — what restarting the UI actually costs
 

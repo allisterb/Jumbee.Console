@@ -601,6 +601,20 @@ var noneGiven = ModelLibrary.Resolve(null, @"C:\Projects\Jumbee.Console\src");
 Check("no argument is never an error", noneGiven.Error is null && noneGiven.Files.Length == 0,
     $"{noneGiven.Files.Length} files, error={noneGiven.Error ?? "none"}");
 
+// With no argument the ONLY place looked at is a models/ folder beside the working directory -- never the working
+// directory itself, which would scoop up whatever .obj happened to be next to you.
+var modelsParent = Directory.GetParent(modelDir)!.FullName;
+var defaulted = ModelLibrary.Resolve(null, modelsParent);
+Check("no argument finds a models/ folder beside the working directory",
+    defaulted.Files.Length == 4 && defaulted.Error is null,
+    $"{defaulted.Files.Length} files from '{modelsParent}', error={defaulted.Error ?? "none"}");
+
+// The .obj files sit IN modelDir, so resolving with modelDir as the working directory must find none: proof the
+// rule is "a models/ subfolder", not "this folder".
+var notCwd = ModelLibrary.Resolve(null, modelDir);
+Check("and does not load the working directory itself", notCwd.Files.Length == 0 && notCwd.Error is null,
+    $"{notCwd.Files.Length} files, error={notCwd.Error ?? "none"}");
+
 // The start index must survive into the scene.
 var startAt = new ModelScene(1);
 Check("ModelScene opens on the requested index", startAt.MeshId == 1, $"{startAt.MeshId} ({startAt.Name})");
