@@ -4,6 +4,10 @@
 ![](https://i.imgur.com/pUu2luL.gif)
 [source](../examples/Jumbee.Console.Examples/Examples/Graphics/)
 
+### 3D Model Viewer Demo
+![](https://i.imgur.com/2gtZvAJ.gif)
+[source](../examples/Jumbee.Console.3DSandboxDemo/)
+
 ### Document Editing Demo
 ![](https://i.imgur.com/mpNylpY.gif)
 [source](../examples/Jumbee.Console.Examples/Examples/Editors/)

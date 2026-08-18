@@ -2,9 +2,9 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Jumbee.Console demos — run any of the interactive TUIs with nothing installed but
-# Docker. One image bundles four apps (examples browser, agent-harness demo, IDE
-# demo, AudioScope demo); the examples.sh entry point picks which via the first
-# `docker run` arg.
+# Docker. One image bundles five apps (examples browser, agent-harness demo, IDE
+# demo, AudioScope demo, 3D sandbox); the examples.sh entry point picks which via the
+# first `docker run` arg.
 # Uses the FULL .NET 10 SDK (not just the runtime) so the build tools stay available
 # inside the image (some demos shell out to `dotnet`). Base is the default SDK image,
 # which for .NET 10 is Ubuntu 24.04 (noble) — that matters for apt package names, see
@@ -52,13 +52,16 @@ WORKDIR /src
 COPY . .
 RUN dotnet build examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj -c Release
 
-# Also build the three standalone demos so one image can run any of the four apps (the entry-point script below picks
+# Also build the four standalone demos so one image can run any of the five apps (the entry-point script below picks
 # which). The VS Code–style IDE demo opens a bundled sample C# project you can edit and `dotnet build`/`dotnet run`
 # right in its terminal pane (the SDK above makes that work in-container); the agent-harness demo is a Claude-desktop-
-# style agent UI (session rail, chat transcript, live task list, document pane). The AudioScope demo is a real-time three-pane audio oscilloscope/spectroscope/vectorscope.
+# style agent UI (session rail, chat transcript, live task list, document pane). The AudioScope demo is a real-time
+# three-pane audio oscilloscope/spectroscope/vectorscope, and the 3D sandbox is a rigid-body playground and OBJ model
+# viewer over three terminal renderers.
 RUN dotnet build examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj -c Release
 RUN dotnet build examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj -c Release
 RUN dotnet build examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj -c Release
+RUN dotnet build examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj -c Release
 
 # The AudioScope demo defaults to the bundled sample track at media/ when given no --path, and examples.sh cds to
 # /src, so the COPY above is what puts it where the demo looks. media/ is NOT tracked in git (see docker.md) — a
@@ -71,6 +74,17 @@ RUN if [ -f media/06_arido_III_the_oscilloscope_rmx.mp3 ]; then \
            "'audio-scope' will need an explicit --path. See docker.md for the download link."; \
     fi
 
+# Same arrangement for the 3D sandbox's models. examples.sh runs that demo from its own project directory (see the
+# note there), so the COPY above is already what puts them where it looks -- no staging step, unlike the AOT image,
+# which has no repo to point at. Also untracked, also soft: without it the sandbox falls back to its generated torus
+# knot and the `obj` viewer opens on that, which is a working app rather than a broken one.
+RUN if [ -d examples/Jumbee.Console.3DSandboxDemo/models ]; then \
+      echo "3D sandbox: $(ls examples/Jumbee.Console.3DSandboxDemo/models/*.obj 2>/dev/null | wc -l) model(s) found."; \
+    else \
+      echo "3D sandbox NOTE: examples/Jumbee.Console.3DSandboxDemo/models is missing from the build context;" \
+           "'3dsandbox' will show only its generated torus knot."; \
+    fi
+
 # The apps are INTERACTIVE full-screen TUIs (mouse, alternate screen, raw key input), so the container MUST be given a
 # TTY. examples.sh is the single entry point; its first argument selects the app (no argument = the examples browser):
 #     docker build -t jumbee-console .
@@ -78,6 +92,7 @@ RUN if [ -f media/06_arido_III_the_oscilloscope_rmx.mp3 ]; then \
 #     docker run --rm -it jumbee-console agent-harness   # agent harness demo
 #     docker run --rm -it jumbee-console ide             # IDE demo
 #     docker run --rm -it jumbee-console audio-scope     # AudioScope demo (bundled sample track)
+#     docker run --rm -it jumbee-console 3dsandbox       # 3D physics sandbox (3dsandbox obj = the model viewer)
 # Quit any app with Ctrl+Q; it restores your terminal on exit.
 #
 # The bundled track is "Of. — Árido III (The Oscilloscope remix)" from Modismo M028, under Creative Commons

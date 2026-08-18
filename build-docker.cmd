@@ -15,12 +15,20 @@ dotnet build examples\Jumbee.Console.IdeDemo\Jumbee.Console.IdeDemo.csproj /p:Co
 if errorlevel 1 exit /b 1
 dotnet build examples\Jumbee.Console.AudioScopeDemo\Jumbee.Console.AudioScopeDemo.csproj /p:Configuration=Release
 if errorlevel 1 exit /b 1
+dotnet build examples\Jumbee.Console.3DSandboxDemo\Jumbee.Console.3DSandboxDemo.csproj /p:Configuration=Release
+if errorlevel 1 exit /b 1
 
 rem The AudioScope demo defaults to the bundled sample track, which is not tracked in git — warn before an image is
 rem built without it (see docker.md for the download link).
 if not exist "media\06_arido_III_the_oscilloscope_rmx.mp3" (
   echo WARNING: media\06_arido_III_the_oscilloscope_rmx.mp3 is missing, so the images will have no default 1>&2
   echo          AudioScope track. See docker.md for where to download it. 1>&2
+)
+
+rem Same for the 3D sandbox's models, also untracked. Without them the sandbox still runs, on its generated torus knot.
+if not exist "examples\Jumbee.Console.3DSandboxDemo\models" (
+  echo WARNING: examples\Jumbee.Console.3DSandboxDemo\models is missing, so '3dsandbox' in the images will 1>&2
+  echo          show only its generated torus knot. See docker.md. 1>&2
 )
 
 rem Read the shared version (ProjectAssemblyVersion, defined in src\Directory.Build.props) from a src project — the

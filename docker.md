@@ -10,7 +10,7 @@ No clone, no build. Docker pulls the image ([`allisterb/jumbee-console`](https:/
 docker run --rm -it --pull=always allisterb/jumbee-console
 ```
 
-One image bundles four apps. The first argument picks which; with none, the examples browser runs:
+One image bundles five apps. The first argument picks which; with none, the examples browser runs:
 
 | Argument | App |
 | --- | --- |
@@ -18,6 +18,7 @@ One image bundles four apps. The first argument picks which; with none, the exam
 | `agent-harness` | Claude-desktop-style agent UI (session rail, transcript, live task list) |
 | `ide` | VS Code–style IDE demo — edit and `dotnet build`/`run` a sample project in its terminal pane |
 | `audio-scope` | Real-time oscilloscope, vectorscope and spectroscope over a bundled audio track |
+| `3dsandbox` | Real-time 3D rigid-body sandbox over three terminal renderers; `3dsandbox obj` opens its OBJ model viewer |
 
 ```sh
 docker run --rm -it --pull=always allisterb/jumbee-console audio-scope
@@ -89,6 +90,27 @@ error inside the demo.
 > with the album say BY-NC 3.0 while archive.org lists BY-NC-ND 4.0. The images redistribute it **unmodified**, which
 > both permit, and ship the album's credits file next to it. The NonCommercial term means these demo images must not
 > be used commercially with the track in place; the ND term means don't ship a trimmed or remixed excerpt.
+
+
+### The 3D sandbox's models
+
+Same arrangement, same reason. `3dsandbox` looks for a `models` folder and loads every `.obj` in it — the sandbox
+makes them spawnable, and `3dsandbox obj` opens the viewer on the first. That folder lives at
+`examples/Jumbee.Console.3DSandboxDemo/models` and is **not in the repository**: the meshes are third-party research
+assets (the Stanford bunny and dragon, the Utah teapot, and friends), each with its own terms.
+
+Without it both images still build, and the sandbox falls back to a torus knot it generates itself — which is a
+working app, not a broken one, and is what the demo ships with by design. Drop any `.obj` files into that folder to
+bundle them. Where the two images put them differs, because only one of them has a repo at runtime:
+
+| | where the models end up | why |
+| --- | --- | --- |
+| `jumbee-console` (full) | `/src/examples/Jumbee.Console.3DSandboxDemo/models` | `COPY . .` already puts them there; `examples.sh` runs the demo from that directory |
+| `jumbee-console-aot` (slim) | `/app/models` | no repo in the image, so `Dockerfile.aot` stages them beside the binaries, as it does for the audio track |
+
+> If you bundle models in an image you publish, ship their licences too — most research meshes carry attribution or
+> non-commercial terms, and `THIRD-PARTY-NOTICES.TXT` is where this repo records that kind of thing. Any `.txt`
+> alongside the `.obj` files is copied into the slim image for exactly this.
 
 ### Scoping a live audio device (Linux hosts)
 

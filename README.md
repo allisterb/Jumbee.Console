@@ -1,7 +1,7 @@
 # Jumbee.Console
 [![NuGet Version](https://img.shields.io/nuget/v/Jumbee.Console?style=plastic)](https://www.nuget.org/packages/Jumbee.Console)
 
-![](https://i.imgur.com/mpNylpY.gif)
+![](https://i.imgur.com/2gtZvAJ.gif)
 
 ## About
 Jumbee.Console is a .NET library for advanced TUIs that focuses on performance and usability. Inspired by libs like [ratatui](https://ratatui.rs/) and [Textual](https://textual.textualize.io/), it tries to provide a high-performance retained-mode library that is easy-to-use with idiomatic .NET GUI and Task patterns, while flexible enough to create different types of TUI applications from news readers to animated dashboards to IDEs to agent harnesses to graphics apps.
@@ -46,6 +46,12 @@ The audio scope example, from the AOT image:
 
 ```sh
 docker run --rm -it --pull=always allisterb/jumbee-console-aot:latest audio-scope
+```
+
+The 3D physics sandbox (add `obj` for its model viewer):
+
+```sh
+docker run --rm -it --pull=always allisterb/jumbee-console:latest 3dsandbox
 ```
 
 

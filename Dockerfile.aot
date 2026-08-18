@@ -3,9 +3,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Jumbee.Console — SLIM, NATIVE-AOT image.
 #
-# Unlike the full playground image (./Dockerfile), this ships only the three
-# AOT-eligible demos — the examples browser, the agent-harness demo and the
-# AudioScope demo — each compiled to a self-contained native binary with NativeAOT.
+# Unlike the full playground image (./Dockerfile), this ships only the four
+# AOT-eligible demos — the examples browser, the agent-harness demo, the AudioScope
+# demo and the 3D sandbox — each compiled to a self-contained native binary with
+# NativeAOT.
 # No .NET runtime and no SDK in the final image. The IDE demo is excluded on
 # purpose: it needs the in-container `dotnet` (edit + build/run a project in its
 # terminal pane), so keep using ./Dockerfile for that one.
@@ -14,6 +15,7 @@
 #     docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #     docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
 #     docker run --rm -it jumbee-console-aot audio-scope     # AudioScope demo (bundled sample track)
+#     docker run --rm -it jumbee-console-aot 3dsandbox       # 3D physics sandbox (3dsandbox obj = model viewer)
 #
 # The first `docker run` argument picks the app (see examples-aot.sh). Quit with
 # Ctrl+Q; it restores your terminal on exit.
@@ -25,7 +27,7 @@
 # default) needs neither.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Stage 1: build + NativeAOT-publish the two AOT-eligible demos ────────────
+# ── Stage 1: build + NativeAOT-publish the AOT-eligible demos ────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # NativeAOT compiles and links a native binary, which needs the clang toolchain and
@@ -52,6 +54,8 @@ RUN dotnet publish examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.Agent
         -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
 RUN dotnet publish examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj \
         -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/audioscope
+RUN dotnet publish examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj \
+        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/sandbox
 
 # Stage the AudioScope demo's default input (the bundled sample track) into the layout the runtime stage copies from.
 # media/ is NOT tracked in git (see docker.md), so this is deliberately soft: a checkout without it still produces a
@@ -68,6 +72,23 @@ RUN mkdir -p /app/media \
        else \
          echo "AudioScope WARNING: media/06_arido_III_the_oscilloscope_rmx.mp3 is missing from the build context;" \
               "'audio-scope' will need an explicit --path. See docker.md for the download link."; \
+       fi
+
+# Stage the 3D sandbox's models the same way, and for the same reason the media block above exists: this image has no
+# repo at runtime, only the published binaries, so anything resolved relative to the working directory has to be put
+# there explicitly. The sandbox looks for `models` in its cwd, which examples-aot.sh pins to /app.
+#
+# Soft again -- models/ is untracked, so a fresh clone builds a working image where the sandbox shows its generated
+# torus knot instead. The README.txt keeps the directory non-empty so stage 2's COPY succeeds either way.
+RUN mkdir -p /app/models \
+    && echo "3D sandbox models, loaded by the 3dsandbox demo and its obj viewer." > /app/models/README.txt \
+    && if [ -d examples/Jumbee.Console.3DSandboxDemo/models ]; then \
+         cp examples/Jumbee.Console.3DSandboxDemo/models/*.obj /app/models/ 2>/dev/null || true; \
+         cp examples/Jumbee.Console.3DSandboxDemo/models/*.txt /app/models/ 2>/dev/null || true; \
+         echo "3D sandbox: $(ls /app/models/*.obj 2>/dev/null | wc -l) model(s) staged at /app/models."; \
+       else \
+         echo "3D sandbox NOTE: examples/Jumbee.Console.3DSandboxDemo/models is missing from the build context;" \
+              "'3dsandbox' will show only its generated torus knot."; \
        fi
 
 # ── Stage 2: minimal runtime image (no SDK, no .NET runtime — just OS deps) ───
@@ -93,9 +114,12 @@ WORKDIR /app
 COPY --from=build /app/examples/ ./examples/
 COPY --from=build /app/agent/ ./agent/
 COPY --from=build /app/audioscope/ ./audioscope/
+COPY --from=build /app/sandbox/ ./sandbox/
 # The AudioScope demo resolves its default --path relative to the working directory, which examples-aot.sh pins to
 # /app — so the track has to land at /app/media, not next to the binary.
 COPY --from=build /app/media/ ./media/
+# Likewise the sandbox's models: it looks for `models` in the working directory, which is /app.
+COPY --from=build /app/models/ ./models/
 COPY examples-aot.sh ./
 
 # The demos are INTERACTIVE full-screen TUIs (mouse, alternate screen, raw key input), so the container MUST be given

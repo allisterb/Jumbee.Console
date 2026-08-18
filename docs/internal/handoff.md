@@ -18,7 +18,8 @@ the sandbox, and three sidebar buttons they asked for. Both written up below.
 process**, the only one of the three that reached the library and the only one with a behaviour change in
 `CHANGELOG.txt`. Written up next.
 
-**Uncommitted after that**, four follow-ups on it:
+**Then `f570062` "Sandbox sidebar implements IScrollable. Fix model viewer reading 'models' dir on switch"** — four
+follow-ups on the switching work, all written up below:
 
 - The viewer got a **`Scene` menu** of its own, leading the bar and holding Switch and Quit, so those two live in the
   same place in both scenes.
@@ -33,6 +34,28 @@ process**, the only one of the three that reached the library and the only one w
   so those models become spawnable back in the sandbox too.
 - **The sandbox sidebar scrolls**, like the viewer's: `SidebarPanel` is `IScrollable` with `MeasureHeight` summed from
   its sections, wrapped in the same borderless frame. See below — the tier logic needed one non-obvious change.
+
+**Uncommitted after that:** shipping the sandbox through the launchers and both images.
+
+- **The launchers and both Docker images carry the 3D sandbox**, reachable as `./examples.sh 3dsandbox` (aliases `3d`,
+  `sandbox`), `examples.cmd 3dsandbox`, and `docker run --rm -it jumbee-console 3dsandbox`. `3dsandbox obj` opens the
+  model viewer. The models folder is handled differently per image, and that asymmetry is the only interesting part:
+  the **full** image already has the repo at `/src`, so `examples.sh` just runs the demo **from its own project
+  directory** and `models/` is found with no staging step — the same one line that makes it work on a host checkout
+  from any cwd; the **slim AOT** image has no repo, so `Dockerfile.aot` stages `models/` to `/app/models` beside the
+  binaries, exactly as it already does for the AudioScope track. Both are soft: `models/` is untracked (18 MB of
+  third-party research meshes), and without it the sandbox falls back to its generated torus knot, which is a working
+  app. Build-time notes in both Dockerfiles and both `build-docker` scripts say which happened.
+  **Both images are verified end to end, built and run.** Full: `3dsandbox obj` in the container opens on `bunny`,
+  which is the whole claim — the launcher's working-directory switch reaches the models `COPY . .` brought in. Slim:
+  the sandbox **does** NativeAOT-publish (5.5 MB binary, 364 MB image), `obj` finds `/app/models`, and the plain
+  sandbox reports `11 bodies` with the sim clock advancing to `t=1.0s` — so **Box3D's native P/Invoke loads and steps
+  under NativeAOT**, which was the one part of this nobody had ever tried. Build notes read `5 model(s) found.` and
+  `5 model(s) staged at /app/models.`
+
+  One cosmetic difference under AOT: System.CommandLine prints the usage line as `Jumbee.Console [command]` rather
+  than `Jumbee.Console.3DSandboxDemo` — it derives the program name differently from a trimmed native binary. Left
+  alone.
 
 ### The sandbox sidebar scrolls, and the trap in making it
 
@@ -408,6 +431,21 @@ bespoke delegate types while everything else is now `EventHandler`.
 
 ## Operational notes
 
+- **Editing a `.cmd` file with `sed`/`awk` on Git Bash silently converts it to LF, and `.gitattributes` pins
+  `*.cmd` to CRLF on purpose** — its own comment says why: *"cmd.exe drops leading characters from LF-only .cmd/.bat
+  files."* An `awk '{...}' f > tmp && mv tmp f` rewrite preserves the `\r` on lines it copies through but writes
+  LF-only for lines it inserts, so the file ends up mixed; a `sed -i` over the whole file finishes the job and makes
+  it uniformly LF. **`git diff` will not tell you**: with `core.autocrlf=true` the blob normalises either way, so the
+  diff looks clean and small while the file the user actually runs is broken. The tell is a byte-level count, not a
+  diff:
+
+  ```sh
+  perl -ne '$t++; $c++ if /\r\n$/; END{print "$ARGV: $c of $t CRLF\n"}' examples.cmd
+  ```
+
+  Everything else in this working tree is LF (`.sh` by `.gitattributes`, the rest by convention — `pack.ps1`,
+  `CHANGELOG.txt` and `.dockerignore` are all LF), so `.cmd` is the only family that needs the check. It bit here and
+  the user caught it, not any test.
 - **The full-suite flakiness improved, and the cause is now half-understood.** The suite used to fail a *different*
   1–2 tests per run while all passed in isolation. `MenuBarTests` had no `UiTestHarness.EnsureStopped()` in its
   constructor while most classes do, and it drives the ambient `UI.Overlay`, which is global; adding it gave three
