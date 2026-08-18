@@ -143,6 +143,20 @@ public sealed class SceneView : CompositeControl
         RendererChanged?.Invoke();
     }
 
+    /// <summary>The active renderer's shade-ramp resolution, or <see langword="null"/> under the wireframe, which has
+    /// no ramp to quantise.</summary>
+    /// <remarks>Unlike the shaded-only dials above, BOTH solid renderers have one, and each keeps its own value
+    /// across a renderer swap — the two defaults differ on purpose (see <see cref="SolidRenderer.DefaultShadeLevels"/>).</remarks>
+    public float? ShadeLevels => renderer is MeshRenderer m ? m.ShadeLevels : null;
+
+    /// <summary>Sets the active renderer's shade-ramp resolution. A no-op under the wireframe.</summary>
+    public void SetShadeLevels(float levels)
+    {
+        if (renderer is not MeshRenderer mesh || mesh.ShadeLevels == levels) return;
+        mesh.ShadeLevels = levels;
+        RendererChanged?.Invoke();
+    }
+
     /// <summary>How hard the shaded renderer darkens creases and contacts, or <see langword="null"/> under a
     /// renderer that has no such pass.</summary>
     public float? OcclusionStrength => renderer is ShadedRenderer s ? s.OcclusionStrength : null;

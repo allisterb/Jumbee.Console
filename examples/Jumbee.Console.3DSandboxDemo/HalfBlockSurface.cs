@@ -177,9 +177,8 @@ public sealed class HalfBlockSurface : Control
 
                 edge[i] = true;
                 // Same boost the glyph path applies, for the same reason: an outline that merely follows its
-                // surface disappears exactly where it is most needed — a sleeping body is drawn at a third
-                // brightness, so a darkened outline on it is dark on dark.
-                if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);
+                // surface disappears exactly where it is most needed — on the unlit side of a body, where it would
+                // be dark on dark.
             }
         }
     }
@@ -256,13 +255,19 @@ public sealed class HalfBlockSurface : Control
     {
         // Two sub-pixel rows per character row: the upper is the glyph's foreground, the lower its background.
         // Emitting one glyph for both halves is what buys the doubled vertical resolution.
+        // Clamped on BOTH axes against the control's CURRENT size, not just the pixel buffer's. The buffer is sized
+        // at BeginFrame; a re-layout between that and this paint can leave the control SMALLER than the frame drawn
+        // into it -- collapsing the sidebar and restoring it does exactly that, and the write then runs off the end
+        // of the console buffer. The row clamp was already here; the column one was not, and that asymmetry was the
+        // bug: hiding the sidebar with `u` while a solid renderer was active could take the app down.
         var rows = Math.Min(ActualHeight, PixelHeight / 2);
+        var cols = Math.Min(ActualWidth, PixelWidth);
         var glyphEdges = EdgeStyle == SilhouetteStyle.Glyph && edge.Length == color.Length;
         for (var row = 0; row < rows; row++)
         {
             var top = row * 2 * PixelWidth;
             var bottom = top + PixelWidth;
-            for (var x = 0; x < PixelWidth; x++)
+            for (var x = 0; x < cols; x++)
             {
                 var upper = color[top + x];
                 var lower = color[bottom + x];
@@ -272,8 +277,8 @@ public sealed class HalfBlockSurface : Control
                     // Brighter colour to the glyph, darker behind it, so the outline reads against its own surface.
                     var (fg, bg) = Luminance(upper) >= Luminance(lower) ? (upper, lower) : (lower, upper);
                     // Boost rather than inherit. An outline that merely follows its surface disappears exactly where
-                    // it is most needed: a sleeping body is drawn at a third brightness, so its silhouette came out
-                    // as the faintest glyph in a dark colour on a dark background — present, and invisible.
+                    // it is most needed: on the unlit side of a body, where the surface is already near ambient and
+                    // the background behind it is dark -- present in the buffer, invisible on screen.
                     var ink = Brighten(fg, EdgeBoost);
                     consoleBuffer.Write(new Position(x, row), new CCharacter(EdgeGlyph(Luminance(ink)), ink, bg));
                     continue;

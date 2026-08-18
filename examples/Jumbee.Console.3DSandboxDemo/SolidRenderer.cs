@@ -22,6 +22,11 @@ using CColor = ConsoleGUI.Data.Color;
 /// </remarks>
 public sealed class SolidRenderer : MeshRenderer
 {
+    #region Constructors
+    /// <summary>Creates the solid renderer at its default shade-ramp resolution.</summary>
+    public SolidRenderer() : base(DefaultShadeLevels) { }
+    #endregion
+
     #region Properties
     /// <inheritdoc/>
     public override string Name => "solid";
@@ -45,7 +50,8 @@ public sealed class SolidRenderer : MeshRenderer
     private static readonly Vector3 LightDirection = Vector3.Normalize(new Vector3(-0.4f, -0.85f, -0.35f));
     private const float Ambient = 0.28f;
 
-    // How many distinct brightness levels a face can take. Low on purpose: see MeshRenderer.Quantise.
-    private const float ShadeLevels = 5f;
+    /// <summary>The default for <see cref="MeshRenderer.ShadeLevels"/>. Lower than the shaded renderer's: one flat
+    /// value per FACE, so the faceting already carries the form and a fine ramp buys less.</summary>
+    public const float DefaultShadeLevels = 5f;
     #endregion
 }

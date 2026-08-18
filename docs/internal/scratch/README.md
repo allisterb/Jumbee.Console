@@ -23,9 +23,9 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 `--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
-**`--shell` has a floor of 34 rows**, and it is the harness's rather than the app's. The sandbox sidebar scrolls now,
+**`--shell` has a floor of 36 rows**, and it is the harness's rather than the app's. The sandbox sidebar scrolls now,
 so at any height it is *reachable*; but most checks read the panel by finding its text in the rendered rows, and
-below 34 the World section is off screen at the top of the scroll. Only the camera-pad check scrolls to what it is
+below 36 the World section is off screen at the top of the scroll. Only the camera-pad check scrolls to what it is
 looking for. The app itself is fine down there — 30 rows renders and scrolls correctly.
 
 ## What it covers that a normal test would not

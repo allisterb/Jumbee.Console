@@ -72,6 +72,31 @@ follow-ups on the switching work, all written up below:
   is now the general one: an outline inheriting its surface colour vanishes on the unlit side of a body, which is
   where a silhouette matters most.
 
+- **`ShadeLevels` is a runtime dial**, on `MeshRenderer` so both solid renderers have one, clamped and rounded to
+  [2, 24] and defaulting to 7 (shaded) / 5 (solid). Exposed through `SceneView.ShadeLevels` / `SetShadeLevels` and a
+  **Shades** slider in both sidebars. It greys out under the *wireframe* rather than under the non-shaded renderers,
+  which is the opposite gating from the Edges/Occlusion dials — worth noticing when adding the next one.
+
+  It is the quality knob *and* the largest performance lever, which used to be an argument for pinning it. The
+  argument changed when the demo started being **recorded**: nothing is waiting on the terminal in a capture, so a
+  fine ramp is free there and ruinous live. That tension is now the user's to resolve with a slider.
+
+- **A crash the shade dial found by accident, and the more valuable result of the session.**
+  `HalfBlockSurface.Render` clamped its row loop against `ActualHeight` but its **column loop against `PixelWidth`**,
+  the pixel buffer's own width. The buffer is sized at `BeginFrame`; a re-layout between that and the next paint can
+  leave the control *smaller* than the frame drawn into it, and the write then runs off the end of the console
+  buffer. **Collapsing the sidebar with `u` and restoring it does exactly that** — so `u`, `u` with a solid or shaded
+  renderer active could take the app down. Fixed by clamping both axes.
+
+  It had gone unseen because the harness pressed `v` early, leaving the *wireframe* (a `Canvas`, not a
+  `HalfBlockSurface`) active for the sidebar-toggle checks. Selecting a mesh renderer for the new dial checks put a
+  half-block surface on that path for the first time and it crashed immediately. **A test that leaves global state
+  behind can hide a bug from every test after it** — the same class as the scroll-position problem noted above.
+
+- **Two more pieces of prose justified themselves by the removed sleep dimming** and were rewritten: both silhouette
+  comments in `HalfBlockSurface`. The historical record in `3D Sandbox Plan.md` was *annotated* rather than edited,
+  since it documents what was true when the work happened.
+
 ### The sandbox sidebar scrolls, and the trap in making it
 
 `SpacedRows` is demoted rather than deleted: the panel still picks the compact layout in a short terminal, because

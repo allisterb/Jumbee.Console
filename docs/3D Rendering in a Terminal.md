@@ -705,10 +705,12 @@ cell, sixty times a second.
 
 Three consequences run through the whole design:
 
-**1. Quantise the shade ramp.** Faces land on one of 5 (solid) or 7 (shaded) brightness levels, so neighbouring
-cells share a colour and runs coalesce. This is not a stylistic choice that happens to be fast; it is the single
-largest performance lever available, and a smooth gradient would buy nothing visible at this resolution while
-moving the renderer into the expensive column.
+**1. Quantise the shade ramp.** Faces land on one of a small number of brightness levels — 5 (solid) or 7 (shaded)
+by default, adjustable at runtime through `MeshRenderer.ShadeLevels` — so neighbouring cells share a colour and runs
+coalesce. This is not a stylistic choice that happens to be fast; it is the single largest performance lever
+available, and a smooth gradient would buy nothing visible at this resolution while moving the renderer into the
+expensive column. It is also the quality dial: a curved surface shows this many bands across it, so raising it is
+the first thing to reach for when the output is destined for a recording rather than a live terminal.
 
 **2. Flat shading is a feature.** Large uniform regions are exactly what the emitter wants.
 
@@ -919,9 +921,23 @@ Choosing between them:
 - **Texturing.** Interpolate UV coordinates (perspective-correctly, exactly as world position is handled here) and
   sample an image. The blocker is not the maths — it is that a terminal cell has one colour, so texture detail
   finer than a sub-pixel simply cannot be shown.
-- **Smooth (Phong) normals.** Store per-vertex normals and interpolate them. Would remove the faceting — and would
-  also destroy the shade quantisation that makes the output cheap to emit. A deliberate omission, not an oversight.
-- **Anti-aliasing.** The half-block trick is already a form of vertical supersampling. Going further means blending
+- **Smooth (Phong) normals.** Store per-vertex normals and interpolate them, removing the faceting. **A deliberate
+  omission, and the reason is the sampling grid rather than the cost.** Phong interpolates *within* a triangle, and
+  at this resolution a triangle is smaller than the samples covering it: the generated sphere is 100 triangles and
+  draws at roughly 12 × 12 sub-pixels in the sandbox, so about **2 sub-pixels per front-facing triangle**. There is
+  nothing to interpolate across — you would compute a smooth gradient and point-sample it twice. Loaded meshes are
+  further the same way, not less: the reference teapot is 6,320 triangles at a similar on-screen size. What reads as
+  "faceting" on a sphere here is the shade quantisation and the coarse grid, not the normals.
+
+  Worth being precise about the cost too, since the obvious objection is that Phong would ruin the quantisation. It
+  would not: `Quantise` is applied to the **final intensity** whatever produced it, so smooth normals snap to the
+  same levels and add **no colours at all**. What they cost is run *length* — a flat-shaded triangle is one uniform
+  run, where a Phong-shaded one may cross a band boundary and split into two or three. For the solid renderer that
+  is the whole argument, since one flat value per face is exactly what makes it cheap. For the shaded renderer it is
+  a much smaller marginal cost than it sounds, because the occlusion pass already varies per sub-pixel across nine
+  discrete factors and has broken those runs up regardless.
+
+  If the goal is a smoother sphere, the lever is [`MeshRenderer.ShadeLevels`](#part-3--three-renderers), not normals.
   colours between cells, which increases how much neighbours differ — directly the expensive direction.
 - **Near-plane clipping.** Triangles with any corner behind the camera are dropped rather than split. Cheap, and at
   the distances an orbit camera holds it costs a sliver of geometry at the very edge of the view.

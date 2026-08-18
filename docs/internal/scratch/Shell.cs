@@ -184,6 +184,28 @@ internal static class ShellChecks
         Settle(app.Runner, 10);
         Check("bounce is applied to every live shape without disturbing the world", bounced);
 
+
+        // The shade-ramp dial, which is BOTH the quality knob and the renderer's biggest performance lever -- so it
+        // is worth knowing the widget and the renderer actually agree. Unlike the shaded-only dials, both solid
+        // renderers own one, and each keeps its own value across a swap.
+        // A `v` keypress above left the WIREFRAME active, and it has no ramp to quantise -- so select a solid one
+        // first. That null is the property behaving correctly, not a gap: it is what greys the slider out.
+        view.SetRenderer(view.Renderers.First(r => r is MeshRenderer));
+        var shadeBefore = view.ShadeLevels;
+        view.SetShadeLevels(MeshRenderer.MaxShadeLevels);
+        Draw();
+        Check("the shade-levels dial reaches the renderer",
+            view.ShadeLevels == MeshRenderer.MaxShadeLevels, $"{shadeBefore} -> {view.ShadeLevels}");
+        Check("and the slider reads it back", SliderReads(root, width, height, "Shades", MeshRenderer.MaxShadeLevels));
+
+        // Out of range on purpose: the property rounds and clamps, so a UI cannot drive it somewhere the quantiser
+        // would divide by.
+        view.SetShadeLevels(0f);
+        Check("it clamps rather than trusting its caller", view.ShadeLevels == MeshRenderer.MinShadeLevels,
+            $"asked for 0, got {view.ShadeLevels}");
+        view.SetShadeLevels(ShadedRenderer.DefaultShadeLevels);
+        Draw();
+
         Console.WriteLine("\nno feedback loop:");
         var refreshes = 0;
         view.Spawn.Changed += () => refreshes++;

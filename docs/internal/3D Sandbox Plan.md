@@ -468,7 +468,9 @@ actual PNG immediately exposed three defects that every passing test had missed:
    point light exists for the *gradient across a face*, not for dramatic falloff — `R = 40` fixed it.
 2. **Edge glyphs were outlining the ground plane's own outer boundary**, which reads as speckle along the horizon
    rather than as shape. Sub-pixels now carry a `group` byte (scenery vs body) and only bodies are outlined.
-3. **The outline was invisible on sleeping bodies.** A sleeping body is drawn at a third brightness, so an outline
+3. **The outline was invisible on sleeping bodies.** *(Sleep dimming was later removed — see the handoff. The
+   brightening it motivated stayed, for the general reason: an outline that inherits its surface colour vanishes on
+   the unlit side of a body.)* A sleeping body was drawn at a third brightness, so an outline
    that inherits its surface colour came out as the faintest glyph in a dark colour on a dark background — present
    in the buffer, and invisible on screen. Edge cells now *boost* brightness rather than inherit it.
 
@@ -917,7 +919,8 @@ recorded above, and `ink` darkened because that is what ink means. Nobody re-exa
 The point of having two is a **resolution** trade — a glyph gives up the cell's two independent sub-pixels, ink
 keeps them — and the colour inversion was swamping it. `Ink` is now `Line` and brightens by the same factor, so
 switching between them shows the trade they exist to demonstrate. It also inherits the reason for the boost: a
-sleeping body is drawn at a third brightness, and a darkened outline on one is dark on dark.
+sleeping body was drawn at a third brightness, and a darkened outline on one is dark on dark. (Sleep dimming has
+since been removed; the brightening stayed — the unlit side of any body makes the same argument.)
 
 Cheaper too, which was not the motivation but is worth recording, since the earlier table measured the darkening
 version (200×50, 7 bodies, orbiting camera):

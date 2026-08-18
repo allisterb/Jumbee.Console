@@ -22,6 +22,11 @@ using CColor = ConsoleGUI.Data.Color;
 /// </remarks>
 public abstract class MeshRenderer : ISceneRenderer
 {
+    #region Constructors
+    /// <summary>Initialises the shared rasteriser with the shade-ramp resolution its subclass wants by default.</summary>
+    protected MeshRenderer(float shadeLevels) => ShadeLevels = shadeLevels;
+    #endregion
+
     #region Properties
     /// <inheritdoc/>
     public abstract string Name { get; }
@@ -43,8 +48,37 @@ public abstract class MeshRenderer : ISceneRenderer
 
     /// <summary>Size of one checkerboard square, in world units.</summary>
     public float GroundStep { get; set; } = 2f;
-    #endregion
 
+    /// <summary>
+    /// How many distinct brightness levels the shade ramp is quantised to. Rounded and clamped to
+    /// [<see cref="MinShadeLevels"/>, <see cref="MaxShadeLevels"/>].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The quality/cost dial, and the one that actually moves the picture at this resolution — a curved surface shows
+    /// this many bands across it, so a sphere at 12 sub-pixels across is showing about four. Raising it smooths the
+    /// banding; lowering it flattens the scene into poster shades.
+    /// </para>
+    /// <para>
+    /// It is <b>also the largest performance lever the renderer has</b>, which is why the defaults are low. Coarse
+    /// levels mean neighbouring cells share a colour and the emitter coalesces them into long runs; fine levels break
+    /// those runs and the ANSI byte count climbs. Cheap to raise for a recording, where nothing is waiting on the
+    /// terminal; think before raising it for interactive use on a slow one.
+    /// </para>
+    /// </remarks>
+    public float ShadeLevels
+    {
+        get => shadeLevels;
+        set => shadeLevels = Math.Clamp(MathF.Round(value), MinShadeLevels, MaxShadeLevels);
+    }
+
+    /// <summary>The coarsest shade ramp on offer — two levels is lit and unlit, and little else.</summary>
+    public const float MinShadeLevels = 2f;
+
+    /// <summary>The finest shade ramp on offer. Past this the bands are below what the palette and the eye resolve,
+    /// and only the byte count keeps climbing.</summary>
+    public const float MaxShadeLevels = 24f;
+    #endregion
     #region Methods
     /// <inheritdoc/>
     public void Draw(SceneSnapshot snapshot, OrbitCamera camera)
@@ -280,6 +314,7 @@ public abstract class MeshRenderer : ISceneRenderer
     #endregion
 
     #region Fields
+    private float shadeLevels;
     // Scenery versus bodies: only bodies are outlined (see HalfBlockSurface.TestAndSet).
     private const byte GroundGroup = 0;
     private const byte BodyGroup = 1;

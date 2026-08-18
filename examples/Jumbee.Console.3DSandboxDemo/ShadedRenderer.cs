@@ -28,6 +28,11 @@ using CColor = ConsoleGUI.Data.Color;
 /// </remarks>
 public sealed class ShadedRenderer : MeshRenderer
 {
+    #region Constructors
+    /// <summary>Creates the shaded renderer at its default shade-ramp resolution.</summary>
+    public ShadedRenderer() : base(DefaultShadeLevels) { }
+    #endregion
+
     #region Properties
     /// <inheritdoc/>
     public override string Name => "shaded";
@@ -137,7 +142,8 @@ public sealed class ShadedRenderer : MeshRenderer
 
     // More levels than SolidRenderer: with a genuine gradient to represent there is something for them to do. Each
     // extra level costs ANSI bytes, so this is deliberately still small.
-    private const float ShadeLevels = 7f;
+    /// <summary>The default for <see cref="MeshRenderer.ShadeLevels"/>, so a UI offering the dial can mark it.</summary>
+    public const float DefaultShadeLevels = 7f;
 
     // How sharply the inverse-depth field must bend, relative to local depth, to count as an edge. Low enough to
     // catch a box crease seen face-on, high enough that a sphere's curvature does not light up its whole interior.
