@@ -151,7 +151,7 @@ public abstract class MeshRenderer : ISceneRenderer
 
         var tint = Selected == snapshot.Ids[i]
             ? Palette.Selection
-            : Palette.For(snapshot.ColorKeys[i], snapshot.Awake[i]);
+            : Palette.For(snapshot.ColorKeys[i]);
 
         EnsureVertexCapacity(mesh.Vertices.Length);
         // A full affine transform when the scene supplies one -- shear and non-uniform scale cannot go through the

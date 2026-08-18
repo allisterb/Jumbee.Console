@@ -642,9 +642,9 @@ Two presentations, and the difference between them is a resolution trade specifi
   up its two independent sub-pixels** and the outline lands on a full-cell boundary. Free for a renderer that
   samples once per cell; a genuine cost at double resolution.
 
-Both *brighten*. That is not arbitrary: a sleeping body is drawn at a third brightness, so an outline that merely
-inherited its surface colour came out as the faintest possible mark on a dark background — present in the buffer,
-invisible on screen.
+Both *brighten*. That is not arbitrary: an outline that merely inherited its surface colour would vanish exactly
+where a silhouette matters most — on the unlit side of a body, where the surface is already near ambient and the
+background behind it is dark. Present in the buffer, invisible on screen.
 
 #### Ambient occlusion, in screen space
 

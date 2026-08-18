@@ -57,6 +57,21 @@ follow-ups on the switching work, all written up below:
   than `Jumbee.Console.3DSandboxDemo` — it derives the program name differently from a trimmed native binary. Left
   alone.
 
+- **Sleep dimming removed.** `Palette.For` drew a sleeping body at a third brightness, to make the engine's sleep
+  behaviour visible. It went, and the reasoning is worth keeping: a settled pile is the *common* case, so most of the
+  scene sat dimmed most of the time, and the one thing it degraded was the lighting — which is the whole point of the
+  shaded renderer. It also read as a lighting bug rather than as information: three boxes falling asleep on the same
+  tick dim simultaneously, and the selected body is exempt (`Palette.Selection` bypasses `Palette.For`), so one object
+  stays bright while its neighbours darken — which looks exactly like a light moving. Nothing is lost: the footer and
+  the Scene panel both report the awake count in words, and the step-time readout visibly drops when the solver stops
+  working, which is a better demonstration than a colour nobody can interpret.
+
+  Two pieces of prose justified themselves by it and were rewritten, not just re-worded: `Program.Populate`'s comment,
+  and — the one worth knowing about — the silhouette section of `docs/3D Rendering in a Terminal.md`, which explained
+  why outlines *brighten* by pointing at the third-brightness sleeping body. The design is still right, but the reason
+  is now the general one: an outline inheriting its surface colour vanishes on the unlit side of a body, which is
+  where a silhouette matters most.
+
 ### The sandbox sidebar scrolls, and the trap in making it
 
 `SpacedRows` is demoted rather than deleted: the panel still picks the compact layout in a short terminal, because

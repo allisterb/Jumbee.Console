@@ -130,7 +130,7 @@ public sealed class WireframeRenderer : ISceneRenderer
         {
             var b = order[i];
             var selected = Selected == snapshot.Ids[b];
-            var color = selected ? Palette.Selection : Palette.For(snapshot.ColorKeys[b], snapshot.Awake[b]);
+            var color = selected ? Palette.Selection : Palette.For(snapshot.ColorKeys[b]);
             switch (snapshot.Shapes[b])
             {
                 case BodyShape.Sphere:
@@ -545,17 +545,19 @@ public sealed class WireframeRenderer : ISceneRenderer
     #endregion
 }
 
-/// <summary>Scene colours: one hue per body colour key, dimmed when the body is asleep.</summary>
+/// <summary>Scene colours: one hue per body colour key, plus the ground, grid and selection colours.</summary>
 public static class Palette
 {
     #region Methods
-    /// <summary>The colour for a body, dimmed if it has gone to sleep — which makes the engine's sleep behaviour
-    /// visible rather than something you have to read off the inspector.</summary>
-    public static Color For(int colorKey, bool awake)
-    {
-        var c = Bodies[((colorKey % Bodies.Length) + Bodies.Length) % Bodies.Length];
-        return awake ? c : new Color((byte)(c.R / 3), (byte)(c.G / 3), (byte)(c.B / 3));
-    }
+    /// <summary>The colour for a body, from its palette slot.</summary>
+    /// <remarks>
+    /// Sleeping bodies used to be drawn at a third brightness, to make the engine's sleep behaviour visible. It was
+    /// removed: a settled pile is the common case, so most of the scene sat dimmed most of the time, and the one
+    /// thing it made worse was the lighting — which is the whole point of the shaded renderer. Nothing is lost, since
+    /// the footer and the Scene panel both report the awake count in words.
+    /// </remarks>
+    public static Color For(int colorKey) =>
+        Bodies[((colorKey % Bodies.Length) + Bodies.Length) % Bodies.Length];
     #endregion
 
     #region Fields

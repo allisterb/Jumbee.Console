@@ -242,7 +242,7 @@ async Task<int> RunModelViewer(int startIndex)
 }
 
 // A tower of boxes with a slight lean, plus a few spheres dropped alongside -- enough motion to show the camera,
-// the depth sorting and the sleep dimming all working, and enough contact for the solver to have to do something.
+// the depth sorting and the shading all working, and enough contact for the solver to have to do something.
 static void Populate(PhysicsScene scene)
 {
     const int TowerHeight = 7;
