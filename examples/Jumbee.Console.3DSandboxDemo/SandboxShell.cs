@@ -31,7 +31,7 @@ public static class SandboxShell
         // The three reach the screen by genuinely different routes (a Canvas versus half-block cells with a private
         // z-buffer), which is why each brings its own surface and SceneView swaps the child rather than the drawing
         // code. The two solid ones share their rasteriser through MeshRenderer and differ only in shading.
-        var view = new SceneView(runner, new ShadedRenderer());
+        var view = new SceneView(runner, new ShadedRenderer() { WrapLighting = true });
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
 
