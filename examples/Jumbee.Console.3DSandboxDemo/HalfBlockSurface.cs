@@ -155,9 +155,11 @@ public sealed class HalfBlockSurface : Control
     /// <paramref name="threshold"/> is what keeps that below the line while its silhouette still fires hard.
     /// </para>
     /// </remarks>
-    public void DetectEdges(float threshold)
+    public void DetectEdges(float threshold, bool wanted)
     {
-        if (EdgeStyle == SilhouetteStyle.None || PixelWidth < 3 || PixelHeight < 3) return;
+        // Not gated on EdgeStyle any more: SmoothEdges consumes the same edge set, so the detector has to run
+        // when EITHER the outline or the smoothing wants it. The caller decides via `wanted`.
+        if (!wanted || PixelWidth < 3 || PixelHeight < 3) return;
         if (edge.Length != color.Length) edge = new bool[color.Length];
         Array.Clear(edge);
 
@@ -179,6 +181,69 @@ public sealed class HalfBlockSurface : Control
                 // Same boost the glyph path applies, for the same reason: an outline that merely follows its
                 // surface disappears exactly where it is most needed — on the unlit side of a body, where it would
                 // be dark on dark.
+                if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Softens the staircase along detected edges by pulling each edge sub-pixel, and its immediate neighbours,
+    /// toward the local average — the cheap post-process approximation of coverage antialiasing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Real antialiasing asks "what fraction of this sample area does the triangle cover", which needs more samples
+    /// than there are output sub-pixels. This asks a far cheaper question of a buffer that has already been written:
+    /// <em>where did <see cref="DetectEdges"/> say the geometry breaks</em>, and blends only there. Cost is
+    /// proportional to silhouette <b>perimeter</b> rather than screen <b>area</b>, which is what makes it affordable
+    /// where supersampling is not.
+    /// </para>
+    /// <para>
+    /// Two things it does <b>not</b> fix, both worth knowing before reaching for it. The detector finds
+    /// <em>geometric</em> discontinuities from the depth field, so a boundary that is only a change of colour is
+    /// invisible to it: the checkerboard ground and the shade-band contours on a curved surface stay exactly as
+    /// blocky as they were. And the pass runs on a buffer that is already quantised, so it re-introduces the
+    /// intermediate colours <see cref="MeshRenderer.ShadeLevels"/> exists to avoid — a few hundred of them, along
+    /// the silhouettes. That costs ANSI runs live, and file size in a capture.
+    /// </para>
+    /// <para>
+    /// Reads from a copy so the result does not depend on iteration order — blending in place would let a sub-pixel
+    /// already touched this pass feed the next one, smearing along the scan direction instead of symmetrically.
+    /// </para>
+    /// </remarks>
+    /// <param name="strength">0 skips the pass; 1 replaces each affected sub-pixel with the neighbourhood average.</param>
+    public void SmoothEdges(float strength)
+    {
+        if (strength <= 0f || edge.Length != color.Length || PixelWidth < 3 || PixelHeight < 3) return;
+        if (blend.Length != color.Length) blend = new CColor[color.Length];
+        Array.Copy(color, blend, color.Length);
+
+        for (var y = 1; y < PixelHeight - 1; y++)
+        {
+            var row = y * PixelWidth;
+            for (var x = 1; x < PixelWidth - 1; x++)
+            {
+                var i = row + x;
+                var up = i - PixelWidth;
+                var down = i + PixelWidth;
+                // The edge sub-pixel AND its neighbours. DetectEdges marks only the body side of a silhouette (it
+                // skips background and scenery), so blending the marked sub-pixel alone would soften the object's
+                // inner side and leave the background hard against it — a body that looks eroded rather than
+                // antialiased. Including neighbours is what makes the transition two-sided.
+                if (!edge[i] && !edge[i - 1] && !edge[i + 1] && !edge[up] && !edge[down]) continue;
+
+                var c = blend[i];
+                var l = blend[i - 1];
+                var r = blend[i + 1];
+                var u = blend[up];
+                var d = blend[down];
+                var avgR = (l.Red + r.Red + u.Red + d.Red) / 4;
+                var avgG = (l.Green + r.Green + u.Green + d.Green) / 4;
+                var avgB = (l.Blue + r.Blue + u.Blue + d.Blue) / 4;
+                color[i] = new CColor(
+                    (byte)(c.Red + ((avgR - c.Red) * strength)),
+                    (byte)(c.Green + ((avgG - c.Green) * strength)),
+                    (byte)(c.Blue + ((avgB - c.Blue) * strength)));
             }
         }
     }
@@ -326,5 +391,9 @@ public sealed class HalfBlockSurface : Control
     private float[] depth = [];
     private byte[] group = [];
     private bool[] edge = [];
+
+    // Source snapshot for SmoothEdges, so the blend reads pre-pass colours rather than partly-blended ones. Grown
+    // with the buffer and never shrunk, like the others.
+    private CColor[] blend = [];
     #endregion
 }

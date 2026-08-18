@@ -170,6 +170,19 @@ public sealed class SceneView : CompositeControl
         RendererChanged?.Invoke();
     }
 
+
+    /// <summary>How hard silhouettes are blended into their surroundings, or <see langword="null"/> under a renderer
+    /// that has no edge pass.</summary>
+    public float? EdgeSmoothing => renderer is ShadedRenderer s ? s.EdgeSmoothing : null;
+
+    /// <summary>Sets the edge-smoothing strength; 0 skips the pass. See <see cref="ShadedRenderer.EdgeSmoothing"/>.</summary>
+    public void SetEdgeSmoothing(float strength)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.EdgeSmoothing == strength) return;
+        shaded.EdgeSmoothing = strength;
+        RendererChanged?.Invoke();
+    }
+
     // The wireframe's mesh-sampling dials.
     //
     // These read and write the WIREFRAME wherever it is in the renderer list, not "the active renderer if it

@@ -939,6 +939,22 @@ Choosing between them:
 
   If the goal is a smoother sphere, the lever is [`MeshRenderer.ShadeLevels`](#part-3--three-renderers), not normals.
   colours between cells, which increases how much neighbours differ — directly the expensive direction.
+- **Anti-aliasing.** The half-block trick is already a form of vertical supersampling. Going further means blending
+  colours between cells, which increases how much neighbours differ — directly the expensive direction. A cheap
+  first step **is implemented**: `ShadedRenderer.EdgeSmoothing` blends detected edges into their surroundings, a
+  post-process over the sub-pixels `DetectEdges` already marked, so its cost tracks silhouette *perimeter* rather
+  than screen *area*. Off by default, and worth knowing its limits before turning it on — it blends **whole
+  sub-pixels**, where real coverage AA blends *within* one, so at a sphere twelve sub-pixels across a full-strength
+  blend reads as erosion rather than smoothing. Useful around 0.3; wrong at 1.0. It also cannot touch the
+  checkerboard or the shade-band contours, which are colour boundaries rather than geometric ones and so invisible
+  to a depth-based detector.
+
+  The better answer for this medium, unimplemented, exploits a constraint rather than fighting it: a cell carries
+  **exactly two colours**, and a silhouette is **exactly a two-colour boundary**. A quadrant glyph (`▘▝▖▗`…) can
+  therefore place that boundary at 2×2 resolution *within* the cell at no colour cost at all — increasing spatial
+  precision instead of smearing colour. Picking the right pattern needs per-quadrant coverage, so it means
+  supersampling, but only at cells the edge pass already flagged.
+
 - **Near-plane clipping.** Triangles with any corner behind the camera are dropped rather than split. Cheap, and at
   the distances an orbit camera holds it costs a sliver of geometry at the very edge of the view.
 

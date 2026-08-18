@@ -97,6 +97,48 @@ follow-ups on the switching work, all written up below:
   comments in `HalfBlockSurface`. The historical record in `3D Sandbox Plan.md` was *annotated* rather than edited,
   since it documents what was true when the work happened.
 
+- **Edge smoothing (cheap AA) implemented, and honestly it is a taste dial rather than a quality win.**
+  `HalfBlockSurface.SmoothEdges` blends each edge sub-pixel and its neighbours toward the local average, reusing the
+  sub-pixels `DetectEdges` already marks — so cost tracks silhouette **perimeter**, not screen **area**.
+  `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, with a **Smooth** slider in both sidebars.
+
+  **The measured result is worth recording, because it is not what the plan predicted.** I expected the cost to be
+  the colour count; it barely moved (93 → 99 distinct fg/bg pairs at full strength). The real limit is spatial: the
+  pass blends **whole sub-pixels**, where coverage AA blends *within* one. On a sphere twelve sub-pixels across, a
+  one-sub-pixel ring is ~8% of the diameter per side, so **strength 1.0 reads as erosion, not smoothing** — the body
+  visibly shrinks and desaturates. Around **0.3–0.4** it softens the staircase without that. Default 0 stands.
+
+  It also cannot touch the checkerboard or the shade-band contours: those are colour boundaries, and the detector is
+  a *depth* second-difference test, so they are invisible to it. Those are arguably the more blocky things on screen.
+
+  **This is direct evidence for the quadrant-glyph approach over supersampling.** A cell carries exactly two colours
+  and a silhouette is exactly a two-colour boundary, so a quadrant glyph places that boundary at 2×2 resolution
+  *within* the cell at zero colour cost — spatial precision instead of smeared colour, which is precisely what this
+  experiment shows is missing.
+
+  Two mechanical notes for whoever extends it: `DetectEdges` no longer self-gates on `EdgeStyle` (it takes a
+  `wanted` flag, since two consumers now want the edge set), and `SmoothEdges` reads from a copy so the result does
+  not depend on scan order — blending in place smears along the scan direction. Perf with the pass OFF is unchanged
+  within noise; the cost with it ON was **not** measured.
+
+- **I deleted a line of working code and it shipped in `fd3ca75`.** `DetectEdges` ended with
+  `if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);` — the entire visible effect of
+  the `Line` outline style. A comment above it was being replaced, the replacement consumed one line too many, and
+  because the result was a *complete statement removal* it compiled clean. `Line` marked its edges and drew nothing
+  for two commits.
+
+  **The same slip happened twice in one session**; the other ate `var ink = Brighten(fg, EdgeBoost);` and was caught
+  instantly by the compiler. The difference is the whole lesson: an edit that removes a self-contained statement has
+  no syntactic evidence, so nothing but a test can find it.
+
+  **And no test could have.** Every silhouette check read the *detector* — which sub-pixels got marked — and not one
+  read what the marking then does to the picture. Two new checks close that: render with `Edges=None` and `Edges=Line`
+  and require the cells to differ (31 do), and require `Glyph` to differ from `Line`. Verified non-vacuous by
+  re-deleting the line: both fail with `0 cells differ`.
+
+  **Generalisable rule for this codebase:** a check that asserts an internal mark is only half a check. `DetectEdges`
+  had 0-false-positive coverage on its *classification* and none at all on its *output*. Prefer asserting the pixels.
+
 ### The sandbox sidebar scrolls, and the trap in making it
 
 `SpacedRows` is demoted rather than deleted: the panel still picks the compact layout in a short terminal, because

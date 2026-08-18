@@ -35,6 +35,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
+        smooth.ValueChanged += (_, v) => Push(() => view.SetEdgeSmoothing((float)v));
 
         // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
         // ONE loaded model filling the frame, which is exactly the case the thinning has to get right.
@@ -76,7 +77,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Colour", color), spin), 5),
             // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
             // the shaded renderer's, so they belong together.
-            new Section("Shaded detail", Spaced(Labelled("Edges", edges), wrapLighting, occlusion, shade), 7),
+            new Section("Shaded detail", Spaced(Labelled("Edges", edges), wrapLighting, occlusion, shade, smooth), 9),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -145,6 +146,8 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             shade.Enabled = view.ShadeLevels is not null;
+            smooth.Value = view.EdgeSmoothing ?? 0f;
+            smooth.Enabled = view.EdgeSmoothing is not null;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
             // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
@@ -268,6 +271,9 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // rather than under the non-shaded renderers, since both solid ones have a ramp.
     private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "Shades") { LabelWidth = 9, ValueFormat = "F0" };
+
+    // Cheap antialiasing along silhouettes; see ShadedRenderer.EdgeSmoothing.
+    private readonly Slider smooth = Axis("Smooth", 0f, 1f, 0f);
 
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =

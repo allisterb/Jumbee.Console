@@ -39,6 +39,56 @@ if (args.Contains("--shell")) return Render3d.ShellChecks.Run(W, H, args);
 // UI LOOP; everything else renders through ConsoleSnapshot with no loop at all.
 if (args.Contains("--switch")) return Render3d.SwitchChecks.Run(W, H);
 
+// --- Edge smoothing: the same frame at several strengths, so the softening can be judged rather than asserted ----
+if (args.Contains("--aa"))
+{
+    var outDir = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
+    var aaRunner = new PhysicsRunner(s =>
+    {
+        s.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
+        s.GroundY = 0f;
+        s.AddSphere(new Vector3(0f, 0.6f, 0f), 0.6f, 3);
+        s.AddBox(new Vector3(1.6f, 0.5f, -0.4f), new Vector3(0.5f), 0);
+    });
+
+    var aaShaded = new ShadedRenderer { WrapLighting = true };
+    var aaView = new SceneView(aaRunner, aaShaded);
+    _ = new ControlFrame(aaView, borderStyle: BorderStyle.Rounded);
+    var aaRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(aaView), aaView);
+    _ = ConsoleSnapshot.ToText(aaRoot, W, H);
+    var settleTarget = aaRunner.Snapshot.StepCount + 240;
+    while (aaRunner.Snapshot.StepCount < settleTarget) Thread.Sleep(5);
+
+    var opt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+    foreach (var strength in new[] { 0f, 0.35f, 0.7f, 1f })
+    {
+        aaShaded.EdgeSmoothing = strength;
+        var snap = aaRunner.Snapshot;
+        aaShaded.Draw(snap, aaView.Camera);
+        _ = ConsoleSnapshot.ToText(aaRoot, W, H);
+        aaShaded.Draw(snap, aaView.Camera);
+        var aaBuffer = ConsoleSnapshot.Render(aaRoot, W, H);
+        ConsoleSnapshot.SavePng(aaRoot, W, H, Path.Combine(outDir, $"aa-{strength:F2}.png"), opt);
+
+        // Distinct fg/bg pairs is the honest proxy for what the smoothing costs the emitter and a capture: the
+        // blend re-introduces colours between the quantised plateaus.
+        var pairs = new HashSet<(uint, uint)>();
+        for (var y = 0; y < aaBuffer.Size.Height; y++)
+            for (var x = 0; x < aaBuffer.Size.Width; x++)
+            {
+                var ch = aaBuffer[x, y].Character;
+                if (ch.Foreground is { } f && ch.Background is { } b)
+                    pairs.Add(((uint)(f.Red << 16 | f.Green << 8 | f.Blue), (uint)(b.Red << 16 | b.Green << 8 | b.Blue)));
+            }
+
+        Console.WriteLine($"  smoothing {strength:F2}  ->  {pairs.Count,5} distinct fg/bg pairs   aa-{strength:F2}.png");
+    }
+
+    aaRunner.Dispose();
+    return 0;
+}
+
+
 void Check(string what, bool ok, string? detail = null)
 {
     Console.WriteLine($"  {(ok ? "PASS" : "FAIL")}  {what}{(detail is null ? "" : $"  [{detail}]")}");
@@ -801,10 +851,46 @@ if (args.Contains("--perf"))
 // that ground recedes. Both halves of that are asserted, because a detector that lights up the floor would be
 // worse than none.
 Console.WriteLine("\nsilhouettes:");
-solid.Edges = SilhouetteStyle.Glyph;
 solid.Draw(solidScene, view.Camera);
 
 var edgeSurface = (HalfBlockSurface)solid.Surface;
+
+// Every check above reads the DETECTOR -- which sub-pixels were marked. None of them read what the marking then
+// DOES to the picture, and that gap let a deleted line ship: `Line` marked its edges and drew nothing, silently,
+// for two commits. So compare the rendered cells with the outline off and on, and require that they differ.
+var edgesOff = 0;
+solid.Edges = SilhouetteStyle.None;
+solid.Draw(solidScene, view.Camera);
+var offCells = CellColours(edgeSurface);
+solid.Edges = SilhouetteStyle.Line;
+solid.Draw(solidScene, view.Camera);
+var lineCells = CellColours(edgeSurface);
+for (var c = 0; c < offCells.Length; c++) if (offCells[c] != lineCells[c]) edgesOff++;
+Check("the Line style actually brightens pixels, not just the edge mask", edgesOff > 0,
+    $"{edgesOff} cells differ between Edges=None and Edges=Line");
+
+// And Glyph must differ from Line too -- they are different presentations of the same edge set, so a build where
+// one silently fell back to the other would otherwise look fine.
+solid.Edges = SilhouetteStyle.Glyph;
+solid.Draw(solidScene, view.Camera);
+var glyphCells = CellColours(edgeSurface);
+var lineVsGlyph = 0;
+for (var c = 0; c < lineCells.Length; c++) if (lineCells[c] != glyphCells[c]) lineVsGlyph++;
+Check("and Glyph differs from Line", lineVsGlyph > 0, $"{lineVsGlyph} cells differ");
+
+static int[] CellColours(HalfBlockSurface s)
+{
+    var cells = new int[s.PixelWidth * (s.PixelHeight / 2)];
+    for (var y = 0; y < s.PixelHeight / 2; y++)
+        for (var x = 0; x < s.PixelWidth; x++)
+        {
+            var c = s.ColorAt(x, y * 2);
+            cells[(y * s.PixelWidth) + x] = (c.Red << 16) | (c.Green << 8) | c.Blue;
+        }
+
+    return cells;
+}
+solid.Edges = SilhouetteStyle.Glyph;
 var solidCam = view.Camera.GetView();
 
 // Classify every sub-pixel: is it showing the bare floor? (Compare its depth against the analytic ray/plane

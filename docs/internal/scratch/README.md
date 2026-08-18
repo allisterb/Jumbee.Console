@@ -15,6 +15,7 @@ with a `$(Repo)` property at the top pointing at the repo root.
 | *(none)* | 63 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
+| `--aa out=DIR [WxH]` | one settled frame at four `EdgeSmoothing` strengths, plus its distinct fg/bg pair count |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
