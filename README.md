@@ -1,7 +1,7 @@
 # Jumbee.Console
 [![NuGet Version](https://img.shields.io/nuget/v/Jumbee.Console?style=plastic)](https://www.nuget.org/packages/Jumbee.Console)
 
-<img width="1904" height="975" alt="Jc_3d_7" src="https://github.com/user-attachments/assets/ebf53ded-6342-4b21-9e35-d6aa3404f185" />
+<img width="1904" height="975" alt="jc_3d" src="https://github.com/user-attachments/assets/670be3ab-169e-4dbf-9f54-38f283b0a68c" />
 
 ## About
 Jumbee.Console is a .NET library for advanced TUIs that focuses on performance and usability. Inspired by libs like [ratatui](https://ratatui.rs/) and [Textual](https://textual.textualize.io/), it tries to provide a high-performance retained-mode library that is easy-to-use with idiomatic .NET GUI and Task patterns, while flexible enough to create different types of TUI applications from news readers to animated dashboards to IDEs to agent harnesses to graphics apps.
