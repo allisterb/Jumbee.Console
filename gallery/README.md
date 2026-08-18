@@ -1,3 +1,5 @@
+
+
 # Jumbee.Console Gallery
 
 ### Graphics Demo
@@ -6,6 +8,10 @@
 
 ### 3D Model Viewer Demo
 ![](https://i.imgur.com/2gtZvAJ.gif)
+[source](../examples/Jumbee.Console.3DSandboxDemo/)
+
+### 3D Physics Sandbox Demo
+<img width="1904" height="975" alt="Jc_3d_7" src="https://github.com/user-attachments/assets/ebf53ded-6342-4b21-9e35-d6aa3404f185" />
 [source](../examples/Jumbee.Console.3DSandboxDemo/)
 
 ### Document Editing Demo
