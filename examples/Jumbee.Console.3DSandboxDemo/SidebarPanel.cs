@@ -43,7 +43,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
         quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
-        smooth.ValueChanged += (_, v) => Push(() => view.SetEdgeSmoothing((float)v));
         stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
         scanCap.SelectionChanged += (_, _) =>
             Push(() => view.SetScanCap(WireframeRenderer.ScanCapChoices[scanCap.SelectedIndex].Value));
@@ -90,7 +89,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     /// that cannot hold it, and the frame scrolls instead of clipping. It used to decide whether the bottom section
     /// existed at all. Still worth keeping honest — the harness's <c>--shell 200xH</c> sweeps both tiers.
     /// </remarks>
-    public const int SpacedRows = 63;
+    public const int SpacedRows = 61;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -186,8 +185,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             quadrants.IsChecked = view.QuadrantSampling ?? false;
             shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
-            smooth.Value = view.EdgeSmoothing ?? 0f;
-            smooth.Enabled = view.EdgeSmoothing is not null;
             stratify.IsChecked = view.Stratify ?? false;
             scanCap.SelectedIndex = IndexOfScanCap();
             density.Value = DetailOf(view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
@@ -295,8 +292,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
             // a large model is examined and does nothing to a model below that cap.
             new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                wrapLighting, occlusion, shade, quadrants, smooth, stratify, density, Labelled("Scan", scanCap)),
-                10 + (9 * gap)),
+                wrapLighting, quadrants, occlusion, shade, stratify, density, Labelled("Scan", scanCap)),
+                9 + (8 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale, Row(resetWorld)),
@@ -349,11 +346,10 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     private static Button Action(string text) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Columns / 2 - 3 } };
 
-
     private static Slider Param(string label, float min, float max, float value, string format = "F2") =>
-        // 9 cells, the width of the longest label ("Occlusion"). Every slider reserves the same, so the tracks line
-        // up down the panel — LabelWidth is exact, not a minimum, so a longer label would be ellipsized instead.
-        new Slider(min, max, value, label) { LabelWidth = 9, ValueFormat = format };
+        // LabelWidth cells for every slider, so their tracks line up down the panel. It is EXACT, not a minimum:
+        // a longer label is ellipsized rather than pushing its own track right, so widening one label widens all.
+        new Slider(min, max, value, label) { LabelWidth = LabelWidth, ValueFormat = format };
 
     // Detail is the reciprocal of the renderer's sub-pixels-per-triangle -- see WireframeRenderer.DetailFromSubPixels
     // for why. It lives there rather than here so this panel and the viewer's agree on what a given number means.
@@ -384,18 +380,17 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
     // How many brightness bands a curved surface shows. The quality dial that actually moves the picture at this
     // resolution -- and the renderer's largest performance lever, so it is deliberately not buried in a menu.
-    private readonly Slider shade = Param("Shades", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
+    private readonly Slider shade = Param("Shade Levels", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "F0");
 
-    // The other half of the antialiasing story, and deliberately next to Smooth: this one buys HORIZONTAL
-    // resolution (a half-cell boundary rather than a whole-cell one) and pays in fill, where Smooth buys softness
-    // and pays in colours. Both solid renderers composite through the surface, so it greys out only under the
-    // wireframe -- same gating as Shades.
-    private readonly Switch quadrants = new Switch("Quadrant AA");
-
-    // Cheap antialiasing along silhouettes. Shaded-only, like Edges and Occlusion, and off by default -- see
-    // ShadedRenderer.EdgeSmoothing for why it is not simply free.
-    private readonly Slider smooth = Param("Smooth", 0f, 1f, 0f, "F2");
+    // The antialiasing toggle. Off by default -- it costs about half again as much per frame, and this is a demo
+    // that should look cheap until you ask it not to. Both solid renderers composite through the surface, so it
+    // greys out only under the wireframe -- same gating as Shades.
+    //
+    // There was a second AA control here, a Smooth slider blending detected edge sub-pixels. It was removed once
+    // this one existed: measured, it made the silhouette placement slightly WORSE while costing 43% more distinct
+    // fg/bg pairs, and having two controls where one of them does nothing you can see is worse than having one.
+    private readonly Switch quadrants = new Switch("AA");
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =
         new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };
@@ -426,9 +421,12 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
     private readonly CameraPad camera;
 
-    // Matches the sliders' LabelWidth plus their gap, so captions line up down the whole sidebar.
-    private const int LabelColumn = 9;
-
+    // The label column, shared by the sliders and by Labelled()'s captions so everything lines up down the whole
+    // sidebar. 12 because of "Shade Levels", the longest label here; it was 9 while that read "Shades". The
+    // caption column is one WIDER, because Slider.BuildLabel appends a gutter cell of its own before the track --
+    // which this panel did not account for, so its captions sat a cell left of every track.
+    private const int LabelWidth = 12;
+    private const int LabelColumn = LabelWidth + 1;
     private SceneSnapshot? drawn;
     private Section[] sections = [];
     private bool syncing;

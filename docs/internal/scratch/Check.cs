@@ -96,30 +96,26 @@ if (args.Contains("--aa"))
         return pairs.Count;
     }
 
-    Console.WriteLine("\nedge smoothing — colour blended along the detected silhouette:");
-    foreach (var strength in new[] { 0f, 0.35f, 0.7f, 1f })
-    {
-        aaShaded.EdgeSmoothing = strength;
-        var aaBuffer = AaFrame($"aa-{strength:F2}");
-        Console.WriteLine($"  smoothing {strength:F2}  ->  {Pairs(aaBuffer),5} distinct fg/bg pairs   " +
-                          $"jag {Jaggedness(aaBuffer, aaSky, W, H).Rms:F2} ({Jaggedness(aaBuffer, aaSky, W, H).Rows} rows)   aa-{strength:F2}.png");
-    }
 
-    // The second stage, and the comparison the whole experiment is for: the same frame with the boundary placed at
-    // half-cell resolution instead of blended across whole ones.
+    // The antialiasing comparison: the same frame with the boundary placed inside the cell, and without.
+    //
+    // This mode used to sweep an EdgeSmoothing slider as well, a post-process blending each detected edge sub-pixel
+    // toward its neighbours. Both were live at once for a while, since they are independent stages -- one rewrote
+    // the sub-pixel buffer, the other decides how a 2x2 block of it becomes a cell. The sweep is gone with the pass:
+    // measured together, adding the blend on top of quadrants cost 43% more distinct fg/bg pairs (277 -> 395) and
+    // made the placement error slightly WORSE (0.32 -> 0.35), so it earned nothing at any strength.
     Console.WriteLine("\nquadrant sampling — the boundary placed inside the cell:");
-    aaShaded.EdgeSmoothing = 0f;
     foreach (var on in new[] { false, true })
     {
         aaShaded.QuadrantSampling = on;
-        var aaBuffer = AaFrame(on ? "quad-on" : "quad-off");
+        var aaBuffer = AaFrame($"quad-{(on ? "on" : "off")}");
         var insideCell = 0;
         var boundaries = Silhouette(aaBuffer, aaSky, W, H);
         foreach (var b in boundaries) if (b > 0 && (b & 1) == 1) insideCell++;
-        Console.WriteLine($"  quadrants {(on ? "on " : "off")}  ->  {Pairs(aaBuffer),5} distinct fg/bg pairs   " +
+        Console.WriteLine($"  quadrants {(on ? "on " : "off")}  ->  " +
+                          $"{Pairs(aaBuffer),5} distinct fg/bg pairs   " +
                           $"jag {Jaggedness(aaBuffer, aaSky, W, H).Rms:F2} ({Jaggedness(aaBuffer, aaSky, W, H).Rows} rows)   " +
-                          $"{insideCell} of {boundaries.Count(b => b > 0)} silhouette rows on a half-cell   " +
-                          $"quad-{(on ? "on" : "off")}.png");
+                          $"{insideCell} of {boundaries.Count(b => b > 0)} silhouette rows on a half-cell");
     }
 
     aaRunner.Dispose();
@@ -1133,9 +1129,35 @@ Check("no silhouette lands inside a cell without it", plainHalves == 0, $"{plain
 Check("and a good share of them do with it", quadHalves > quadEdge.Count(b => b > 0) / 5,
     $"{quadHalves} of {quadEdge.Count(b => b > 0)} silhouette rows");
 
+solid.QuadrantSampling = false;
+
+// --- the selection tint -------------------------------------------------------------------------------------
+// The sandbox is the scene that HAS a selection (SceneView.SupportsSelection, which the model viewer does not), and
+// what a selection does is repaint the body in Palette.Selection. Asserted on the cells rather than on the flag,
+// because the flag was never the problem: the viewer bug was that a body could be tintedPixels white in a scene whose
+// only colour control was the Colour drop-down, and nothing there could clear it.
+//
+// This is also the guard on the OTHER direction of that fix: gating selection on having a physics runner must not
+// have taken selection away from the scene that wants it.
+Console.WriteLine("\nselection tint:");
+Check("the sandbox supports selection", view.SupportsSelection);
+
+view.Selected = null;
+solid.Draw(solidScene, view.Camera);
+var selectionOffCells = CellColours(edgeSurface);
+view.Selected = solidScene.Ids[0];
+solid.Draw(solidScene, view.Camera);
+var selectionOnCells = CellColours(edgeSurface);
+var tintedPixels = 0;
+for (var c = 0; c < selectionOffCells.Length; c++) if (selectionOffCells[c] != selectionOnCells[c]) tintedPixels++;
+Check("selecting a body repaints it", view.Selected == solidScene.Ids[0] && tintedPixels > 20,
+    $"{tintedPixels} sub-pixels changed");
+
+view.Selected = null;
+solid.Draw(solidScene, view.Camera);
+
 // Put back what this section borrowed. A check that leaves global state behind hides bugs from every check after
 // it -- this is the harness's own lesson, learnt when an early `v` left the wireframe active for the rest of a run.
-solid.QuadrantSampling = false;
 solid.Edges = SilhouetteStyle.Glyph;
 
 if (args.Contains("--solid"))

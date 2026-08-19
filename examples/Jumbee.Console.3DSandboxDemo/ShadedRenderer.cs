@@ -82,23 +82,6 @@ public sealed class ShadedRenderer : MeshRenderer
     /// </remarks>
     public bool WrapLighting { get; set; }
 
-    /// <summary>
-    /// How hard detected edges are blended into their surroundings, softening the silhouette staircase. 0 (the
-    /// default) skips the pass; 1 replaces each affected sub-pixel with its neighbourhood average.
-    /// </summary>
-    /// <remarks>
-    /// Cheap antialiasing, and honest about being an approximation — see <see cref="HalfBlockSurface.SmoothEdges"/>
-    /// for what it does and, more usefully, the two things it cannot: it never touches the checkerboard or the
-    /// shade-band contours, because those are colour boundaries and the detector only sees geometric ones. Off by
-    /// default because it re-introduces intermediate colours that <see cref="MeshRenderer.ShadeLevels"/> exists to
-    /// suppress, which costs ANSI runs live and file size in a capture.
-    /// </remarks>
-    public float EdgeSmoothing
-    {
-        get => edgeSmoothing;
-        set => edgeSmoothing = Math.Clamp(value, 0f, 1f);
-    }
-
     #endregion
 
     #region Protected methods
@@ -138,13 +121,10 @@ public sealed class ShadedRenderer : MeshRenderer
     /// <inheritdoc/>
     protected override void PostProcess()
     {
-        // Order matters: darken first, then outline, then smooth. Outlining after the occlusion pass keeps edge
-        // glyphs at full brightness instead of having it mute the very lines that define the shape; smoothing last
-        // because it is the only pass that wants FINAL colours -- blending before the outline would soften the
-        // surface and then draw a hard line back over it.
+        // Darken first, then outline. Outlining after the occlusion pass keeps edge glyphs at full brightness
+        // instead of having it mute the very lines that define the shape.
         HalfBlocks.ApplyOcclusion(OcclusionStrength);
-        HalfBlocks.DetectEdges(EdgeThreshold, Edges != SilhouetteStyle.None || EdgeSmoothing > 0f);
-        HalfBlocks.SmoothEdges(EdgeSmoothing);
+        HalfBlocks.DetectEdges(EdgeThreshold);
     }
 
     #endregion
@@ -158,7 +138,6 @@ public sealed class ShadedRenderer : MeshRenderer
     // falloff — at 14 the far checkerboard collapsed to near-black and took the recession cue with it, which is
     // the very thing that makes the flat renderer read as 3D. Wide enough that distance reads as a gentle dimming.
     private const float LightRadius = 40f;
-    private float edgeSmoothing;
 
     private const float SpecularPower = 24f;
     private const float SpecularStrength = 0.55f;

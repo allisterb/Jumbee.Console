@@ -12,10 +12,10 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 | | |
 |---|---|
-| *(none)* | 84 behaviour checks — the default |
+| *(none)* | 86 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
-| `--aa out=DIR [WxH]` | one settled frame at four `EdgeSmoothing` strengths and with quadrant sampling off/on: distinct fg/bg pairs, silhouette placement error, PNGs |
+| `--aa out=DIR [WxH]` | one settled frame with quadrant sampling off and on: distinct fg/bg pairs, silhouette placement error, PNGs |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
@@ -24,16 +24,16 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 `--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
-**`--shell` has a floor of 37 rows, and `--shell viewer` one of 52**, and both are the harness's rather than the
+**`--shell` has a floor of 36 rows, and `--shell viewer` one of 49**, and both are the harness's rather than the
 app's. Either sidebar scrolls, so at any height every control is *reachable*; but most checks read a panel by
 finding its text in the rendered rows, and below the floor the last section (the sandbox's World, the viewer's
 Shear) is off screen. Only the camera-pad check scrolls to what it is looking for. The app itself is fine down
 there — 30 rows renders and scrolls correctly.
 
-**Both floors rise by a row or two whenever a control is added to a sidebar**, which is the price of reading the
+**Both floors move by a row or two whenever a sidebar gains or loses a control**, which is the price of reading the
 panel off the screen rather than off its state, and is the same maintenance smell as `SidebarPanel.SpacedRows`.
-Quadrant AA moved them from 36 and 50. Sweep them (`--shell 200xH`) after touching a sidebar rather than
-spot-checking one height.
+Adding Quadrant AA took them to 37 and 52; removing the Smooth slider brought them back. Sweep them
+(`--shell 200xH`) after touching a sidebar rather than spot-checking one height.
 
 ## What it covers that a normal test would not
 

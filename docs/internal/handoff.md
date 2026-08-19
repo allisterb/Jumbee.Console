@@ -22,14 +22,14 @@ which turned out to mean far less rendering work than plumbing, packaging and bu
 | `7ef0016` | edge smoothing, and the `Line`-outline regression fix |
 
 **The second stage of smoothing — quadrant-glyph AA — is done and it works**, unlike the first. `QuadrantSampling`
-on `MeshRenderer`, a **Quadrant AA** switch in both sidebars and an item in both Render menus, off by default. See
+on `MeshRenderer`, an **AA** switch in both sidebars and an item in both Render menus, off by default. See
 *Quadrant sampling* below for the numbers, the one place the plan was wrong about the cost, and the two things the
-measurement itself got wrong before it got them right. It is **uncommitted**, along with the handoff rewrite and
-`Recording the demos.md`.
+measurement itself got wrong before it got them right. It is **uncommitted**, along with a fix for the white-model
+bug the user reported from play (see below), the handoff rewrite and `Recording the demos.md`.
 
 **Next up is unclaimed.** The obvious candidates are M4 polish (colour modes, trails, scene presets — see *What this
 session did* below) and open question 3, promoting the harness into a real test project, which is now overdue: it
-is up to 84 + 31 checks and has caught five shipped bugs.
+is up to 86 + 34 checks and has caught six shipped bugs.
 
 **New doc worth reading before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the
 measured WebP/GIF settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture
@@ -53,12 +53,12 @@ one (which bypasses `Palette.For`) stays bright — indistinguishable from a lig
 count is in the footer and the `step` readout visibly drops when the solver stops working.
 
 **`ShadeLevels` is a runtime dial** — on `MeshRenderer`, so both solid renderers have one; rounded and clamped to
-[2, 24]; defaults 7 (shaded) / 5 (solid). `SceneView.ShadeLevels`/`SetShadeLevels` plus a **Shades** slider in both
+[2, 24]; defaults 7 (shaded) / 5 (solid). `SceneView.ShadeLevels`/`SetShadeLevels` plus a slider in both
 sidebars. Note it greys out under the *wireframe*, the opposite gating from Edges/Occlusion. It is the quality knob
 *and* the largest performance lever, which used to argue for pinning it — the argument changed once the demo
 started being recorded, where nothing waits on the terminal.
 
-**Edge smoothing (cheap AA) — implemented, and it disappoints.** `HalfBlockSurface.SmoothEdges` blends each edge
+**Edge smoothing (cheap AA) — implemented, it disappointed, and it has since been removed entirely** (see *the smoothing pass was removed outright* below). `HalfBlockSurface.SmoothEdges` blends each edge
 sub-pixel and its neighbours toward the local average, reusing what `DetectEdges` already marks, so cost tracks
 silhouette *perimeter* not screen *area*. `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, **Smooth**
 slider in both sidebars.
@@ -77,16 +77,17 @@ precisely what this experiment shows is missing. Picking the pattern needs per-q
 but only at cells the edge pass already flagged. Check quadrant-block font coverage (U+2596–259F) with the existing
 multi-font snapshot test before committing.
 
-Two mechanical notes: `DetectEdges` no longer self-gates on `EdgeStyle` (it takes a `wanted` flag, since two
-consumers want the edge set), and `SmoothEdges` reads from a copy so the result does not depend on scan order.
-Frame cost with the pass **off** is unchanged within noise; the cost with it **on** was never measured.
+Two mechanical notes, *both since undone with the pass itself*: `DetectEdges` stopped self-gating on `EdgeStyle`
+(it took a `wanted` flag, since two consumers wanted the edge set) and `SmoothEdges` read from a copy so the result
+did not depend on scan order. Frame cost with the pass **off** was unchanged within noise; the cost with it **on**
+was never measured.
 
 ### Quadrant sampling — the second stage, and this one delivers
 
 `HalfBlockSurface.QuadrantSampling` samples **twice per column** and composites each 2×2 block into whichever of the
 sixteen quadrant glyphs best fits its four colours. Surfaced as `MeshRenderer.QuadrantSampling` (so **both** solid
-renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, a **Quadrant AA** switch
-in both sidebars beside `Smooth`, and an unshortcutted item in both Render menus.
+renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, an **AA** switch
+in both sidebars (under Half-Lambert, with the post-processing settings) and an unshortcutted item in both Render menus.
 
 **It came out simpler than the plan, and the simplification is the interesting part.** The plan said "picking the
 pattern needs per-quadrant coverage, so supersampling, but only at cells the edge pass already flagged" — a second,
@@ -137,7 +138,78 @@ sixteen patterns and requires its ink to land in the quadrants it names. All six
 snapshot font. Same failure shape as the Braille one — a missing glyph draws the *same box* for all sixteen, and no
 text assertion can see it.
 
-**And the sidebar constants moved for the fourth session running.** `SpacedRows` 61 → **63** (exact: it is the sum
+### And then the smoothing pass was removed outright
+
+Once quadrant AA existed, the user's read on the first stage was that it *"didn't do much"* — which is what the
+numbers had already said — so `ShadedRenderer.EdgeSmoothing`, `HalfBlockSurface.SmoothEdges`, its `blend` buffer,
+`SceneView.EdgeSmoothing`/`SetEdgeSmoothing` and the **Smooth** slider in both sidebars are all gone. The remaining
+toggle is relabelled **AA** (the menu item, **Antialiasing**); the property stays `QuadrantSampling`, which names
+the mechanism rather than the feature and is still accurate.
+
+**The measurement that decided it**, from `--aa` with both live at once — they are independent stages, so this was a
+real question rather than a choice between two implementations of one thing:
+
+| | distinct fg/bg pairs | placement error | rows inside a cell |
+|---|---:|---:|---:|
+| neither | 242 | 0.65 | 0 of 21 |
+| quadrants | **277** | **0.32** | **11 of 21** |
+| smooth 0.35 | 390 | 0.87 | 0 of 21 |
+| both | 395 | 0.35 | 10 of 21 |
+
+Adding the blend on top of quadrants costs **43% more distinct pairs and makes the placement slightly worse**. It
+was removed rather than left at a default of zero, because two controls where one does nothing you can see is worse
+than one — and a slider at 0.36 was exactly what the user had been running.
+
+Two knock-ons. `DetectEdges` **self-gates on `EdgeStyle` again** — the `wanted` flag existed only because two
+consumers could want the edge set, and the outline is now the only one. And the sidebar constants moved *back*:
+`SpacedRows` 63 → **61**, harness floors 37 → **36** and viewer 52 → **49** (49 measured, where the pre-quadrant
+figure of 50 had only ever been observed to pass).
+
+**Then two labelling changes, at the user's request.** `AA` moved directly under `Half-Lambert light` so the two
+switches sit together above the two sliders, and `Shades` became **`Shade Levels`**. The rename is not free: a
+`Slider`'s `LabelWidth` is *exact*, not a minimum, so a longer label is ellipsized rather than pushing its own track
+right — every slider in a panel has to share one width or the tracks stop lining up. Both panels now derive it from
+a single `LabelWidth = 12` constant, up from 9, which costs three cells of track.
+
+That also surfaced a **pre-existing one-cell misalignment**: `Slider.BuildLabel` appends a gutter cell of its own
+(`cells = target + 1`), so the caption column for the drop-downs has to be `LabelWidth + 1`. The viewer's panel had
+that right and the sandbox's did not, so every sandbox drop-down had been sitting one column left of every slider
+track. Both are `LabelWidth + 1` now — and it was only visible in a PNG, which is the third time that has been true.
+
+### The white-model bug — pre-existing, reported from play, and a good example of its class
+
+**Symptom, in the user's words:** *"sometimes when I grab the model to rotate it it turns white and setting the
+colour doesn't change anything. This white color persists to the other models too."*
+
+**Cause:** `SceneView.OnMousePress` picks a body and selects it, and a selected body is tinted `Palette.Selection`
+— which is pure white. The *model viewer* has no reason to select anything: one subject, no delete, no inspector,
+nothing in its key map that clears a selection (`Escape` does, but the viewer's footer never mentions it). So a
+press near the model turned it white for the rest of the session, and because selection is by **id** and the
+viewer's body keeps its id across a reload, it followed you into every model after it. The Colour drop-down went on
+working perfectly and changing nothing, because the selection tint replaces the tint rather than modulating it.
+
+**Why it read as intermittent:** `Pick` matches against a body's projected **centre** within 0.08 NDC. Grab the
+bunny's ear and you orbit; grab its body and you do not. Worse, a press on the model in the viewer did *neither* —
+it suppressed the orbit (a grab was starting) and then the grab posted to a `PhysicsRunner` the viewer does not
+have, so the drag was simply dead.
+
+**Fix:** `SceneView.SupportsSelection`, derived from `runner is not null` rather than passed in by the shell,
+because it is a fact about the scene and not a preference — selecting is only meaningful where something can be
+grabbed, thrown or deleted, and all three go through the runner. Two places honour it: `OnMousePress` skips the
+pick entirely (so a press **orbits**, which is the actual UX fix), and the `Selected` setter refuses a value. The
+setter guard is the one that matters for the future — the mouse, `Tab` and the select-the-newest-spawn tick all
+write that property, and guarding one of three is a bug waiting for the fourth route.
+
+**Two things worth carrying forward.** First: **a feature that is merely useless in one scene is not neutral there
+— it was overriding the one control that scene exists to demonstrate.** Second, on testing it: the obvious check is
+to count the model's coloured cells and require them to survive the drag, and that check **passes with the bug
+present** (295 → 428 saturated cells in the viewport, because the count is dominated by things that are not the
+model, including the sidebar's own colour swatch). It is now two checks that do separate the states — the camera
+orbits, and nothing gets selected — plus a sandbox check that selecting still *does* repaint a body, which is the
+guard on the other direction of the fix. **A pixel check is only better than a state check when the pixels it
+counts are the ones the bug changes.**
+
+**And the sidebar constants moved for the fourth session running.** `SpacedRows` 61 → **63** at this point (exact: it is the sum
 of the sections, 7+21+11+13+6+5). The harness's own floors moved too — `--shell` 36 → **37**, `--shell viewer`
 50 → **52** — because those checks read a panel by finding its text on screen, and one more row pushes the last
 section below the fold. Both are documented in the harness README now. This is the fourth time; open question 3.

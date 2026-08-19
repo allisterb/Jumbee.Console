@@ -36,7 +36,6 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
         quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
-        smooth.ValueChanged += (_, v) => Push(() => view.SetEdgeSmoothing((float)v));
 
         // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
         // ONE loaded model filling the frame, which is exactly the case the thinning has to get right.
@@ -79,7 +78,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
             // the shaded renderer's, so they belong together.
             new Section("Shaded detail",
-                Spaced(Labelled("Edges", edges), wrapLighting, occlusion, shade, quadrants, smooth), 11),
+                Spaced(Labelled("Edges", edges), wrapLighting, quadrants, occlusion, shade), 9),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -149,8 +148,6 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             quadrants.IsChecked = view.QuadrantSampling ?? false;
             shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
-            smooth.Value = view.EdgeSmoothing ?? 0f;
-            smooth.Enabled = view.EdgeSmoothing is not null;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
             // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
@@ -238,14 +235,17 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // 9 cells, the width of the longest caption ("Scale All"), so nothing is ellipsized and every track starts in
     // the same column.
     private static Slider Axis(string label, float min, float max, float value) =>
-        new Slider(min, max, value, label) { LabelWidth = 9 };
+        new Slider(min, max, value, label) { LabelWidth = LabelWidth };
     #endregion
 
     #region Fields
     private const int Half = SidebarPanel.Columns / 2 - 2;
 
-    // Matches the sliders' LabelWidth plus their gap, so captions line up down the whole sidebar.
-    private const int LabelColumn = 10;
+    // The label column, shared by the sliders and by Labelled()'s captions so everything lines up down the whole
+    // sidebar. 12 because of "Shade Levels", the longest label here; it was 9 while that read "Shades". The
+    // caption column is one WIDER, for the gutter cell Slider.BuildLabel appends before the track.
+    private const int LabelWidth = 12;
+    private const int LabelColumn = LabelWidth + 1;
     private const float DefaultSpin = 0.35f;
 
     private readonly SceneView view;
@@ -273,14 +273,11 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // The shade-ramp resolution: how many brightness bands a curved surface shows. Greys out under the WIREFRAME
     // rather than under the non-shaded renderers, since both solid ones have a ramp.
     private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
-        ShadedRenderer.DefaultShadeLevels, "Shades") { LabelWidth = 9, ValueFormat = "F0" };
+        ShadedRenderer.DefaultShadeLevels, "Shade Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
 
-    // Half-cell horizontal resolution on every boundary, silhouette or not; see HalfBlockSurface.QuadrantSampling.
-    // Beside Smooth on purpose: this is the comparison the viewer exists to make easy.
-    private readonly Switch quadrants = new Switch("Quadrant AA");
-
-    // Cheap antialiasing along silhouettes; see ShadedRenderer.EdgeSmoothing.
-    private readonly Slider smooth = Axis("Smooth", 0f, 1f, 0f);
+    // The antialiasing toggle: half-cell horizontal resolution on every boundary, silhouette or not. See
+    // HalfBlockSurface.QuadrantSampling. Greys out under the wireframe only, like Shades.
+    private readonly Switch quadrants = new Switch("AA");
 
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =

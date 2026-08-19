@@ -80,6 +80,61 @@ internal static class ShellChecks
                 viewerLines[0].IndexOf("Model", StringComparison.Ordinal) > s,
                 viewerLines[0].Trim());
 
+            // Dragging the MODEL ITSELF must orbit, and must not tint it.
+            //
+            // It used to do neither. A press within the pick radius of the model's projected CENTRE selected it,
+            // and a selected body is drawn in Palette.Selection (white) -- which overrode the Colour drop-down for
+            // the rest of the session, through every model after it, with nothing in the viewer's key map able to
+            // clear it. Pressing off-centre orbited normally, so it read as intermittent.
+            //
+            // Aimed at the model by finding it: the centroid of the saturated cells in the VIEWPORT (the sidebar's
+            // Colour swatch is saturated too, and would drag the aim into the panel). The press has to land within
+            // the pick radius of the model's projected centre or the bug does not reproduce — off-centre always
+            // orbited, which is why it looked intermittent.
+            //
+            // The count itself is deliberately NOT asserted. It cannot separate the two states here: with the tint
+            // bug reproduced (selected=1) the viewport still reports 428 saturated cells against 295 before, so a
+            // count-based check on it passes while the bug is present. The two checks below do separate them, and
+            // the tint's own behaviour is asserted where it is meant to happen, in the sandbox checks.
+            static (int Count, int X, int Y) Coloured(ILayout root, int width, int height)
+            {
+                var buffer = ConsoleSnapshot.Render(root, width, height);
+                int n = 0, sx = 0, sy = 0;
+                for (var y = 0; y < height; y++)
+                    for (var x = 0; x < width - SidebarPanel.Columns; x++)
+                    {
+                        if (buffer[x, y].Character.Foreground is not { } c) continue;
+                        if (Math.Max(c.Red, Math.Max(c.Green, c.Blue)) - Math.Min(c.Red, Math.Min(c.Green, c.Blue)) <= 60)
+                            continue;
+                        n++;
+                        sx += x;
+                        sy += y;
+                    }
+
+                return n == 0 ? (0, 0, 0) : (n, sx / n, sy / n);
+            }
+
+            void DrawViewer()
+            {
+                v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                _ = ConsoleSnapshot.ToText(v.Root, width, height);
+            }
+
+            DrawViewer();
+            var tinted = Coloured(v.Root, width, height);
+            Check("the model is drawn in its colour", tinted.Count > 200, $"{tinted.Count} saturated cells");
+
+            var theta = v.View.Camera.Theta;
+            var dragged = ConsoleSnapshot.Drag(ConsoleSnapshot.Render(v.Root, width, height),
+                tinted.X, tinted.Y, tinted.X + 10, tinted.Y, steps: 5);
+            DrawViewer();
+
+            Check("dragging the model orbits the camera", dragged && Math.Abs(v.View.Camera.Theta - theta) > 1e-3,
+                $"theta {theta:F3} -> {v.View.Camera.Theta:F3}");
+            Check("and never selects it — there is nothing here to select",
+                v.View.Selected is null && !v.View.SupportsSelection,
+                $"selected={v.View.Selected?.ToString() ?? "none"}");
+
             v.Model.SetScaleAxis(1, 2.4f);
             v.Model.SetShear(0.7f, 0f);
             v.Sidebar.Report();
@@ -196,7 +251,7 @@ internal static class ShellChecks
         Draw();
         Check("the shade-levels dial reaches the renderer",
             view.ShadeLevels == MeshRenderer.MaxShadeLevels, $"{shadeBefore} -> {view.ShadeLevels}");
-        Check("and the slider reads it back", SliderReads(root, width, height, "Shades", MeshRenderer.MaxShadeLevels));
+        Check("and the slider reads it back", SliderReads(root, width, height, "Shade Levels", MeshRenderer.MaxShadeLevels));
 
         // Out of range on purpose: the property rounds and clamps, so a UI cannot drive it somewhere the quantiser
         // would divide by.
@@ -222,10 +277,13 @@ internal static class ShellChecks
 
         view.SetQuadrantSampling(false);
         Draw();
-        var quadOffRow = SwitchRow(root, width, height, "Quadrant AA");
+        // Searched as ") AA" rather than "AA": the label is two characters now, and a bare Contains would happily
+        // match any row that happened to hold them. The ")" is the switch's own knob, so this can only match a
+        // switch called AA.
+        var quadOffRow = SwitchRow(root, width, height, ") AA");
         view.SetQuadrantSampling(true);
         Draw();
-        var quadOnRow = SwitchRow(root, width, height, "Quadrant AA");
+        var quadOnRow = SwitchRow(root, width, height, ") AA");
         Check("the quadrant switch is on the panel", quadOffRow.Length > 0, quadOffRow.Trim());
         Check("and follows the renderer", quadOnRow != quadOffRow && view.QuadrantSampling == true,
             $"{quadOffRow.Trim()} -> {quadOnRow.Trim()}");

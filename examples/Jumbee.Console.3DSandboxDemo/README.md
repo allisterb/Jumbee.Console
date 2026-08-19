@@ -93,30 +93,41 @@ A half-block cell carries two colours and two sub-pixels, so there are exactly t
 and finer **space**. Both dials are live under the solid renderer as well as the shaded one, and both grey out
 under the wireframe, which composites no cells.
 
-**Shades** is the colour axis — how many brightness levels the ramp quantises to (7 shaded, 5 solid by default).
+**Shade Levels** is the colour axis — how many brightness levels the ramp quantises to (7 shaded, 5 solid by default).
 Raising it smooths the banding on a curved surface and costs ANSI bytes, because neighbouring cells stop sharing a
 colour and the emitter's runs break up.
 
-**Quadrant AA** is the space axis. The surface samples twice per column and each 2×2 block is composited into
-whichever of the sixteen quadrant glyphs (`▘▝▖▗▌▐▞▚▛▜▙▟▀▄█`) best fits its four colours — so a silhouette can land
-*between* two columns instead of only on the boundary between them. `▀` is one of those sixteen and wins whenever
-the block's structure really is horizontal, so this only ever adds resolution; it never trades the vertical
-resolution away. The two colours it emits are members of the block, never a blend of them, so the palette is
-untouched — everything stays on the quantised ramp.
+**AA** is the space axis. The surface samples twice per column and each 2×2 block is composited into whichever of
+the sixteen quadrant glyphs (`▘▝▖▗▌▐▞▚▛▜▙▟▀▄█`) best fits its four colours — so a silhouette can land *between* two
+columns instead of only on the boundary between them. `▀` is one of those sixteen and wins whenever the block's
+structure really is horizontal, so this only ever adds resolution; it never trades the vertical resolution away.
+The two colours it emits are members of the block, never a blend of them, so the palette is untouched — everything
+stays on the quantised ramp.
 
 Measured on a sphere against the sky, the silhouette's placement error halves (0.65 → 0.32 half-cells RMS) and
 about half the silhouette rows move to a half-cell boundary, where before none could. It costs roughly half again
 as much per frame — at 200×50, shaded 2.9 → 4.4 ms and 18.1 → 25.7 KB of ANSI, solid 1.7 → 2.4 ms and
 12.0 → 17.4 KB — because there are twice as many sub-pixels to shade and a boundary inside a cell breaks a run
-that used to coalesce.
+that used to coalesce. Off by default for that reason.
 
-**Smooth** is the earlier, cheaper attempt at the same problem, and it is worth knowing why it is not the answer.
-It blends each detected edge sub-pixel toward its neighbours: no extra sampling, cost tracking silhouette perimeter
-rather than screen area. But it blends *whole* sub-pixels where real antialiasing blends within one, so on a body a
-dozen sub-pixels across, 1.0 reads as erosion and 0.3–0.4 merely softens the staircase without moving it — the
-measured placement error gets slightly *worse*, not better. And being driven by a depth-based detector it cannot
-see a boundary that is only a change of colour, so the checkerboard and the shade-band contours stay exactly as
-blocky as they were. Quadrant AA has no detector and improves those too.
+### The blend that came first, and why it is gone
+
+There was a second AA control here, a **Smooth** slider. It blended each detected edge sub-pixel toward its
+neighbours: no extra sampling, and a cost tracking silhouette *perimeter* rather than screen *area*, which made it
+much the cheaper idea. Two things were wrong with it, and both are worth knowing before reaching for the same trick
+elsewhere.
+
+It blends **whole** sub-pixels where real antialiasing blends *within* one. On a body a dozen sub-pixels across a
+one-sub-pixel ring is ~8% of the diameter per side, so full strength reads as erosion — the body visibly shrinks —
+and a low setting merely softens the staircase without moving it. Measured, it makes the placement error slightly
+*worse* (0.65 → 0.87 half-cells). And being driven by a depth-based detector, it cannot see a boundary that is only
+a change of **colour**: the checkerboard and the shade-band contours, arguably the blockiest things on screen,
+stayed exactly as they were.
+
+Run together the two are independent — one rewrites sub-pixels, the other decides how a 2×2 block becomes a cell —
+so the honest test was to measure all four combinations. Adding the blend on top of quadrant sampling cost 43% more
+distinct fg/bg pairs (277 → 395) and bought nothing measurable (placement 0.32 → 0.35). It was removed rather than
+left at a default of zero: two controls where one of them does nothing you can see is worse than one.
 
 ## Mesh detail, under the wireframe
 
@@ -143,7 +154,7 @@ the time goes on a dense mesh.
 
 | key | |
 |---|---|
-| drag / arrows | orbit the camera (Shift for fine steps) |
+| drag / arrows | orbit the camera (Shift for fine steps) — in the sandbox, a drag that starts *on a body* grabs it instead |
 | wheel, PgUp/PgDn | zoom |
 | Home | reset the camera |
 | `v` | cycle renderer: wireframe → solid → shaded |

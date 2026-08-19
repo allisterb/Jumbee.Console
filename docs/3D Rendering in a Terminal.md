@@ -939,16 +939,16 @@ Choosing between them:
 
   If the goal is a smoother sphere, the lever is [`MeshRenderer.ShadeLevels`](#part-3--three-renderers), not normals.
 - **Anti-aliasing.** The half-block trick is already a form of vertical supersampling. The obvious way further is to
-  blend colours between cells, which increases how much neighbours differ — directly the expensive direction — and
-  that is the cheap first step, implemented: `ShadedRenderer.EdgeSmoothing` blends detected edges into their surroundings, a
-  post-process over the sub-pixels `DetectEdges` already marked, so its cost tracks silhouette *perimeter* rather
-  than screen *area*. Off by default, and worth knowing its limits before turning it on — it blends **whole
-  sub-pixels**, where real coverage AA blends *within* one, so at a sphere twelve sub-pixels across a full-strength
-  blend reads as erosion rather than smoothing. Useful around 0.3; wrong at 1.0. It also cannot touch the
-  checkerboard or the shade-band contours, which are colour boundaries rather than geometric ones and so invisible
-  to a depth-based detector.
+  blend colours between cells, which increases how much neighbours differ — directly the expensive direction. That
+  was the first attempt and it was **built, measured and removed**: a post-process blending each edge sub-pixel that
+  `DetectEdges` had marked into its neighbours, so its cost tracked silhouette *perimeter* rather than screen *area*.
+  Two things killed it. It blends **whole sub-pixels** where real coverage AA blends *within* one, so on a sphere
+  twelve sub-pixels across it softens the staircase without moving it — the measured placement error came out
+  slightly *worse* — and at full strength it reads as erosion, the body visibly shrinking. And being driven by a
+  depth-based detector it could not touch the checkerboard or the shade-band contours, which are colour boundaries
+  rather than geometric ones.
 
-  The better answer for this medium exploits a constraint rather than fighting it, and **is now implemented** as
+  The better answer for this medium exploits a constraint rather than fighting it, and is what the demo now ships as
   `MeshRenderer.QuadrantSampling`. A cell carries **exactly two colours**, and the sixteen quadrant glyphs
   (`▘▝▖▗▌▐▞▚`…) are exactly the sixteen ways to divide a 2×2 block between them. So sample twice per column, and the
   compositor's whole job becomes picking the division: the two-means partition of the four sub-pixels, with each
@@ -956,7 +956,7 @@ Choosing between them:
   colour cost at zero — every colour emitted is one the renderer already produced, so the picture stays on the
   quantised ramp.
 
-  It needs no edge detector, which is the second thing it gains over blending: a colour-only boundary — the
+  It needs no edge detector, which is the second thing it gains over the blend: a colour-only boundary — the
   checkerboard, a shade-band contour — gets the same half-cell precision a silhouette does. Measured on a sphere
   against the sky, the silhouette's placement error halves (0.65 → 0.32 half-cells RMS) and about half the
   silhouette rows move to a boundary inside a cell, where before none could.
