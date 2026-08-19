@@ -1,0 +1,4 @@
+# Original id Software game assets are NOT redistributable and must never be committed.
+*
+!.gitignore
+!README.md

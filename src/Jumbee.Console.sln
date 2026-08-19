@@ -145,6 +145,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3DSandboxDemo", "3DSandboxD
 		..\docs\3D Rendering in a Terminal.md = ..\docs\3D Rendering in a Terminal.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.Wolf3DDemo", "..\examples\Jumbee.Console.Wolf3DDemo\Jumbee.Console.Wolf3DDemo.csproj", "{26D7F366-1FA7-4D07-911D-761D261A4427}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -503,6 +505,18 @@ Global
 		{72164E99-D706-4580-B0AA-A6DEF58597C2}.Release|x64.Build.0 = Release|Any CPU
 		{72164E99-D706-4580-B0AA-A6DEF58597C2}.Release|x86.ActiveCfg = Release|Any CPU
 		{72164E99-D706-4580-B0AA-A6DEF58597C2}.Release|x86.Build.0 = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|x64.Build.0 = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Debug|x86.Build.0 = Debug|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x64.ActiveCfg = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x64.Build.0 = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x86.ActiveCfg = Release|Any CPU
+		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -547,6 +561,7 @@ Global
 		{FE52B70A-CB1D-4B47-A0E6-98C1470363DB} = {6ED98344-E90A-44C5-8EB8-CBA5F48FF975}
 		{72164E99-D706-4580-B0AA-A6DEF58597C2} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
 		{D8EB9B91-97F5-43B1-A8B4-65BE57718FDA} = {A3DE0DB1-7DC9-444B-8EFC-AEB65C273F7F}
+		{26D7F366-1FA7-4D07-911D-761D261A4427} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}

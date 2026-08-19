@@ -1,0 +1,76 @@
+# Wolfenstein 3D walkthrough
+
+Walk through the original 1992 game's levels in a terminal. Real maps, real wall textures, real scenery sprites,
+cast by a real raycaster — no enemies, no doors opening, no weapons, no sound.
+
+```bash
+dotnet run --project examples/Jumbee.Console.Wolf3DDemo -c Release
+```
+
+You need the game's own data files first — see [`GameData/README.md`](GameData/README.md). They are not
+redistributable and are not in this repository.
+
+| key | |
+|---|---|
+| `w` `s` | walk forward and back |
+| `a` `d` | turn |
+| `q` `e` | strafe |
+| `shift` | run |
+| `[` `]` | previous / next level |
+| `r` | back to the start marker |
+| `1` `2` `3` | colour quantisation, quadrant sampling, field of view |
+| `esc` | quit |
+
+## How it is put together
+
+The engine under [`engine/`](engine/README.md) is [Wolfenshine](https://github.com/deanthecoder/Wolfenshine) by
+Dean Edis, vendored unmodified. Its raycaster and software renderer write into an RGBA framebuffer and have no idea
+what a terminal is — no Avalonia, no SkiaSharp, no threads. Everything in this directory is the ~350 lines that put
+that framebuffer on screen.
+
+`HalfBlockSurface` carries **two independently coloured sub-pixels per character cell**, drawn as `▀` with the top
+half in the foreground colour and the bottom in the background. At 200×50 cells that is 200×100 square pixels —
+the exact 2:1 aspect of the original's 320×160 3D view, so the picture is a uniform 0.625× downscale of the real
+thing rather than a reinterpretation of it. (The file is a copy of the 3D sandbox demo's; a second consumer is the
+argument for promoting it into the library.)
+
+`Wolf3DRenderer` casts one ray per sub-pixel *column*, hands the columns to Wolfenshine's own
+`SoftwareRaycastRenderer`, and blits the result. The RGBA intermediate is deliberate: it keeps the vendored
+renderer byte-for-byte the original, so what you see is the reference engine's output.
+
+## What it cost, and what that taught us
+
+Median of 90 frames of the assembled app — border, footer and all — through the real `ConsoleManager` at 200×52:
+
+| motion | quantise | ANSI B/frame | runs | frame total |
+|---|---|---|---|---|
+| standing still | — | **8 B** | — | 1.9 ms |
+| walking | none | 86,797 B | 3,372 | 4.7 ms |
+| walking | 6/channel | **46,000 B** | 1,828 | 2.8 ms |
+| turning | none | 82,735 B | 3,331 | 2.7 ms |
+| turning | 6/channel | **47,300 B** | 1,943 | 2.3 ms |
+
+At 30 fps a moving frame is about **1.4 MB/s** quantised, 2.6 MB/s not. Compute is never the constraint: the
+raycast is ~0.5 ms and the emit is most of the rest.
+
+**The cost is run count, not palette size.** The obvious guess is that a 256-colour game overwhelms the emitter
+with colours. It does not — authentic Wolfenstein does no distance shading at all, so a whole frame is only
+13–26 distinct colours. What costs is how finely those few colours are *interleaved*: every texel boundary breaks
+a colour run and forces another SGR. Across every configuration measured, bytes land at a near-constant 25–34 per
+run, which is why `LastRuns` rather than `LastColors` is what the footer reports.
+
+That is also why snapping colours to 6 levels a channel halves the bill — it merges neighbouring texels back into
+runs — while being very hard to see. Press `1` to compare.
+
+**Quadrant sampling is nearly free here**, unlike in the 3D sandbox where it costs 42% more bytes. It adds about
+10% (46.0 → 50.5 KB) because a picture already fragmented by texture detail gains few new run breaks from extra
+horizontal resolution. It does cost roughly double the scene time. Press `2`.
+
+**The authentic 66° field of view is also the cheaper one** — the derived ~90° view that fills a wide terminal
+costs about 15–20% more bytes for geometry the level was never composed for. Press `3`.
+
+## What is deliberately not here
+
+The enhanced renderer (`F2` in Wolfenshine) is an SKSL GPU shader and cannot follow us into a terminal. Actors,
+weapons, pickups and level progression all exist in the vendored `GameSession` and are simply not driven — a
+static walkthrough was the goal. Doors render as wall faces because nothing opens them.
