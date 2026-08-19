@@ -127,7 +127,7 @@ under the wireframe, which composites no cells.
 Raising it smooths the banding on a curved surface and costs ANSI bytes, because neighbouring cells stop sharing a
 colour and the emitter's runs break up.
 
-**AA** is the space axis. The surface samples twice per column and each 2×2 block is composited into whichever of
+**Anti-Aliasing** is the space axis. The surface samples twice per column and each 2×2 block is composited into whichever of
 the sixteen quadrant glyphs (`▘▝▖▗▌▐▞▚▛▜▙▟▀▄█`) best fits its four colours — so a silhouette can land *between* two
 columns instead of only on the boundary between them. `▀` is one of those sixteen and wins whenever the block's
 structure really is horizontal, so this only ever adds resolution; it never trades the vertical resolution away.

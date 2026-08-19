@@ -277,7 +277,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
 
     // The antialiasing toggle: half-cell horizontal resolution on every boundary, silhouette or not. See
     // HalfBlockSurface.QuadrantSampling. Greys out under the wireframe only, like Shades.
-    private readonly Switch quadrants = new Switch("AA");
+    private readonly Switch quadrants = new Switch("Anti-Aliasing");
 
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =

@@ -390,7 +390,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     // There was a second AA control here, a Smooth slider blending detected edge sub-pixels. It was removed once
     // this one existed: measured, it made the silhouette placement slightly WORSE while costing 43% more distinct
     // fg/bg pairs, and having two controls where one of them does nothing you can see is worse than having one.
-    private readonly Switch quadrants = new Switch("AA");
+    private readonly Switch quadrants = new Switch("Anti-Aliasing");
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =
         new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };

@@ -161,7 +161,7 @@ public static class SceneMenu
     // Greyed out under the wireframe rather than under the non-shaded renderers: both solid renderers composite
     // through the half-block surface, so both have it — the same gating the Shades dial uses.
     private static MenuItem QuadrantItem(SceneView view) =>
-        new MenuItem("Antialiasing", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
+        new MenuItem("Anti-Aliasing", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
         {
             Checked = view.QuadrantSampling ?? false,
             Enabled = view.QuadrantSampling is not null,

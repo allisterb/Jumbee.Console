@@ -1,92 +1,71 @@
-# Handoff — the 3D demo made public-ready (2026-08-17)
+# Handoff — the 3D demo (living note, last updated 2026-08-19)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
+It is written newest-first: the sections under **2026-08-19** and **2026-08-17** are each a session's findings, and
+everything from *Where things stand* down is standing context.
 
 ## Next session starts here
 
-**Working tree is clean. Everything below is committed**, ending at `7ef0016` "Fix bug in smoothing".
+### State of the tree
 
-The session's theme was **getting the 3D sandbox ready to show in public** — a Reddit post and a recorded clip —
-which turned out to mean far less rendering work than plumbing, packaging and bug-fixing. Nine commits:
+**`9889ec7` "Begin quadrant AA implementation" is HEAD**, and despite the name it holds the *whole* quadrant-AA
+arc plus the white-model fix — the two were committed together. On top of it there is **uncommitted work in ~10
+files**: the Smooth removal, the AA relabelling, STL support, and the doc/harness updates for all three. Nothing is
+half-finished; it is uncommitted only because this repo never auto-commits.
 
-| commit | what |
+**The demo exe cannot relink while the app is running.** Every build during these sessions failed with `MSB3021 —
+file is locked by Jumbee.Console.3DSandboxDemo`. Close it before building, or use `-t:Compile` to type-check
+without linking. This is why "I don't see my change" happened twice.
+
+### What changed in the 2026-08-19 session
+
+| | |
 |---|---|
-| `de29352`, `b37379f` | mesh thinning, control settings, renderable `Select` |
-| `2464d4f` | two grab-gesture bugs + three sidebar buttons |
-| `6212d36` | switching scenes without leaving the process *(the only library change: `UI.RestoreBuiltInHotKeys`)* |
-| `f570062` | viewer `Scene` menu, `models/` folder resolution, scrolling sandbox sidebar |
-| *(launchers/images)* | `3dsandbox` in `examples.sh` / `examples.cmd` / both Docker images |
-| `9372746` | half-Lambert on by default in the sandbox |
-| `fd3ca75` | sleep dimming removed, `ShadeLevels` slider |
-| `7ef0016` | edge smoothing, and the `Line`-outline regression fix |
+| **Quadrant AA** | `MeshRenderer.QuadrantSampling` — samples twice per column, composites each 2×2 block into the best-fitting quadrant glyph. Silhouette placement error halves. Off by default. |
+| **Smooth removed** | The earlier blend pass (`EdgeSmoothing`/`SmoothEdges`) was built, measured and **deleted** — it cost 43% more colour pairs for a slightly *worse* placement. |
+| **White-model bug** | `SceneView.SupportsSelection`: the model viewer could select its model, tinting it white and overriding the Colour drop-down for the session. |
+| **STL support** | `StlLoader` (binary + ASCII) and `ModelLoader`, the one place that knows which formats exist. |
 
-**The second stage of smoothing — quadrant-glyph AA — is done and it works**, unlike the first. `QuadrantSampling`
-on `MeshRenderer`, an **AA** switch in both sidebars and an item in both Render menus, off by default. See
-*Quadrant sampling* below for the numbers, the one place the plan was wrong about the cost, and the two things the
-measurement itself got wrong before it got them right. It is **uncommitted**, along with a fix for the white-model
-bug the user reported from play (see below), the handoff rewrite and `Recording the demos.md`.
+Each has a section below with the measurements and what they cost to learn.
 
-**Next up is unclaimed.** The obvious candidates are M4 polish (colour modes, trails, scene presets — see *What this
-session did* below) and open question 3, promoting the harness into a real test project, which is now overdue: it
-is up to 97 + 34 checks and has caught six shipped bugs.
+### The three things most likely to bite
 
-**New doc worth reading before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the
-measured WebP/GIF settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture
-decisions that outweigh every encoder setting.
+1. **The sidebar constants are hand-maintained and move whenever a control is added or removed.**
+   `SidebarPanel.SpacedRows` is **61**; the harness floors are **36** (`--shell`) and **49** (`--shell viewer`).
+   Sweep `--shell 200xH`, do not spot-check one height. This has bitten in four consecutive sessions.
+2. **`Slider.LabelWidth` is exact, not a minimum.** Every slider in a panel shares one width or their tracks stop
+   lining up — both panels derive it from a `LabelWidth = 12` constant, and the caption column for drop-downs is
+   `LabelWidth + 1` because `Slider.BuildLabel` appends its own gutter cell.
+3. **Judge renders from a PNG.** Three separate defects this week were invisible in text and obvious in an image —
+   a one-cell drop-down misalignment, the quadrant AA improvement itself, and whether an STL's facets survive the
+   back-face cull. `--shell --png out=DIR` and `--shell viewer --png out=DIR`.
 
-### The 3D demo is now publicly reachable
+### Next up — unclaimed
 
-- `./examples.sh 3dsandbox` (aliases `3d`, `sandbox`), `examples.cmd 3dsandbox`, `examples-aot.sh 3dsandbox`
-- `docker run --rm -it jumbee-console 3dsandbox` and the same on `jumbee-console-aot`
-- `3dsandbox obj` opens the model viewer; **Scene ▸ Switch** moves between the two without leaving the process
-- Both images built and verified end to end; the slim AOT one publishes a 5.5 MB native binary and **Box3D's native
-  P/Invoke steps correctly under NativeAOT**, which nobody had ever tried
+- **M4 polish**: colour modes (velocity / mass / sleep), motion trails, scene presets.
+- **Open question 3, promoting the harness into a real test project.** Now **97 + 34 checks**, six shipped bugs
+  caught, and still sourcing only from [`scratch/`](scratch/README.md). This is the one that will rot.
+- **MTL / textures** — scoped and deliberately *not* started; see the end of the STL section for why the sample
+  file makes Kd-only support pointless and what to measure before writing a parser.
+- The user has a 25 MB Eiffel-tower STL to try. Worth watching: parse time (the dragon's 250k triangles take
+  ~600 ms and models are parsed *before* the UI appears) and whether the wireframe's sub-pixel-triangle ceiling
+  (open questions 6 and 7) bites the way it does on the dragon.
 
-### Rendering changes, and what each one actually taught
+**Before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the measured WebP/GIF
+settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture decisions that outweigh
+every encoder setting.
 
-**Sleep dimming removed.** `Palette.For` drew a sleeping body at a third brightness to make the engine's sleep
-behaviour visible. It went: a settled pile is the *common* case, so most of the scene sat dimmed most of the time,
-and the one thing it degraded was the lighting — the whole point of the shaded renderer. It also read as a lighting
-*bug* rather than as information, because bodies fall asleep on the same tick and dim together while the selected
-one (which bypasses `Palette.For`) stays bright — indistinguishable from a light moving. Nothing is lost: the awake
-count is in the footer and the `step` readout visibly drops when the solver stops working.
+## 2026-08-19 — antialiasing, a bug from play, and STL
 
-**`ShadeLevels` is a runtime dial** — on `MeshRenderer`, so both solid renderers have one; rounded and clamped to
-[2, 24]; defaults 7 (shaded) / 5 (solid). `SceneView.ShadeLevels`/`SetShadeLevels` plus a slider in both
-sidebars. Note it greys out under the *wireframe*, the opposite gating from Edges/Occlusion. It is the quality knob
-*and* the largest performance lever, which used to argue for pinning it — the argument changed once the demo
-started being recorded, where nothing waits on the terminal.
-
-**Edge smoothing (cheap AA) — implemented, it disappointed, and it has since been removed entirely** (see *the smoothing pass was removed outright* below). `HalfBlockSurface.SmoothEdges` blends each edge
-sub-pixel and its neighbours toward the local average, reusing what `DetectEdges` already marks, so cost tracks
-silhouette *perimeter* not screen *area*. `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, **Smooth**
-slider in both sidebars.
-
-The measured result was not what the plan predicted. I expected the cost to be the colour count; it barely moved
-(**93 → 99** distinct fg/bg pairs at full strength). The real limit is spatial: it blends **whole sub-pixels** where
-coverage AA blends *within* one. On a sphere twelve sub-pixels across, a one-sub-pixel ring is ~8% of the diameter
-per side, so **1.0 reads as erosion** — the body visibly shrinks and desaturates — and 0.3–0.4 merely softens the
-staircase. It also cannot touch the checkerboard or the shade-band contours, which are *colour* boundaries and so
-invisible to a depth-based detector; those are arguably the blockier things on screen.
-
-**This is the evidence for doing quadrant glyphs next rather than supersampling.** A cell carries exactly two
-colours and a silhouette is exactly a two-colour boundary, so a quadrant glyph (`▘▝▖▗`…) can place that boundary at
-2×2 resolution *within* the cell at **zero colour cost** — spatial precision instead of smeared colour, which is
-precisely what this experiment shows is missing. Picking the pattern needs per-quadrant coverage, so supersampling,
-but only at cells the edge pass already flagged. Check quadrant-block font coverage (U+2596–259F) with the existing
-multi-font snapshot test before committing.
-
-Two mechanical notes, *both since undone with the pass itself*: `DetectEdges` stopped self-gating on `EdgeStyle`
-(it took a `wanted` flag, since two consumers wanted the edge set) and `SmoothEdges` read from a copy so the result
-did not depend on scan order. Frame cost with the pass **off** was unchanged within noise; the cost with it **on**
-was never measured.
+Four arcs, in the order they happened. Each records what was measured as well as what was built, because in three
+of the four the measurement is what changed the decision.
 
 ### Quadrant sampling — the second stage, and this one delivers
 
 `HalfBlockSurface.QuadrantSampling` samples **twice per column** and composites each 2×2 block into whichever of the
 sixteen quadrant glyphs best fits its four colours. Surfaced as `MeshRenderer.QuadrantSampling` (so **both** solid
-renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, an **AA** switch
+renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, an **Anti-Aliasing** switch
 in both sidebars (under Half-Lambert, with the post-processing settings) and an unshortcutted item in both Render menus.
 
 **It came out simpler than the plan, and the simplification is the interesting part.** The plan said "picking the
@@ -143,7 +122,8 @@ text assertion can see it.
 Once quadrant AA existed, the user's read on the first stage was that it *"didn't do much"* — which is what the
 numbers had already said — so `ShadedRenderer.EdgeSmoothing`, `HalfBlockSurface.SmoothEdges`, its `blend` buffer,
 `SceneView.EdgeSmoothing`/`SetEdgeSmoothing` and the **Smooth** slider in both sidebars are all gone. The remaining
-toggle is relabelled **AA** (the menu item, **Antialiasing**); the property stays `QuadrantSampling`, which names
+toggle is relabelled — **AA** at first, then **Anti-Aliasing**, in the sidebars and the menu alike; the property
+stays `QuadrantSampling`, which names
 the mechanism rather than the feature and is still accurate.
 
 **The measurement that decided it**, from `--aa` with both live at once — they are independent stages, so this was a
@@ -165,7 +145,7 @@ consumers could want the edge set, and the outline is now the only one. And the 
 `SpacedRows` 63 → **61**, harness floors 37 → **36** and viewer 52 → **49** (49 measured, where the pre-quadrant
 figure of 50 had only ever been observed to pass).
 
-**Then two labelling changes, at the user's request.** `AA` moved directly under `Half-Lambert light` so the two
+**Then two labelling changes, at the user's request.** The AA switch moved directly under `Half-Lambert light` so the two
 switches sit together above the two sliders, and `Shades` became **`Shade Levels`**. The rename is not free: a
 `Slider`'s `LabelWidth` is *exact*, not a minimum, so a longer label is ellipsized rather than pushing its own track
 right — every slider in a panel has to share one width or the tracks stop lining up. Both panels now derive it from
@@ -265,6 +245,69 @@ counts are the ones the bug changes.**
 of the sections, 7+21+11+13+6+5). The harness's own floors moved too — `--shell` 36 → **37**, `--shell viewer`
 50 → **52** — because those checks read a panel by finding its text on screen, and one more row pushes the last
 section below the fold. Both are documented in the harness README now. This is the fourth time; open question 3.
+
+## 2026-08-17 — making the demo public-ready
+
+Nine commits, ending at `7ef0016`. The theme was far less rendering work than plumbing, packaging and bug-fixing:
+
+| commit | what |
+|---|---|
+| `de29352`, `b37379f` | mesh thinning, control settings, renderable `Select` |
+| `2464d4f` | two grab-gesture bugs + three sidebar buttons |
+| `6212d36` | switching scenes without leaving the process *(the only library change: `UI.RestoreBuiltInHotKeys`)* |
+| `f570062` | viewer `Scene` menu, `models/` folder resolution, scrolling sandbox sidebar |
+| *(launchers/images)* | `3dsandbox` in `examples.sh` / `examples.cmd` / both Docker images |
+| `9372746` | half-Lambert on by default in the sandbox |
+| `fd3ca75` | sleep dimming removed, `ShadeLevels` slider |
+| `7ef0016` | edge smoothing, and the `Line`-outline regression fix |
+
+### The 3D demo is now publicly reachable
+
+- `./examples.sh 3dsandbox` (aliases `3d`, `sandbox`), `examples.cmd 3dsandbox`, `examples-aot.sh 3dsandbox`
+- `docker run --rm -it jumbee-console 3dsandbox` and the same on `jumbee-console-aot`
+- `3dsandbox obj` opens the model viewer; **Scene ▸ Switch** moves between the two without leaving the process
+- Both images built and verified end to end; the slim AOT one publishes a 5.5 MB native binary and **Box3D's native
+  P/Invoke steps correctly under NativeAOT**, which nobody had ever tried
+
+### Rendering changes, and what each one actually taught
+
+**Sleep dimming removed.** `Palette.For` drew a sleeping body at a third brightness to make the engine's sleep
+behaviour visible. It went: a settled pile is the *common* case, so most of the scene sat dimmed most of the time,
+and the one thing it degraded was the lighting — the whole point of the shaded renderer. It also read as a lighting
+*bug* rather than as information, because bodies fall asleep on the same tick and dim together while the selected
+one (which bypasses `Palette.For`) stays bright — indistinguishable from a light moving. Nothing is lost: the awake
+count is in the footer and the `step` readout visibly drops when the solver stops working.
+
+**`ShadeLevels` is a runtime dial** — on `MeshRenderer`, so both solid renderers have one; rounded and clamped to
+[2, 24]; defaults 7 (shaded) / 5 (solid). `SceneView.ShadeLevels`/`SetShadeLevels` plus a slider in both
+sidebars. Note it greys out under the *wireframe*, the opposite gating from Edges/Occlusion. It is the quality knob
+*and* the largest performance lever, which used to argue for pinning it — the argument changed once the demo
+started being recorded, where nothing waits on the terminal.
+
+**Edge smoothing (cheap AA) — implemented, it disappointed, and it has since been removed entirely** (see *the smoothing pass was removed outright* below). `HalfBlockSurface.SmoothEdges` blends each edge
+sub-pixel and its neighbours toward the local average, reusing what `DetectEdges` already marks, so cost tracks
+silhouette *perimeter* not screen *area*. `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, **Smooth**
+slider in both sidebars.
+
+The measured result was not what the plan predicted. I expected the cost to be the colour count; it barely moved
+(**93 → 99** distinct fg/bg pairs at full strength). The real limit is spatial: it blends **whole sub-pixels** where
+coverage AA blends *within* one. On a sphere twelve sub-pixels across, a one-sub-pixel ring is ~8% of the diameter
+per side, so **1.0 reads as erosion** — the body visibly shrinks and desaturates — and 0.3–0.4 merely softens the
+staircase. It also cannot touch the checkerboard or the shade-band contours, which are *colour* boundaries and so
+invisible to a depth-based detector; those are arguably the blockier things on screen.
+
+**This is the evidence for doing quadrant glyphs next rather than supersampling.** A cell carries exactly two
+colours and a silhouette is exactly a two-colour boundary, so a quadrant glyph (`▘▝▖▗`…) can place that boundary at
+2×2 resolution *within* the cell at **zero colour cost** — spatial precision instead of smeared colour, which is
+precisely what this experiment shows is missing. Picking the pattern needs per-quadrant coverage, so supersampling,
+but only at cells the edge pass already flagged. Check quadrant-block font coverage (U+2596–259F) with the existing
+multi-font snapshot test before committing.
+
+Two mechanical notes, *both since undone with the pass itself*: `DetectEdges` stopped self-gating on `EdgeStyle`
+(it took a `wanted` flag, since two consumers wanted the edge set) and `SmoothEdges` read from a copy so the result
+did not depend on scan order. Frame cost with the pass **off** was unchanged within noise; the cost with it **on**
+was never measured.
+
 
 ### Two bugs I caused, and what each one says about the tests
 

@@ -296,13 +296,14 @@ internal static class ShellChecks
 
         view.SetQuadrantSampling(false);
         Draw();
-        // Searched as ") AA" rather than "AA": the label is two characters now, and a bare Contains would happily
-        // match any row that happened to hold them. The ")" is the switch's own knob, so this can only match a
-        // switch called AA.
-        var quadOffRow = SwitchRow(root, width, height, ") AA");
+        // The label, not the property name -- so a rename in the panel fails HERE rather than silently reading an
+        // empty row. It has been "Quadrant AA", "AA" and now "Anti-Aliasing"; each rename broke this line, which is
+        // the check doing its job. Held in one constant so the next one is a single edit.
+        const string aaLabel = "Anti-Aliasing";
+        var quadOffRow = SwitchRow(root, width, height, aaLabel);
         view.SetQuadrantSampling(true);
         Draw();
-        var quadOnRow = SwitchRow(root, width, height, ") AA");
+        var quadOnRow = SwitchRow(root, width, height, aaLabel);
         Check("the quadrant switch is on the panel", quadOffRow.Length > 0, quadOffRow.Trim());
         Check("and follows the renderer", quadOnRow != quadOffRow && view.QuadrantSampling == true,
             $"{quadOffRow.Trim()} -> {quadOnRow.Trim()}");
