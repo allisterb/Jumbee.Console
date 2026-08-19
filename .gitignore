@@ -421,3 +421,4 @@ reference/*
 BenchmarkDotNet.Artifacts/*
 /publish*
 /media/*
+*.stl

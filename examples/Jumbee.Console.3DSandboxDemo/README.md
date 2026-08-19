@@ -1,6 +1,6 @@
 # Jumbee.Console 3D sandbox
 
-A real-time **3D rigid-body sandbox** in the terminal, and an **OBJ model viewer**, built on `Jumbee.Console`.
+A real-time **3D rigid-body sandbox** in the terminal, and a **model viewer** for `.obj` and `.stl`, built on `Jumbee.Console`.
 Physics comes from [Box3D](https://github.com/erincatto/box3d) (Erin Catto's engine, via the `Box3D.NET` binding);
 everything else — camera, projection, rasteriser — is about 900 lines using `System.Numerics` entirely. See [3D Rendering in a Terminal](../../docs/3D%20Rendering%20in%20a%20Terminal.md) for a deep dive into how it works.
 
@@ -21,18 +21,18 @@ coloured sub-pixels — so the solid renderers draw at `width × 2·height` with
 # The sandbox: a leaning tower, some spheres, and a floor.
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release
 
-# The model viewer: one asset filling the viewport, on a turntable.
+# The model viewer: one asset filling the viewport, on a turntable. Reads .obj and .stl.
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- obj path/to/models
 
 # Make models spawnable in the sandbox instead, so you can throw them at things.
-dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- --model path/to/teapot.obj
+dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- --model path/to/part.stl
 ```
 
 `obj` takes **one** path, a file *or* a directory. Either way the whole directory is loaded and `[` / `]` cycle
 through it — naming a file only decides which one opens first.
 
 With **no path** it looks for a `models` folder in the current directory and loads that; with no such folder it opens
-on the generated torus knot. It never loads the working directory itself — picking up whatever `.obj` files happen to
+on the generated torus knot. It never loads the working directory itself — picking up whatever model files happen to
 be sitting next to you is a surprise, and there is always a mesh to fall back on.
 
 Whichever you launch, **Scene ▸ Switch to model viewer** (and **Model ▸ Switch to sandbox** coming back) moves
@@ -45,6 +45,36 @@ whichever model you were last looking at — or, coming from the sandbox, on wha
 > first display would move that pause into the middle of cycling, and a stall mid-interaction reads as a hang where
 > a stall at startup reads as loading. Point `obj` at a single file's directory, or a directory of small models, if
 > you would rather not wait.
+
+## File formats
+
+| | |
+|---|---|
+| **`.obj`** | Wavefront. Geometry only — `v` and `f`, with n-gons fan-triangulated. `vt`/`vn` are parsed past, and materials are not read at all. |
+| **`.stl`** | Binary and ASCII, auto-detected. The CAD and 3D-printing interchange format, which is the reason it is here. |
+
+A directory holding both is loaded as one list in name order, so `[` and `]` walk the directory rather than all the
+OBJs and then all the STLs.
+
+**STL is a triangle soup** — every facet repeats its three corners in full, with no vertex sharing, no materials and
+no texture coordinates. The loader welds identical corners as it reads, because the renderer transforms a body's
+vertices once per frame and references them from its triangles: the sample bee goes from 7,653 corners to 1,286
+vertices for the same 2,551 triangles.
+
+Two details are worth knowing, because they are what most STL readers get wrong:
+
+- **The format is detected by arithmetic, not by the word `solid`.** A binary file's 80-byte header is free-form and
+  exporters do write descriptions into it beginning with that word — the usual sniff then reads a perfectly good
+  binary file as ASCII and yields nothing. A binary file's length is fully determined by its facet count
+  (`84 + n × 50`), so checking that identifies the format exactly.
+- **A facet's stored normal decides its winding.** The renderers derive their own normal from the vertex order and
+  cull back faces on its sign, and STL files in the wild routinely wind facets against the normal their authoring
+  tool recorded. Taken at their winding alone those facets vanish into the cull and the model reads as full of
+  holes, so where the two disagree the loader swaps two corners to follow the file's normal.
+
+**STLs are treated as Z-up**, since they come overwhelmingly from tools where Z is up. A default rather than a fact,
+and like the OBJ exporter banner it is applied somewhere visible — the viewer's **Z-up file** switch and the `a`
+key — so a wrong guess is a setting to flip rather than a broken-looking model.
 
 ## Colour
 

@@ -53,12 +53,17 @@ public static class ModelLibrary
             return new ModelSet([], 0, $"'{path}' is neither a file nor a directory.");
         }
 
-        var files = Directory.GetFiles(directory, "*.obj").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray();
+        // Enumerated and filtered rather than globbed per extension, so the two formats interleave in one name
+        // order — cycling with [ and ] should walk the directory, not all the OBJs and then all the STLs.
+        var files = Directory.GetFiles(directory)
+            .Where(ModelLoader.IsModel)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (files.Length == 0)
         {
             // Only a failure when a path was actually named. With no argument the viewer still has its generated
             // mesh to fall back on, so an empty working directory is not an error.
-            return new ModelSet([], 0, path is null ? null : $"no .obj files in '{directory}'.");
+            return new ModelSet([], 0, path is null ? null : $"no model files in '{directory}' ({Formats}).");
         }
 
         var start = 0;
@@ -98,5 +103,8 @@ public static class ModelLibrary
     #region Fields
     /// <summary>The folder looked for beside the working directory when no path is given.</summary>
     public const string DefaultDirectoryName = "models";
+
+    /// <summary>The readable extensions, for a message — <c>".obj, .stl"</c>.</summary>
+    public static string Formats => string.Join(", ", ModelLoader.Extensions);
     #endregion
 }

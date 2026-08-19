@@ -34,7 +34,7 @@ var scannedModelsFolder = false;
 var modelPath = new Argument<string?>("path")
 {
     Arity = ArgumentArity.ZeroOrOne,
-    Description = "An .obj file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
+    Description = "An .obj or .stl file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
                   "cycle through it; naming a file just decides which one opens first. With no path, a 'models' " +
                   "folder in the current directory is used if there is one, and otherwise the viewer opens on its " +
                   "generated torus knot. NOTE: models are parsed before the UI appears, so a directory holding " +
@@ -47,7 +47,7 @@ var sandboxModels = new Option<string[]>("--model", "-m")
 {
     Arity = ArgumentArity.ZeroOrMore,
     AllowMultipleArgumentsPerToken = true,
-    Description = "Wavefront .obj files to make spawnable. Cycle them with 'm', then drop with 'n' or fire with 'f'.",
+    Description = "Model files (.obj, .stl) to make spawnable. Cycle them with 'm', then drop with 'n' or fire with 'f'.",
 };
 
 var objCommand = new Command("obj", "Open the model viewer: one asset filling the viewport, on a turntable.")
@@ -144,7 +144,7 @@ static bool LoadModel(string path)
 {
     try
     {
-        Meshes.Register(ObjLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+        Meshes.Register(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
         return true;
     }
     catch (Exception ex) when (ex is IOException or InvalidDataException)
@@ -154,7 +154,7 @@ static bool LoadModel(string path)
     }
 }
 
-// Registers each .obj, reporting the first failure rather than starting a UI that is missing what was asked for.
+// Registers each model, reporting the first failure rather than starting a UI that is missing what was asked for.
 static bool LoadModels(string[]? paths) => (paths ?? []).All(LoadModel);
 
 // The default scene: physics, a floor, and everything you can do to a pile of bodies.
@@ -186,12 +186,12 @@ void RequestSwitch(ShellType to)
 // Load a model while the app is running, which is what --model used to be the only way to do. The chosen mesh
 // becomes what the spawn keys produce, so the very next `n` or `f` throws it into the scene.
 static void LoadMeshDialog(SandboxShell.Sandbox app) =>
-    FileBrowser.OpenFile("Load a model", null, ["*.obj"], path =>
+    FileBrowser.OpenFile("Load a model", null, ModelLoader.Patterns, path =>
     {
         if (path is null) return;
         try
         {
-            var id = Meshes.Register(ObjLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+            var id = Meshes.Register(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
             app.Sidebar.RefreshMeshes();
             app.View.Spawn.MeshId = id;
             app.View.Spawn.Shape = BodyShape.Mesh;
@@ -211,7 +211,7 @@ static void OpenModelsDialog(SandboxShell.Viewer app) =>
         var start = LoadModelDirectory(directory);
         if (start < 0)
         {
-            Dialog.Message("Nothing to show", $"No .obj files in {directory}.");
+            Dialog.Message("Nothing to show", $"No model files in {directory} ({ModelLibrary.Formats}).");
             return;
         }
 

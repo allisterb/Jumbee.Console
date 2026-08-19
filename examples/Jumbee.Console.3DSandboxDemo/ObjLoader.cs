@@ -111,7 +111,11 @@ public static class ObjLoader
     }
     // Centre on the bounding box and scale so the largest half-extent matches `radius`. Uniform, so the model is
     // not distorted; using the box rather than the centroid keeps a lopsided model inside its own bounds.
-    private static void Normalise(List<Vector3> vertices, float radius)
+    //
+    // Shared with StlLoader rather than copied, because every format has to agree on it: the viewer frames a model
+    // from Mesh.Extents and stands it on the floor from Mesh.Min, so two loaders normalising differently would put
+    // one format's models through the floor or out of frame.
+    internal static void Normalise(List<Vector3> vertices, float radius)
     {
         var min = new Vector3(float.MaxValue);
         var max = new Vector3(float.MinValue);

@@ -12,7 +12,7 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 | | |
 |---|---|
-| *(none)* | 86 behaviour checks — the default |
+| *(none)* | 97 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
 | `--aa out=DIR [WxH]` | one settled frame with quadrant sampling off and on: distinct fg/bg pairs, silhouette placement error, PNGs |
@@ -20,7 +20,7 @@ with a `$(Repo)` property at the top pointing at the repo root.
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
 | `--probe` | on-screen size of a launched body, frame by frame |
-| `--load` | OBJ parse time per model in the reference directory |
+| `--load` | parse time, triangle/vertex counts and up-axis per model in a directory (`dir=`) |
 
 `--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
@@ -49,6 +49,8 @@ Adding Quadrant AA took them to 37 and 52; removing the Smooth slider brought th
 - **Colour read back from emitted ANSI** (`AnsiConsoleSnapshot`), so a selection highlight is verified as pixels
   rather than as internal state.
 - **The `obj` path-resolution rules**, all of which are edge cases, via `ModelLibrary.Resolve`.
+- **The STL loader against the raw bytes** — facet count, degenerate facets and every triangle's winding are
+  recomputed from the file, so a loader that agreed with itself would still fail.
 - **The only mode that runs the UI LOOP.** Everything else renders through `ConsoleSnapshot` with no loop at all, so
   `--switch` is where anything lifecycle-shaped shows up: a second `UI.Start` after a `Stop`, session state that
   outlives the session that made it, a background feed still posting after its control is gone. It counts frames

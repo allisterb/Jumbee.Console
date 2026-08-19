@@ -12,13 +12,14 @@ if (args.Contains("--load"))
 {
     var dir = args.FirstOrDefault(a => a.Contains("dir="))?.Split('=')[1]
               ?? @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
-    foreach (var f in Directory.GetFiles(dir, "*.obj").OrderBy(x => x))
+    foreach (var f in Directory.GetFiles(dir).Where(ModelLoader.IsModel).OrderBy(x => x))
     {
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
-        var m = ObjLoader.Load(f);
-        Console.WriteLine($"  {Path.GetFileName(f),-12} {m.TriangleCount,7} tris  parse {sw0.ElapsedMilliseconds,5} ms  " +
-                          $"{new FileInfo(f).Length / 1024,6} KB  " +
-                          $"extents {m.Extents.X:F3},{m.Extents.Y:F3},{m.Extents.Z:F3}");
+        var m = ModelLoader.Load(f);
+        Console.WriteLine($"  {Path.GetFileName(f),-14} {m.TriangleCount,7} tris  {m.Vertices.Length,7} verts  " +
+                          $"parse {sw0.ElapsedMilliseconds,5} ms  {new FileInfo(f).Length / 1024,6} KB  " +
+                          $"extents {m.Extents.X:F3},{m.Extents.Y:F3},{m.Extents.Z:F3}  " +
+                          $"up {m.AuthoredUpAxis?.ToString() ?? "-"}");
     }
 
     return 0;
@@ -780,6 +781,140 @@ Check("and does not load the working directory itself", notCwd.Files.Length == 0
 var startAt = new ModelScene(1);
 Check("ModelScene opens on the requested index", startAt.MeshId == 1, $"{startAt.MeshId} ({startAt.Name})");
 Check("and clamps an out-of-range one", new ModelScene(999).MeshId == Meshes.RegisteredCount - 1);
+
+// --- STL ----------------------------------------------------------------------------------------------------------
+// Checked against the FILE rather than against the loader's own opinion: the facet count, the degenerate facets and
+// the winding of every triangle are all recomputed here from the raw bytes, so a loader that silently agreed with
+// itself would fail.
+Console.WriteLine("\nSTL:");
+var stlPath = @"C:\Projects\Jumbee.Console\media\models\cali-bee.stl";
+if (!File.Exists(stlPath))
+{
+    Console.WriteLine("  SKIP  media/models/cali-bee.stl is not present");
+}
+else
+{
+    var stlBytes = File.ReadAllBytes(stlPath);
+    var declared = BitConverter.ToUInt32(stlBytes, 80);
+
+    Check("a binary STL is detected by its LENGTH, not its first word",
+        StlLoader.IsBinary(stlBytes.Length, stlBytes), $"{declared} facets, {stlBytes.Length} bytes");
+
+    // The trap the length test exists for: an 80-byte header is free-form, and exporters do write "solid ..." into
+    // it. A reader that sniffs the first five bytes calls this binary file ASCII and returns an empty mesh.
+    var disguised = (byte[])stlBytes.Clone();
+    "solid "u8.CopyTo(disguised.AsSpan(0, 6));
+    Check("even one whose header begins \"solid\"", StlLoader.IsBinary(disguised.Length, disguised),
+        $"header now reads '{System.Text.Encoding.ASCII.GetString(disguised, 0, 12)}'");
+
+    // Ground truth, recomputed from the bytes: which facets are degenerate, and which are wound against their own
+    // stored normal.
+    int degenerate = 0, misWound = 0;
+    var misWoundAt = new List<int>();
+    var facetNormals = new List<Vector3>();
+    for (var f = 0u; f < declared; f++)
+    {
+        var at = 84 + ((int)f * 50);
+        Vector3 Read(int o) => new(BitConverter.ToSingle(stlBytes, at + o),
+                                   BitConverter.ToSingle(stlBytes, at + o + 4),
+                                   BitConverter.ToSingle(stlBytes, at + o + 8));
+        var n = Read(0);
+        var (a, b, c) = (Read(12), Read(24), Read(36));
+        var winding = Vector3.Cross(b - a, c - a);
+        if (winding.LengthSquared() < 1e-20f) { degenerate++; continue; }
+        if (Vector3.Dot(winding, n) < 0f) { misWound++; misWoundAt.Add(facetNormals.Count); }
+        facetNormals.Add(n);
+    }
+
+    var bee = StlLoader.Load(stlPath);
+    Check("every non-degenerate facet becomes a triangle", bee.TriangleCount == declared - degenerate,
+        $"{declared} declared − {degenerate} degenerate = {declared - degenerate}, loaded {bee.TriangleCount}");
+
+    // Welding is not cosmetic: a body's vertices are transformed once per frame and referenced by its triangles,
+    // so a soup pays for every corner three times over.
+    Check("corners are welded", bee.Vertices.Length < bee.TriangleCount * 3 / 2,
+        $"{bee.TriangleCount * 3} corners in the file → {bee.Vertices.Length} vertices");
+
+    // The winding invariant, asserted on the OUTPUT: every triangle must wind the way its own facet normal says,
+    // which is what stops the back-face cull eating scattered facets and leaving a model full of holes.
+    //
+    // SLIVERS ARE EXCLUDED, and working out why was the useful part. This file has a dozen facets whose area after
+    // normalisation is 5e-12 to 2e-9 against a median of 1.2e-3 — six to nine orders of magnitude down, one of them
+    // underflowing to exactly zero. A cross product that small has no reliable DIRECTION left, so "which way does
+    // it wind" is not a question with an answer. The loader's absolute degeneracy guard cannot catch them either:
+    // it runs in the file's own units, before the model is scaled down. They cover no pixels either way.
+    var areas = new List<float>();
+    for (var t = 0; t < bee.TriangleCount && t < facetNormals.Count; t++)
+    {
+        var a = bee.Vertices[bee.Indices[t * 3]];
+        var b = bee.Vertices[bee.Indices[(t * 3) + 1]];
+        var c = bee.Vertices[bee.Indices[(t * 3) + 2]];
+        areas.Add(Vector3.Cross(b - a, c - a).Length());
+    }
+
+    var sliver = areas.Order().ToArray()[areas.Count / 2] * 1e-5f;   // five orders below median; the gap measures nine
+    int wrongAfter = 0, slivers = 0;
+    for (var t = 0; t < areas.Count; t++)
+    {
+        if (areas[t] < sliver) { slivers++; continue; }
+        var a = bee.Vertices[bee.Indices[t * 3]];
+        var b = bee.Vertices[bee.Indices[(t * 3) + 1]];
+        var c = bee.Vertices[bee.Indices[(t * 3) + 2]];
+        if (Vector3.Dot(Vector3.Cross(b - a, c - a), facetNormals[t]) < 0f) wrongAfter++;
+    }
+
+    Check("every triangle winds the way its facet normal says", wrongAfter == 0,
+        $"{wrongAfter} wrong of {areas.Count - slivers} facets ({slivers} slivers excluded)");
+
+    // And the honest reading of this particular model: it needed no flipping at all. Every facet the loader
+    // reversed was one of those slivers, so the fix is UNEXERCISED here — the synthetic ASCII facet below is what
+    // proves it works, and this line is what would notice a real file that disagreed.
+    Check("...and this file was already wound consistently",
+        misWoundAt.All(i => i < areas.Count && areas[i] < sliver),
+        $"{misWound} facets reversed at load, every one a sliver");
+
+    Check("STL defaults to Z-up", bee.AuthoredUpAxis == ModelUpAxis.Z, bee.AuthoredUpAxis?.ToString() ?? "none");
+    Check("and the extension decides the loader", ModelLoader.Load(stlPath).AuthoredUpAxis == ModelUpAxis.Z);
+}
+
+// ASCII STL, on a synthetic one so the geometry is known exactly. Written with the ragged indentation and the
+// keywords a real writer emits, since that is what the reader has to survive.
+string[] asciiStl =
+[
+    "solid tetra",
+    "  facet normal 0 0 1",
+    "    outer loop",
+    "      vertex 0 0 0",
+    "      vertex 1 0 0",
+    "      vertex 0 1 0",
+    "    endloop",
+    "  endfacet",
+    // Wound clockwise against a normal that says otherwise -- the malformed-but-common case the fix is for.
+    "  facet normal 0 0 1",
+    "    outer loop",
+    "      vertex 0 0 0",
+    "      vertex 0 1 0",
+    "      vertex 1 0 0",
+    "    endloop",
+    "  endfacet",
+    "endsolid tetra",
+];
+
+var ascii = StlLoader.ParseAscii(asciiStl);
+Check("ASCII STL parses", ascii.TriangleCount == 2, $"{ascii.TriangleCount} triangles");
+Check("and welds its shared corners", ascii.Vertices.Length == 3, $"{ascii.Vertices.Length} vertices");
+var flipped = 0;
+for (var t = 0; t < ascii.TriangleCount; t++)
+{
+    var a = ascii.Vertices[ascii.Indices[t * 3]];
+    var b = ascii.Vertices[ascii.Indices[(t * 3) + 1]];
+    var c = ascii.Vertices[ascii.Indices[(t * 3) + 2]];
+    if (Vector3.Cross(b - a, c - a).Z > 0f) flipped++;
+}
+
+// Both facets name +Z, and the second is wound the other way in the file -- so a loader that ignored the stored
+// normal would return one triangle facing each way, and the cull would drop one of them.
+Check("a facet wound against its normal is corrected", flipped == 2, $"{flipped} of 2 face +Z");
 
 // --- solid renderer -----------------------------------------------------------------------------------------------
 Console.WriteLine("\nsolid renderer:");

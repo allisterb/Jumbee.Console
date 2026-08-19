@@ -22,10 +22,23 @@ internal static class ShellChecks
 
         Meshes.Register(Meshes.TorusKnot(), "knot");
         var models = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
-        if (args.Contains("viewer") && Directory.Exists(models))
+        // Both directories: the reference OBJs, and the repo's own media/models, which is where the STL samples
+        // live. Registering them here is what puts an STL through the real viewer -- the loader checks in Check.cs
+        // prove the file parses, and only this proves it draws.
+        if (args.Contains("viewer"))
         {
-            foreach (var f in Directory.GetFiles(models, "*.obj").OrderBy(x => x))
-                if (!f.Contains("dragon")) Meshes.Register(ObjLoader.Load(f), Path.GetFileNameWithoutExtension(f));
+            foreach (var dir in new[] { models, @"C:\Projects\Jumbee.Console\media\models" })
+            {
+                if (!Directory.Exists(dir)) continue;
+                foreach (var f in Directory.GetFiles(dir).Where(ModelLoader.IsModel).OrderBy(x => x))
+                {
+                    if (f.Contains("dragon")) continue;   // 250k triangles, and ~600 ms of parse, for no extra coverage
+                    var name = Path.GetFileNameWithoutExtension(f);
+                    if (Meshes.RegisteredCount > 0 && Enumerable.Range(0, Meshes.RegisteredCount).Any(i => Meshes.NameOf(i) == name))
+                        continue;   // the two directories overlap; first one wins
+                    Meshes.Register(ModelLoader.Load(f), name);
+                }
+            }
         }
         else if (File.Exists(Path.Combine(models, "teapot.obj")))
         {
@@ -34,7 +47,13 @@ internal static class ShellChecks
 
         if (args.Contains("viewer"))
         {
-            var v = SandboxShell.BuildViewer(Meshes.RegisteredCount - 1);
+            // Opened on a NAMED model, not on whatever happens to be registered last. It used to be the last one,
+            // and adding the media/models directory to the scan above silently moved the subject of every check
+            // below from the teapot to a thin aeroplane — which then failed a coverage threshold calibrated on the
+            // teapot, for a reason that had nothing to do with what was being tested.
+            var subject = Enumerable.Range(0, Meshes.RegisteredCount).FirstOrDefault(
+                i => Meshes.NameOf(i) == "teapot", Meshes.RegisteredCount - 1);
+            var v = SandboxShell.BuildViewer(subject);
             v.Model.SpinRate = 0f;
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
             v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);

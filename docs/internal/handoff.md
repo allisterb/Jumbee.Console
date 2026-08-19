@@ -29,7 +29,7 @@ bug the user reported from play (see below), the handoff rewrite and `Recording 
 
 **Next up is unclaimed.** The obvious candidates are M4 polish (colour modes, trails, scene presets — see *What this
 session did* below) and open question 3, promoting the harness into a real test project, which is now overdue: it
-is up to 86 + 34 checks and has caught six shipped bugs.
+is up to 97 + 34 checks and has caught six shipped bugs.
 
 **New doc worth reading before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the
 measured WebP/GIF settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture
@@ -175,6 +175,58 @@ That also surfaced a **pre-existing one-cell misalignment**: `Slider.BuildLabel`
 (`cells = target + 1`), so the caption column for the drop-downs has to be `LabelWidth + 1`. The viewer's panel had
 that right and the sandbox's did not, so every sandbox drop-down had been sitting one column left of every slider
 track. Both are `LabelWidth + 1` now — and it was only visible in a PNG, which is the third time that has been true.
+
+### STL support — the format, and what the sample files taught
+
+`StlLoader` reads **binary and ASCII** STL; `ModelLoader` dispatches on extension and is now the single place that
+knows which formats exist (the file browser's filter, the viewer's directory scan and its "nothing here" message all
+read `ModelLoader.Extensions`). `ModelLibrary` enumerates and filters rather than globbing per extension, so a mixed
+directory cycles in one name order rather than all the OBJs and then all the STLs. `ObjLoader.Normalise` is
+`internal` now and shared: the viewer frames a model from `Mesh.Extents` and stands it on the floor from `Mesh.Min`,
+so two loaders normalising differently would put one format's models through the floor.
+
+**Both traps the reference implementation walks into are worth carrying forward.**
+
+1. **Detect by arithmetic, not by the word `solid`.** voxcii (and most readers) sniff the first five bytes. A binary
+   STL's 80-byte header is free-form and exporters write descriptions into it — `cali-bee.stl` starts *"Exported
+   from Blender-2.80"*, but plenty start with "solid" and are then read as ASCII, yielding an empty mesh. A binary
+   file's length is fully determined (`84 + n × 50`), so the length test identifies the format exactly — and makes
+   the declared count trustworthy, which is what lets the reader size buffers from it with no sanity cap. There is
+   a check that plants "solid " into the bee's header and requires it still to be detected as binary.
+2. **The stored facet normal decides the winding.** Our rasteriser derives its normal from the vertex order and
+   culls on that sign, and STL files in the wild routinely wind facets against the normal their tool recorded —
+   those facets vanish into the cull and the model reads as full of holes. Where the two disagree the loader swaps
+   two corners.
+
+**And STL is a soup, which the rest of the renderer is not built for.** Every facet repeats its corners in full;
+`Mesh`'s whole premise is that a body's vertices are transformed once per frame and referenced by its triangles.
+Corners are welded on **exact** equality at read time — the bee goes 7,653 → **1,286**, a factor of six — rather
+than with a tolerance, which would merge corners a model meant to keep apart.
+
+**What measuring it actually turned up** (the checks recompute the facet count, the degenerate facets and every
+triangle's winding from the raw bytes, so the loader cannot agree with itself):
+
+- The bee declares 2,568 facets and yields **2,551**. The other 17 are exactly collapsed in the file.
+- **A dozen more are slivers**, at an area six to nine orders of magnitude below the median, one underflowing to
+  zero once the model is scaled down. Their winding direction is numerically meaningless — and *every facet the
+  loader reversed on this model was one of them*. So the winding fix is **unexercised by the real file**; the
+  synthetic ASCII facet, wound deliberately against its normal, is what proves it works. The check says both things
+  rather than claiming coverage it does not have.
+- The degeneracy guard is absolute and runs in the file's own units, before normalisation, which is why it cannot
+  catch the slivers. Left alone deliberately: they cover no pixels either way, and a relative threshold would put a
+  heuristic on the load path for no visible gain.
+
+**A harness lesson, again.** Registering `media/models` for the viewer moved the subject of every later viewer check
+from the teapot to a thin aeroplane, which then failed a coverage threshold calibrated on the teapot — for a reason
+with nothing to do with what was being tested. `--shell viewer` now opens on a model chosen **by name**, not on
+whatever is registered last.
+
+**Not done, and deliberately:** MTL. voxcii's version is `newmtl` + `Kd` and no textures — and `capsule.mtl`, the
+sample, has `Kd 1 1 1` with everything in `map_Kd capsule0.jpg`, so that level of support would render it white.
+Textures mean UV plumbing (cheap — `Fill` already interpolates perspective-correctly), an image decoder (the demo
+has no imaging dependency and ships NativeAOT-trimmed), and a real risk to the emission budget, since a per-pixel
+tint through `Quantise` produces thousands of distinct pairs. Measure with a procedural texture before writing any
+parser.
 
 ### The white-model bug — pre-existing, reported from play, and a good example of its class
 
