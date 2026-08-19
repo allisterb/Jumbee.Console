@@ -938,10 +938,9 @@ Choosing between them:
   discrete factors and has broken those runs up regardless.
 
   If the goal is a smoother sphere, the lever is [`MeshRenderer.ShadeLevels`](#part-3--three-renderers), not normals.
-  colours between cells, which increases how much neighbours differ — directly the expensive direction.
-- **Anti-aliasing.** The half-block trick is already a form of vertical supersampling. Going further means blending
-  colours between cells, which increases how much neighbours differ — directly the expensive direction. A cheap
-  first step **is implemented**: `ShadedRenderer.EdgeSmoothing` blends detected edges into their surroundings, a
+- **Anti-aliasing.** The half-block trick is already a form of vertical supersampling. The obvious way further is to
+  blend colours between cells, which increases how much neighbours differ — directly the expensive direction — and
+  that is the cheap first step, implemented: `ShadedRenderer.EdgeSmoothing` blends detected edges into their surroundings, a
   post-process over the sub-pixels `DetectEdges` already marked, so its cost tracks silhouette *perimeter* rather
   than screen *area*. Off by default, and worth knowing its limits before turning it on — it blends **whole
   sub-pixels**, where real coverage AA blends *within* one, so at a sphere twelve sub-pixels across a full-strength
@@ -949,11 +948,28 @@ Choosing between them:
   checkerboard or the shade-band contours, which are colour boundaries rather than geometric ones and so invisible
   to a depth-based detector.
 
-  The better answer for this medium, unimplemented, exploits a constraint rather than fighting it: a cell carries
-  **exactly two colours**, and a silhouette is **exactly a two-colour boundary**. A quadrant glyph (`▘▝▖▗`…) can
-  therefore place that boundary at 2×2 resolution *within* the cell at no colour cost at all — increasing spatial
-  precision instead of smearing colour. Picking the right pattern needs per-quadrant coverage, so it means
-  supersampling, but only at cells the edge pass already flagged.
+  The better answer for this medium exploits a constraint rather than fighting it, and **is now implemented** as
+  `MeshRenderer.QuadrantSampling`. A cell carries **exactly two colours**, and the sixteen quadrant glyphs
+  (`▘▝▖▗▌▐▞▚`…) are exactly the sixteen ways to divide a 2×2 block between them. So sample twice per column, and the
+  compositor's whole job becomes picking the division: the two-means partition of the four sub-pixels, with each
+  group represented by one of its own **members** rather than by their average. That last part is what keeps the
+  colour cost at zero — every colour emitted is one the renderer already produced, so the picture stays on the
+  quantised ramp.
+
+  It needs no edge detector, which is the second thing it gains over blending: a colour-only boundary — the
+  checkerboard, a shade-band contour — gets the same half-cell precision a silhouette does. Measured on a sphere
+  against the sky, the silhouette's placement error halves (0.65 → 0.32 half-cells RMS) and about half the
+  silhouette rows move to a boundary inside a cell, where before none could.
+
+  What it costs is fill and runs: twice the sub-pixels to shade, and a boundary that now falls between two columns
+  makes a cell differ from its neighbour where the two used to coalesce. At 200×50 the shaded renderer goes
+  2.9 → 4.4 ms and 18.1 → 25.7 KB of ANSI a frame. Note that the *palette* is unchanged and the emission still
+  rises: run-breaking, not new colours.
+
+  Two smaller notes for anyone porting the idea. `▀` is one of the sixteen patterns, so it wins whenever a block's
+  structure genuinely is horizontal — this can only add resolution, never trade the vertical resolution away. And a
+  block whose two columns agree needs no search at all, which is every flat interior, so the partition runs along
+  boundaries only.
 
 - **Near-plane clipping.** Triangles with any corner behind the camera are dropped rather than split. Cheap, and at
   the distances an orbit camera holds it costs a sliver of geometry at the very edge of the view.

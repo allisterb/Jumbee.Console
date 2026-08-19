@@ -66,7 +66,7 @@ public sealed class HalfBlockSurface : Control
     #endregion
 
     #region Properties
-    /// <summary>Sub-pixel columns — one per character column.</summary>
+    /// <summary>Sub-pixel columns — <see cref="SamplesPerColumn"/> per character column.</summary>
     public int PixelWidth { get; private set; }
 
     /// <summary>Sub-pixel rows — two per character row.</summary>
@@ -77,6 +77,49 @@ public sealed class HalfBlockSurface : Control
 
     /// <summary>How <see cref="DetectEdges"/>'s findings are drawn.</summary>
     public SilhouetteStyle EdgeStyle { get; set; } = SilhouetteStyle.None;
+
+    /// <summary>
+    /// Samples <b>twice per column</b> and composites each 2×2 block into the quadrant glyph (<c>▘▝▖▗▌▐▞▚</c>…)
+    /// that best fits its four colours — doubling the surface's horizontal resolution. Off by default; takes
+    /// effect at the next <see cref="BeginFrame"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A cell can carry exactly two colours, and the sixteen quadrant glyphs are exactly the sixteen ways to split a
+    /// 2×2 block between them. So the compositor's whole job is picking the split: the two-means partition of the
+    /// four sub-pixels, cheapest first. <c>▀</c> is one of those sixteen, and it wins whenever the block's structure
+    /// really is a horizontal one — which is why this can only <em>add</em> resolution and never trade the vertical
+    /// resolution away.
+    /// </para>
+    /// <para>
+    /// <b>It introduces no new colour.</b> The two it emits are <em>members</em> of the block (each group's medoid),
+    /// never a blend of them, so the picture stays on whatever quantised ramp <see cref="MeshRenderer.ShadeLevels"/>
+    /// produced. That is the difference from <see cref="SmoothEdges"/>, which buys its softening precisely in
+    /// intermediate shades — and which cannot place a boundary any more finely than the sub-pixel grid it blends
+    /// across, so it softens the staircase without moving it.
+    /// </para>
+    /// <para>
+    /// What it costs is <b>fill</b> — twice the sub-pixels to rasterise and shade — and, less obviously, <b>runs</b>.
+    /// Measured on the sandbox at 200×50: shaded 2.9 → 4.4 ms and 18.1 → 25.7 KB of ANSI a frame, solid 1.7 → 2.4 ms
+    /// and 12.0 → 17.4 KB. The emission rises even with the palette unchanged, because a boundary that now falls
+    /// <em>between</em> two columns makes a cell differ from its neighbour where the two used to coalesce. Same
+    /// currency the shade ramp is spent in, for the opposite kind of detail.
+    /// </para>
+    /// <para>
+    /// The compositing itself is the cheap part: a block whose two columns agree — every flat interior, which is
+    /// most of the screen — short-circuits straight to <c>▀</c>, so the partition search runs along boundaries only.
+    /// </para>
+    /// <para>
+    /// Unlike <see cref="SmoothEdges"/> this needs no edge detector, so it is not blind to boundaries that are only
+    /// a change of <em>colour</em>: the checkerboard's squares and the shade-band contours get the same half-cell
+    /// precision the silhouettes do.
+    /// </para>
+    /// </remarks>
+    public bool QuadrantSampling { get; set; }
+
+    /// <summary>Sub-pixels per character column: 2 under <see cref="QuadrantSampling"/>, otherwise 1. Fixed for the
+    /// frame at <see cref="BeginFrame"/>, so a mid-frame toggle cannot tear the buffer against the compositor.</summary>
+    public int SamplesPerColumn { get; private set; } = 1;
     #endregion
 
     #region Methods
@@ -84,7 +127,8 @@ public sealed class HalfBlockSurface : Control
     /// before drawing; returns <see langword="false"/> if the control has no area yet.</summary>
     public bool BeginFrame()
     {
-        var w = ActualWidth;
+        var samples = QuadrantSampling ? 2 : 1;
+        var w = ActualWidth * samples;
         var h = ActualHeight * 2;
         if (w <= 0 || h <= 0) return false;
 
@@ -96,6 +140,10 @@ public sealed class HalfBlockSurface : Control
             depth = new float[w * h];
             group = new byte[w * h];
         }
+
+        // After the resize, not before: the compositor reads this to map cells back to sub-pixels, so it has to
+        // describe the buffer that is about to be drawn into rather than the property's current value.
+        SamplesPerColumn = samples;
 
         Array.Fill(color, Background);
         Array.Fill(depth, 0f);   // 0 = infinitely far, since depth is a reciprocal
@@ -163,6 +211,11 @@ public sealed class HalfBlockSurface : Control
         if (edge.Length != color.Length) edge = new bool[color.Length];
         Array.Clear(edge);
 
+        // A second difference scales with the SQUARE of the sample spacing, so under QuadrantSampling — where a
+        // column step is half the distance it was — the x term would read a quarter of its old value and quietly
+        // recalibrate the threshold. Scaled back so one threshold means one thing at either sampling rate.
+        var bendScaleX = SamplesPerColumn * SamplesPerColumn;
+
         for (var y = 1; y < PixelHeight - 1; y++)
         {
             var row = y * PixelWidth;
@@ -173,7 +226,7 @@ public sealed class HalfBlockSurface : Control
                 if (d <= 0) continue;   // background: an edge belongs to the surface, not to the sky behind it
                 if (group[i] == 0) continue;   // scenery is not outlined; see TestAndSet
 
-                var bendX = MathF.Abs((2f * d) - depth[i - 1] - depth[i + 1]);
+                var bendX = MathF.Abs((2f * d) - depth[i - 1] - depth[i + 1]) * bendScaleX;
                 var bendY = MathF.Abs((2f * d) - depth[i - PixelWidth] - depth[i + PixelWidth]);
                 if (MathF.Max(bendX, bendY) <= threshold * d) continue;
 
@@ -268,12 +321,17 @@ public sealed class HalfBlockSurface : Control
     /// </remarks>
     public void ApplyOcclusion(float strength)
     {
-        if (strength <= 0f || PixelWidth < 5 || PixelHeight < 5) return;
+        // The ring is a circle on SCREEN, so its horizontal reach is in sub-pixels only while sub-pixels are square.
+        // Under QuadrantSampling they are half as wide, and an unscaled ring would sample an ellipse half as wide as
+        // it is tall — measuring a different neighbourhood at the same dial setting.
+        var reachX = SamplesPerColumn;
+        var marginX = 2 * reachX;
+        if (strength <= 0f || PixelWidth < 2 * marginX + 1 || PixelHeight < 5) return;
 
         for (var y = 2; y < PixelHeight - 2; y++)
         {
             var row = y * PixelWidth;
-            for (var x = 2; x < PixelWidth - 2; x++)
+            for (var x = marginX; x < PixelWidth - marginX; x++)
             {
                 var i = row + x;
                 var d = depth[i];
@@ -286,14 +344,17 @@ public sealed class HalfBlockSurface : Control
                 var occluded = 0;
                 foreach (var (ox, oy) in OcclusionRing)
                 {
-                    var sx = x + ox;
+                    var stepX = ox * reachX;
+                    var sx = x + stepX;
                     var sy = y + oy;
                     if ((uint)sx >= (uint)PixelWidth || (uint)sy >= (uint)PixelHeight) continue;
 
                     var sample = depth[(sy * PixelWidth) + sx];
                     if (sample <= 0) continue;   // background is infinitely far and occludes nothing
 
-                    var predicted = d + (gx * ox) + (gy * oy);
+                    // gx is per sub-pixel column, so the prediction extrapolates over the SCALED step — the same
+                    // screen distance the sample was taken at.
+                    var predicted = d + (gx * stepX) + (gy * oy);
                     if (sample > predicted + (OcclusionBias * d)) occluded++;
                 }
 
@@ -325,8 +386,9 @@ public sealed class HalfBlockSurface : Control
         // into it -- collapsing the sidebar and restoring it does exactly that, and the write then runs off the end
         // of the console buffer. The row clamp was already here; the column one was not, and that asymmetry was the
         // bug: hiding the sidebar with `u` while a solid renderer was active could take the app down.
+        var samples = SamplesPerColumn;
         var rows = Math.Min(ActualHeight, PixelHeight / 2);
-        var cols = Math.Min(ActualWidth, PixelWidth);
+        var cols = Math.Min(ActualWidth, PixelWidth / samples);
         var glyphEdges = EdgeStyle == SilhouetteStyle.Glyph && edge.Length == color.Length;
         for (var row = 0; row < rows; row++)
         {
@@ -334,9 +396,13 @@ public sealed class HalfBlockSurface : Control
             var bottom = top + PixelWidth;
             for (var x = 0; x < cols; x++)
             {
-                var upper = color[top + x];
-                var lower = color[bottom + x];
-                if (glyphEdges && (edge[top + x] || edge[bottom + x]))
+                var left = x * samples;
+                var upperIndex = top + left;
+                var lowerIndex = bottom + left;
+                var upper = color[upperIndex];
+                var lower = color[lowerIndex];
+                if (glyphEdges && (edge[upperIndex] || edge[lowerIndex]
+                    || (samples == 2 && (edge[upperIndex + 1] || edge[lowerIndex + 1]))))
                 {
                     // Either half being an edge marks the whole cell — a glyph cannot say "the top half only".
                     // Brighter colour to the glyph, darker behind it, so the outline reads against its own surface.
@@ -349,11 +415,106 @@ public sealed class HalfBlockSurface : Control
                     continue;
                 }
 
+                if (samples == 2)
+                {
+                    var upperRight = color[upperIndex + 1];
+                    var lowerRight = color[lowerIndex + 1];
+                    // The short circuit that keeps the search off the interior: when a row's two samples agree
+                    // there is nothing horizontal to resolve, and ▀ is already the exact answer -- which is the
+                    // case for every flat plateau, so the partition below runs along boundaries only.
+                    if (upper != upperRight || lower != lowerRight)
+                    {
+                        var (glyph, ink, behind) = Quadrant(upper, upperRight, lower, lowerRight);
+                        consoleBuffer.Write(new Position(x, row), new CCharacter(glyph, ink, behind));
+                        continue;
+                    }
+                }
+
                 consoleBuffer.Write(new Position(x, row), new CCharacter('▀', upper, lower));
             }
         }
     }
     #endregion
+
+    // The best two-colour rendition of one 2x2 block: the quadrant glyph whose split leaves the least colour spread
+    // inside each of the two groups, with each group represented by one of its own members.
+    //
+    // Seven candidate splits, not sixteen. A mask and its complement describe the SAME partition with foreground and
+    // background exchanged, and putting all four sub-pixels in one group can never win -- splitting a set never
+    // increases its spread -- so it needs no candidate of its own; four equal colours simply tie at zero and the
+    // first split wins, which draws the same solid cell either way.
+    private static (char Glyph, CColor Fg, CColor Bg) Quadrant(CColor tl, CColor tr, CColor bl, CColor br)
+    {
+        Span<CColor> block = [tl, tr, bl, br];
+        var best = 1;
+        var bestSpread = float.MaxValue;
+        for (var mask = 1; mask < 8; mask++)
+        {
+            var spread = Spread(block, mask) + Spread(block, ~mask & 0xF);
+            if (spread >= bestSpread) continue;
+            bestSpread = spread;
+            best = mask;
+        }
+
+        return (QuadrantGlyphs[best], Medoid(block, best), Medoid(block, ~best & 0xF));
+    }
+
+    // Sum of squared distance from the group's own mean, over the three channels -- the two-means cost. Computed
+    // from the running sums rather than in two passes: Σ(c²) - (Σc)²/n is the same quantity.
+    private static float Spread(ReadOnlySpan<CColor> block, int mask)
+    {
+        int n = 0, sr = 0, sg = 0, sb = 0, qr = 0, qg = 0, qb = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            if ((mask & (1 << i)) == 0) continue;
+            var c = block[i];
+            n++;
+            sr += c.Red;
+            sg += c.Green;
+            sb += c.Blue;
+            qr += c.Red * c.Red;
+            qg += c.Green * c.Green;
+            qb += c.Blue * c.Blue;
+        }
+
+        return n == 0 ? 0f : qr + qg + qb - ((((float)sr * sr) + ((float)sg * sg) + ((float)sb * sb)) / n);
+    }
+
+    // The group member nearest the group's mean -- NOT the mean itself, which is the whole colour discipline of this
+    // pass: a mean is a colour the renderer never produced, and a screen full of them is exactly the intermediate
+    // shading ShadeLevels exists to suppress. Picking a member keeps every emitted colour on the quantised ramp.
+    private static CColor Medoid(ReadOnlySpan<CColor> block, int mask)
+    {
+        int n = 0, sr = 0, sg = 0, sb = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            if ((mask & (1 << i)) == 0) continue;
+            n++;
+            sr += block[i].Red;
+            sg += block[i].Green;
+            sb += block[i].Blue;
+        }
+
+        if (n == 0) return default;
+        float mr = (float)sr / n, mg = (float)sg / n, mb = (float)sb / n;
+
+        var best = default(CColor);
+        var bestDistance = float.MaxValue;
+        for (var i = 0; i < 4; i++)
+        {
+            if ((mask & (1 << i)) == 0) continue;
+            var c = block[i];
+            var dr = c.Red - mr;
+            var dg = c.Green - mg;
+            var db = c.Blue - mb;
+            var distance = (dr * dr) + (dg * dg) + (db * db);
+            if (distance >= bestDistance) continue;
+            bestDistance = distance;
+            best = c;
+        }
+
+        return best;
+    }
 
     // Brightness-ordered, echoing the ramp in c_ascii_render: a denser glyph for a brighter edge.
     private static char EdgeGlyph(float luminance) => luminance switch
@@ -374,7 +535,11 @@ public sealed class HalfBlockSurface : Control
         (byte)Math.Clamp((c.Blue * factor) + EdgeFloor, 0, 255));
 
     #region Fields
-    
+    // Indexed by the foreground mask, bit 0 top-left through bit 3 bottom-right. Only 1..7 are ever looked up (see
+    // Quadrant), but the table is written in full because the index IS the pattern and a gap would invite a bug.
+    private static readonly char[] QuadrantGlyphs =
+        [' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█'];
+
     private const float EdgeBoost = 1.8f;
     private const int EdgeFloor = 60;
 

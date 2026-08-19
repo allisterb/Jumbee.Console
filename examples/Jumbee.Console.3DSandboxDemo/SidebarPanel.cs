@@ -42,6 +42,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
+        quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
         smooth.ValueChanged += (_, v) => Push(() => view.SetEdgeSmoothing((float)v));
         stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
         scanCap.SelectionChanged += (_, _) =>
@@ -89,7 +90,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     /// that cannot hold it, and the frame scrolls instead of clipping. It used to decide whether the bottom section
     /// existed at all. Still worth keeping honest — the harness's <c>--shell 200xH</c> sweeps both tiers.
     /// </remarks>
-    public const int SpacedRows = 61;
+    public const int SpacedRows = 63;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -183,7 +184,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // Both solid renderers have a ramp, so this one greys out under the WIREFRAME instead -- the only
             // renderer here that draws no shaded surface at all.
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
-            shade.Enabled = view.ShadeLevels is not null;
+            quadrants.IsChecked = view.QuadrantSampling ?? false;
+            shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
             smooth.Value = view.EdgeSmoothing ?? 0f;
             smooth.Enabled = view.EdgeSmoothing is not null;
             stratify.IsChecked = view.Stratify ?? false;
@@ -293,7 +295,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
             // a large model is examined and does nothing to a model below that cap.
             new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                wrapLighting, occlusion, shade, smooth, stratify, density, Labelled("Scan", scanCap)), 9 + (8 * gap)),
+                wrapLighting, occlusion, shade, quadrants, smooth, stratify, density, Labelled("Scan", scanCap)),
+                10 + (9 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale, Row(resetWorld)),
@@ -383,6 +386,12 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     // resolution -- and the renderer's largest performance lever, so it is deliberately not buried in a menu.
     private readonly Slider shade = Param("Shades", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "F0");
+
+    // The other half of the antialiasing story, and deliberately next to Smooth: this one buys HORIZONTAL
+    // resolution (a half-cell boundary rather than a whole-cell one) and pays in fill, where Smooth buys softness
+    // and pays in colours. Both solid renderers composite through the surface, so it greys out only under the
+    // wireframe -- same gating as Shades.
+    private readonly Switch quadrants = new Switch("Quadrant AA");
 
     // Cheap antialiasing along silhouettes. Shaded-only, like Edges and Occlusion, and off by default -- see
     // ShadedRenderer.EdgeSmoothing for why it is not simply free.

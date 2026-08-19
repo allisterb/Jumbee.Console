@@ -72,6 +72,23 @@ public abstract class MeshRenderer : ISceneRenderer
         set => shadeLevels = Math.Clamp(MathF.Round(value), MinShadeLevels, MaxShadeLevels);
     }
 
+    /// <summary>
+    /// Doubles the horizontal sampling rate and composites each 2×2 block into a quadrant glyph, so a silhouette
+    /// lands on a half-cell boundary instead of a whole-cell one. Off by default; costs twice the fill.
+    /// </summary>
+    /// <remarks>
+    /// The <em>other</em> resolution dial, and the counterpart to <see cref="ShadeLevels"/>: that one buys colour
+    /// precision, this one buys spatial precision, and both are paid for in ANSI runs — plus, here, twice the fill.
+    /// Measured cost and the reason it emits no colour the renderer did not already produce are in
+    /// <see cref="HalfBlockSurface.QuadrantSampling"/>. Both solid renderers have it: the surface composites, so
+    /// neither's shading needs to know.
+    /// </remarks>
+    public bool QuadrantSampling
+    {
+        get => surface.QuadrantSampling;
+        set => surface.QuadrantSampling = value;
+    }
+
     /// <summary>The coarsest shade ramp on offer — two levels is lit and unlit, and little else.</summary>
     public const float MinShadeLevels = 2f;
 

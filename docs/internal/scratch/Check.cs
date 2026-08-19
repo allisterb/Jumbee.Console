@@ -47,12 +47,17 @@ if (args.Contains("--aa"))
     {
         s.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
         s.GroundY = 0f;
-        s.AddSphere(new Vector3(0f, 0.6f, 0f), 0.6f, 3);
-        s.AddBox(new Vector3(1.6f, 0.5f, -0.4f), new Vector3(0.5f), 0);
+        // A big sphere, and it has to be big: the thing being measured is the LEFT silhouette against the sky, so
+        // the subject needs many consecutive rows of it. A body a dozen sub-pixels across gives a handful of
+        // scattered rows and every placement statistic comes back empty — which is what the first version of this
+        // scene did, and it reads as "no effect" rather than as "nothing measured".
+        s.AddSphere(new Vector3(0f, 3f, 0f), 3f, 3);
+        s.AddBox(new Vector3(4.2f, 0.7f, -0.4f), new Vector3(0.7f), 0);
     });
 
     var aaShaded = new ShadedRenderer { WrapLighting = true };
     var aaView = new SceneView(aaRunner, aaShaded);
+    aaView.Camera.Distance = 11f;   // close enough that the sphere's outline spans most of the frame's height
     _ = new ControlFrame(aaView, borderStyle: BorderStyle.Rounded);
     var aaRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(aaView), aaView);
     _ = ConsoleSnapshot.ToText(aaRoot, W, H);
@@ -60,32 +65,142 @@ if (args.Contains("--aa"))
     while (aaRunner.Snapshot.StepCount < settleTarget) Thread.Sleep(5);
 
     var opt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
-    foreach (var strength in new[] { 0f, 0.35f, 0.7f, 1f })
+    var aaSky = ((HalfBlockSurface)aaShaded.Surface).Background;
+
+    // Draw twice around a layout pass: BeginFrame sizes the sub-pixel buffers from the control's ActualWidth, which
+    // is only real once the tree has been laid out at least once.
+    ConsoleBuffer AaFrame(string name)
     {
-        aaShaded.EdgeSmoothing = strength;
         var snap = aaRunner.Snapshot;
         aaShaded.Draw(snap, aaView.Camera);
         _ = ConsoleSnapshot.ToText(aaRoot, W, H);
         aaShaded.Draw(snap, aaView.Camera);
-        var aaBuffer = ConsoleSnapshot.Render(aaRoot, W, H);
-        ConsoleSnapshot.SavePng(aaRoot, W, H, Path.Combine(outDir, $"aa-{strength:F2}.png"), opt);
+        var buffer = ConsoleSnapshot.Render(aaRoot, W, H);
+        ConsoleSnapshot.SavePng(aaRoot, W, H, Path.Combine(outDir, name + ".png"), opt);
+        return buffer;
+    }
 
-        // Distinct fg/bg pairs is the honest proxy for what the smoothing costs the emitter and a capture: the
-        // blend re-introduces colours between the quantised plateaus.
+    // Distinct fg/bg pairs is the honest proxy for what a pass costs the emitter and a capture: a blend
+    // re-introduces colours between the quantised plateaus, where a re-partitioned cell cannot.
+    static int Pairs(ConsoleBuffer b)
+    {
         var pairs = new HashSet<(uint, uint)>();
-        for (var y = 0; y < aaBuffer.Size.Height; y++)
-            for (var x = 0; x < aaBuffer.Size.Width; x++)
+        for (var y = 0; y < b.Size.Height; y++)
+            for (var x = 0; x < b.Size.Width; x++)
             {
-                var ch = aaBuffer[x, y].Character;
-                if (ch.Foreground is { } f && ch.Background is { } b)
-                    pairs.Add(((uint)(f.Red << 16 | f.Green << 8 | f.Blue), (uint)(b.Red << 16 | b.Green << 8 | b.Blue)));
+                var ch = b[x, y].Character;
+                if (ch.Foreground is { } f && ch.Background is { } g)
+                    pairs.Add(((uint)(f.Red << 16 | f.Green << 8 | f.Blue), (uint)(g.Red << 16 | g.Green << 8 | g.Blue)));
             }
 
-        Console.WriteLine($"  smoothing {strength:F2}  ->  {pairs.Count,5} distinct fg/bg pairs   aa-{strength:F2}.png");
+        return pairs.Count;
+    }
+
+    Console.WriteLine("\nedge smoothing — colour blended along the detected silhouette:");
+    foreach (var strength in new[] { 0f, 0.35f, 0.7f, 1f })
+    {
+        aaShaded.EdgeSmoothing = strength;
+        var aaBuffer = AaFrame($"aa-{strength:F2}");
+        Console.WriteLine($"  smoothing {strength:F2}  ->  {Pairs(aaBuffer),5} distinct fg/bg pairs   " +
+                          $"jag {Jaggedness(aaBuffer, aaSky, W, H).Rms:F2} ({Jaggedness(aaBuffer, aaSky, W, H).Rows} rows)   aa-{strength:F2}.png");
+    }
+
+    // The second stage, and the comparison the whole experiment is for: the same frame with the boundary placed at
+    // half-cell resolution instead of blended across whole ones.
+    Console.WriteLine("\nquadrant sampling — the boundary placed inside the cell:");
+    aaShaded.EdgeSmoothing = 0f;
+    foreach (var on in new[] { false, true })
+    {
+        aaShaded.QuadrantSampling = on;
+        var aaBuffer = AaFrame(on ? "quad-on" : "quad-off");
+        var insideCell = 0;
+        var boundaries = Silhouette(aaBuffer, aaSky, W, H);
+        foreach (var b in boundaries) if (b > 0 && (b & 1) == 1) insideCell++;
+        Console.WriteLine($"  quadrants {(on ? "on " : "off")}  ->  {Pairs(aaBuffer),5} distinct fg/bg pairs   " +
+                          $"jag {Jaggedness(aaBuffer, aaSky, W, H).Rms:F2} ({Jaggedness(aaBuffer, aaSky, W, H).Rows} rows)   " +
+                          $"{insideCell} of {boundaries.Count(b => b > 0)} silhouette rows on a half-cell   " +
+                          $"quad-{(on ? "on" : "off")}.png");
     }
 
     aaRunner.Dispose();
     return 0;
+}
+
+// The left silhouette against the sky, in HALF-CELL units, one entry per half-row: the leftmost half-cell that is
+// not the background colour, PROVIDED some sky was crossed to reach it. 0 otherwise.
+//
+// That proviso is the definition of a silhouette and not a convenience. Without it every row the ground fills edge
+// to edge reports a boundary in the first content column — always an even one, since there is nothing to place
+// inside a cell — and in a scene of bodies standing on a floor those rows outnumber the real silhouettes six to
+// one, diluting the very measurement they are not part of.
+//
+// Decoded through the quadrant mask, so ONE decoder reads both compositors -- ▀ is quadrant pattern 0011, and a
+// surface not sampling quadrants simply never emits any of the other thirteen. An ODD result is therefore a
+// boundary the ▀ compositor could not have expressed: it sits inside a cell.
+static int[] Silhouette(ConsoleBuffer buffer, ConsoleGUI.Data.Color sky, int w, int h)
+{
+    const string patterns = " ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█";
+    var found = new int[(h - 3) * 2];
+    for (var row = 0; row < h - 3; row++)
+    {
+        for (var halfRow = 0; halfRow < 2; halfRow++)
+        {
+            var at = 0;
+            var sawSky = false;
+            var done = false;
+            for (var x = 0; x < w && !done; x++)
+            {
+                var ch = buffer[x, row].Character;
+                if (ch.Content is not { } glyph) continue;
+                var mask = patterns.IndexOf(glyph);
+                if (mask < 0 || ch.Foreground is not { } fg || ch.Background is not { } bg) continue;
+                // Left quadrant of this half-row, then the right one. Whichever is first to differ from the sky is
+                // where the silhouette crosses.
+                for (var side = 0; side < 2; side++)
+                {
+                    var lit = (mask & (1 << ((halfRow * 2) + side))) != 0 ? fg : bg;
+                    if (lit == sky) { sawSky = true; continue; }
+                    // The first thing that is not sky ends the scan either way: with sky behind it that is the
+                    // silhouette, without it the row was never one.
+                    if (sawSky) at = (x * 2) + side;
+                    done = true;
+                    break;
+                }
+            }
+
+            found[(row * 2) + halfRow] = at;
+        }
+    }
+
+    return found;
+}
+
+// The silhouette's QUANTISATION ERROR: how far each row's boundary sits from where its two neighbours say it should
+// be, in half-cells, RMS. A body's outline is locally straight over three rows, so the midpoint of the neighbours is
+// a fair stand-in for the truth without needing the analytic curve.
+//
+// This is the number the whole stage is about. A staircase can only place the boundary on whole cells, so a row that
+// should sit half a cell along is a whole half-cell out and the residual is ~1; halving the placement grid should
+// halve it. Note what it is NOT: the total zigzag (Σ|second difference|) is nearly INVARIANT here — an antialiased
+// edge bends twice as often by half as much — so the obvious "how much does it wobble" measures cannot see this
+// change at all, and the first version of this function, a median bend, reported 0.00 for every case.
+static (double Rms, int Rows) Jaggedness(ConsoleBuffer buffer, ConsoleGUI.Data.Color sky, int w, int h)
+{
+    var edge = Silhouette(buffer, sky, w, h);
+    double sum = 0;
+    var n = 0;
+    for (var i = 1; i < edge.Length - 1; i++)
+    {
+        if (edge[i - 1] <= 0 || edge[i] <= 0 || edge[i + 1] <= 0) continue;
+        // Skip a step no locally-straight edge could make: at the top and bottom of a body the leftmost object
+        // changes from one row to the next, and that is a jump rather than a placement error.
+        if (Math.Abs(edge[i + 1] - edge[i - 1]) > 4) continue;
+        var residual = edge[i] - ((edge[i - 1] + edge[i + 1]) / 2.0);
+        sum += residual * residual;
+        n++;
+    }
+
+    return (n == 0 ? 0 : Math.Sqrt(sum / n), n);
 }
 
 
@@ -841,6 +956,13 @@ if (args.Contains("--perf"))
     Time("  ..clamped", new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = false });
     Time("  ..wrapped", new ShadedRenderer { Edges = SilhouetteStyle.Glyph, WrapLighting = true });
 
+    // Quadrant sampling doubles the sub-pixels to rasterise and shade, so it is priced against its own baseline
+    // rather than against the rows above -- read each pair, not the column.
+    Time("solid", new SolidRenderer());
+    Time("  ..quadrants", new SolidRenderer { QuadrantSampling = true });
+    Time("shaded+ao", new ShadedRenderer());
+    Time("  ..quadrants", new ShadedRenderer { QuadrantSampling = true });
+
     
     runner.Dispose();
     return 0;
@@ -939,6 +1061,82 @@ Check("edges are found on the bodies", edgesOnBodies > 20, $"{edgesOnBodies} sub
 // however steeply that plane recedes. This is what a naive neighbour-difference detector cannot achieve.
 Check("a wholly-planar neighbourhood never registers as an edge", edgesOnOpenGround == 0,
     $"{edgesOnOpenGround}/{openGroundPixels} open-ground sub-pixels");
+
+// --- quadrant sampling ------------------------------------------------------------------------------------------
+// Everything here reads the CONSOLE CELLS, not the sub-pixel buffer. The pass is a compositor: it changes nothing
+// about what was rasterised, only how a 2x2 block is turned into one cell, so a check that reads the surface would
+// be reading the half of the pipeline this feature does not touch. (Same lesson as the deleted Line statement: a
+// check that asserts an internal mark is half a check.)
+Console.WriteLine("\nquadrant sampling:");
+solid.Edges = SilhouetteStyle.None;
+
+ConsoleBuffer QuadFrame()
+{
+    solid.Draw(solidScene, view.Camera);
+    _ = ConsoleSnapshot.ToText(root, W, H);
+    solid.Draw(solidScene, view.Camera);
+    return ConsoleSnapshot.Render(root, W, H);
+}
+
+solid.QuadrantSampling = false;
+var plainFrame = QuadFrame();
+var plainSamples = edgeSurface.SamplesPerColumn;
+var plainWidth = edgeSurface.PixelWidth;
+
+solid.QuadrantSampling = true;
+var quadFrame = QuadFrame();
+
+Check("the buffer samples twice per column", edgeSurface.SamplesPerColumn == 2 && plainSamples == 1,
+    $"{plainSamples} -> {edgeSurface.SamplesPerColumn}");
+Check("and is twice as wide in sub-pixels", edgeSurface.PixelWidth == plainWidth * 2,
+    $"{plainWidth} -> {edgeSurface.PixelWidth}");
+
+int changed = 0, quadGlyphs = 0, offRamp = 0;
+var rampColours = new HashSet<(byte, byte, byte)>();
+for (var sy = 0; sy < edgeSurface.PixelHeight; sy++)
+    for (var sx = 0; sx < edgeSurface.PixelWidth; sx++)
+    {
+        var c = edgeSurface.ColorAt(sx, sy);
+        rampColours.Add((c.Red, c.Green, c.Blue));
+    }
+
+for (var y = 1; y < H - 3; y++)
+{
+    for (var x = 1; x < W - 1; x++)
+    {
+        var plainCell = plainFrame[x, y].Character;
+        var after = quadFrame[x, y].Character;
+        if (plainCell.Content != after.Content || plainCell.Foreground != after.Foreground
+            || plainCell.Background != after.Background) changed++;
+        if (after.Content is { } glyph && glyph is not ('▀' or ' ') && "▘▝▖▌▞▛▗▚▐▜▄▙▟█".Contains(glyph)) quadGlyphs++;
+        // The colour discipline: every colour a quadrant cell emits must be one the RENDERER put in the sub-pixel
+        // buffer. Averaging the two groups instead of picking a member of each would fail this on the first
+        // boundary cell, and that is the whole difference from the smoothing pass -- which buys its softening in
+        // exactly this currency.
+        if (after.Foreground is { } f && !rampColours.Contains((f.Red, f.Green, f.Blue))) offRamp++;
+        if (after.Background is { } b && !rampColours.Contains((b.Red, b.Green, b.Blue))) offRamp++;
+    }
+}
+
+Check("the picture changes", changed > 100, $"{changed} cells differ");
+Check("quadrant glyphs reach the screen", quadGlyphs > 20, $"{quadGlyphs} cells carry one");
+Check("and every colour they emit is one the renderer produced", offRamp == 0,
+    $"{offRamp} cell colours are not in the sub-pixel buffer");
+
+// The claim itself, measured on what a reader would see: a silhouette that lands between two columns. Whole-cell
+// compositing cannot express one, so the count off must be exactly zero -- which is what makes the count on
+// meaningful rather than merely larger.
+var plainEdge = Silhouette(plainFrame, edgeSurface.Background, W, H);
+var quadEdge = Silhouette(quadFrame, edgeSurface.Background, W, H);
+int plainHalves = plainEdge.Count(b => b > 0 && (b & 1) == 1), quadHalves = quadEdge.Count(b => b > 0 && (b & 1) == 1);
+Check("no silhouette lands inside a cell without it", plainHalves == 0, $"{plainHalves} of {plainEdge.Count(b => b > 0)}");
+Check("and a good share of them do with it", quadHalves > quadEdge.Count(b => b > 0) / 5,
+    $"{quadHalves} of {quadEdge.Count(b => b > 0)} silhouette rows");
+
+// Put back what this section borrowed. A check that leaves global state behind hides bugs from every check after
+// it -- this is the harness's own lesson, learnt when an early `v` left the wireframe active for the rest of a run.
+solid.QuadrantSampling = false;
+solid.Edges = SilhouetteStyle.Glyph;
 
 if (args.Contains("--solid"))
 {

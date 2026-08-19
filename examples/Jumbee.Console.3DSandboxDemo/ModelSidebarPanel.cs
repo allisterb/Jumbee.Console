@@ -35,6 +35,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
+        quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
         smooth.ValueChanged += (_, v) => Push(() => view.SetEdgeSmoothing((float)v));
 
         // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
@@ -77,7 +78,8 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Colour", color), spin), 5),
             // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
             // the shaded renderer's, so they belong together.
-            new Section("Shaded detail", Spaced(Labelled("Edges", edges), wrapLighting, occlusion, shade, smooth), 9),
+            new Section("Shaded detail",
+                Spaced(Labelled("Edges", edges), wrapLighting, occlusion, shade, quadrants, smooth), 11),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -145,7 +147,8 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             occlusion.Value = view.OcclusionStrength ?? 0f;
             edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
-            shade.Enabled = view.ShadeLevels is not null;
+            quadrants.IsChecked = view.QuadrantSampling ?? false;
+            shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
             smooth.Value = view.EdgeSmoothing ?? 0f;
             smooth.Enabled = view.EdgeSmoothing is not null;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
@@ -271,6 +274,10 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // rather than under the non-shaded renderers, since both solid ones have a ramp.
     private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "Shades") { LabelWidth = 9, ValueFormat = "F0" };
+
+    // Half-cell horizontal resolution on every boundary, silhouette or not; see HalfBlockSurface.QuadrantSampling.
+    // Beside Smooth on purpose: this is the comparison the viewer exists to make easy.
+    private readonly Switch quadrants = new Switch("Quadrant AA");
 
     // Cheap antialiasing along silhouettes; see ShadedRenderer.EdgeSmoothing.
     private readonly Slider smooth = Axis("Smooth", 0f, 1f, 0f);

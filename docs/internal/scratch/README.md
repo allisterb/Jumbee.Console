@@ -12,10 +12,10 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 | | |
 |---|---|
-| *(none)* | 63 behaviour checks — the default |
+| *(none)* | 84 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
-| `--aa out=DIR [WxH]` | one settled frame at four `EdgeSmoothing` strengths, plus its distinct fg/bg pair count |
+| `--aa out=DIR [WxH]` | one settled frame at four `EdgeSmoothing` strengths and with quadrant sampling off/on: distinct fg/bg pairs, silhouette placement error, PNGs |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
@@ -24,10 +24,16 @@ with a `$(Repo)` property at the top pointing at the repo root.
 
 `--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
-**`--shell` has a floor of 36 rows**, and it is the harness's rather than the app's. The sandbox sidebar scrolls now,
-so at any height it is *reachable*; but most checks read the panel by finding its text in the rendered rows, and
-below 36 the World section is off screen at the top of the scroll. Only the camera-pad check scrolls to what it is
-looking for. The app itself is fine down there — 30 rows renders and scrolls correctly.
+**`--shell` has a floor of 37 rows, and `--shell viewer` one of 52**, and both are the harness's rather than the
+app's. Either sidebar scrolls, so at any height every control is *reachable*; but most checks read a panel by
+finding its text in the rendered rows, and below the floor the last section (the sandbox's World, the viewer's
+Shear) is off screen. Only the camera-pad check scrolls to what it is looking for. The app itself is fine down
+there — 30 rows renders and scrolls correctly.
+
+**Both floors rise by a row or two whenever a control is added to a sidebar**, which is the price of reading the
+panel off the screen rather than off its state, and is the same maintenance smell as `SidebarPanel.SpacedRows`.
+Quadrant AA moved them from 36 and 50. Sweep them (`--shell 200xH`) after touching a sidebar rather than
+spot-checking one height.
 
 ## What it covers that a normal test would not
 

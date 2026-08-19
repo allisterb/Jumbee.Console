@@ -1,151 +1,181 @@
-# Handoff — mesh thinning, control settings, renderable Select, grab fixes, shell switching (2026-08-17)
+# Handoff — the 3D demo made public-ready (2026-08-17)
 
 Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
 backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
 
 ## Next session starts here
 
-**Committed, in two commits.** `de29352` "Fix bugs in wireframe renderer" carries the first half of the mesh-thinning
-arc (screen-area budget, whole triangles, backface culling, the two-pass draw, `Mesh.WireEdges` removed);
-`b37379f` "Add color control to 3D demo, add shaded renderer detail options" carries everything else — 22 files,
-including the two new test files. Verified at that point: build clean, 1034/1034 tests, doc snippets, the parked
-harness, and `--shell` at 40 / 50 / 56 rows plus the viewer.
+**Working tree is clean. Everything below is committed**, ending at `7ef0016` "Fix bug in smoothing".
 
-**Then `2464d4f` "Fix sandbox physics bugs, add UI controls"** — two grab-gesture bugs the user hit by playing with
-the sandbox, and three sidebar buttons they asked for. Both written up below.
+The session's theme was **getting the 3D sandbox ready to show in public** — a Reddit post and a recorded clip —
+which turned out to mean far less rendering work than plumbing, packaging and bug-fixing. Nine commits:
 
-**Then `6212d36` "Support switching scenes from menus"** — **switching between the two scenes without leaving the
-process**, the only one of the three that reached the library and the only one with a behaviour change in
-`CHANGELOG.txt`. Written up next.
+| commit | what |
+|---|---|
+| `de29352`, `b37379f` | mesh thinning, control settings, renderable `Select` |
+| `2464d4f` | two grab-gesture bugs + three sidebar buttons |
+| `6212d36` | switching scenes without leaving the process *(the only library change: `UI.RestoreBuiltInHotKeys`)* |
+| `f570062` | viewer `Scene` menu, `models/` folder resolution, scrolling sandbox sidebar |
+| *(launchers/images)* | `3dsandbox` in `examples.sh` / `examples.cmd` / both Docker images |
+| `9372746` | half-Lambert on by default in the sandbox |
+| `fd3ca75` | sleep dimming removed, `ShadeLevels` slider |
+| `7ef0016` | edge smoothing, and the `Line`-outline regression fix |
 
-**Then `f570062` "Sandbox sidebar implements IScrollable. Fix model viewer reading 'models' dir on switch"** — four
-follow-ups on the switching work, all written up below:
+**The second stage of smoothing — quadrant-glyph AA — is done and it works**, unlike the first. `QuadrantSampling`
+on `MeshRenderer`, a **Quadrant AA** switch in both sidebars and an item in both Render menus, off by default. See
+*Quadrant sampling* below for the numbers, the one place the plan was wrong about the cost, and the two things the
+measurement itself got wrong before it got them right. It is **uncommitted**, along with the handoff rewrite and
+`Recording the demos.md`.
 
-- The viewer got a **`Scene` menu** of its own, leading the bar and holding Switch and Quit, so those two live in the
-  same place in both scenes.
-- **`obj` with no path** now looks for a `models` folder beside the working directory instead of scanning the working
-  directory itself, falling back to the generated knot. `ModelLibrary.DefaultDirectoryName` names the folder, and the
-  match *enumerates* rather than probing `Directory.Exists`, which is case-insensitive on Windows and not on Linux,
-  where the demo's container runs.
-- **That scan now also happens when switching into the viewer from the UI**, which is what the user actually hit: only
-  the `obj` verb looked at the folder, so a sandbox launched without it switched into a viewer holding nothing but
-  the generated knot. `Program.OpenModelsFolder` does it **once** per process — a directory of the reference models
-  is ~750 ms to parse and switching back and forth must not pay that twice — and what it loads stays in the registry,
-  so those models become spawnable back in the sandbox too.
-- **The sandbox sidebar scrolls**, like the viewer's: `SidebarPanel` is `IScrollable` with `MeasureHeight` summed from
-  its sections, wrapped in the same borderless frame. See below — the tier logic needed one non-obvious change.
+**Next up is unclaimed.** The obvious candidates are M4 polish (colour modes, trails, scene presets — see *What this
+session did* below) and open question 3, promoting the harness into a real test project, which is now overdue: it
+is up to 84 + 31 checks and has caught five shipped bugs.
 
-**Uncommitted after that:** shipping the sandbox through the launchers and both images.
+**New doc worth reading before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the
+measured WebP/GIF settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture
+decisions that outweigh every encoder setting.
 
-- **The launchers and both Docker images carry the 3D sandbox**, reachable as `./examples.sh 3dsandbox` (aliases `3d`,
-  `sandbox`), `examples.cmd 3dsandbox`, and `docker run --rm -it jumbee-console 3dsandbox`. `3dsandbox obj` opens the
-  model viewer. The models folder is handled differently per image, and that asymmetry is the only interesting part:
-  the **full** image already has the repo at `/src`, so `examples.sh` just runs the demo **from its own project
-  directory** and `models/` is found with no staging step — the same one line that makes it work on a host checkout
-  from any cwd; the **slim AOT** image has no repo, so `Dockerfile.aot` stages `models/` to `/app/models` beside the
-  binaries, exactly as it already does for the AudioScope track. Both are soft: `models/` is untracked (18 MB of
-  third-party research meshes), and without it the sandbox falls back to its generated torus knot, which is a working
-  app. Build-time notes in both Dockerfiles and both `build-docker` scripts say which happened.
-  **Both images are verified end to end, built and run.** Full: `3dsandbox obj` in the container opens on `bunny`,
-  which is the whole claim — the launcher's working-directory switch reaches the models `COPY . .` brought in. Slim:
-  the sandbox **does** NativeAOT-publish (5.5 MB binary, 364 MB image), `obj` finds `/app/models`, and the plain
-  sandbox reports `11 bodies` with the sim clock advancing to `t=1.0s` — so **Box3D's native P/Invoke loads and steps
-  under NativeAOT**, which was the one part of this nobody had ever tried. Build notes read `5 model(s) found.` and
-  `5 model(s) staged at /app/models.`
+### The 3D demo is now publicly reachable
 
-  One cosmetic difference under AOT: System.CommandLine prints the usage line as `Jumbee.Console [command]` rather
-  than `Jumbee.Console.3DSandboxDemo` — it derives the program name differently from a trimmed native binary. Left
-  alone.
+- `./examples.sh 3dsandbox` (aliases `3d`, `sandbox`), `examples.cmd 3dsandbox`, `examples-aot.sh 3dsandbox`
+- `docker run --rm -it jumbee-console 3dsandbox` and the same on `jumbee-console-aot`
+- `3dsandbox obj` opens the model viewer; **Scene ▸ Switch** moves between the two without leaving the process
+- Both images built and verified end to end; the slim AOT one publishes a 5.5 MB native binary and **Box3D's native
+  P/Invoke steps correctly under NativeAOT**, which nobody had ever tried
 
-- **Sleep dimming removed.** `Palette.For` drew a sleeping body at a third brightness, to make the engine's sleep
-  behaviour visible. It went, and the reasoning is worth keeping: a settled pile is the *common* case, so most of the
-  scene sat dimmed most of the time, and the one thing it degraded was the lighting — which is the whole point of the
-  shaded renderer. It also read as a lighting bug rather than as information: three boxes falling asleep on the same
-  tick dim simultaneously, and the selected body is exempt (`Palette.Selection` bypasses `Palette.For`), so one object
-  stays bright while its neighbours darken — which looks exactly like a light moving. Nothing is lost: the footer and
-  the Scene panel both report the awake count in words, and the step-time readout visibly drops when the solver stops
-  working, which is a better demonstration than a colour nobody can interpret.
+### Rendering changes, and what each one actually taught
 
-  Two pieces of prose justified themselves by it and were rewritten, not just re-worded: `Program.Populate`'s comment,
-  and — the one worth knowing about — the silhouette section of `docs/3D Rendering in a Terminal.md`, which explained
-  why outlines *brighten* by pointing at the third-brightness sleeping body. The design is still right, but the reason
-  is now the general one: an outline inheriting its surface colour vanishes on the unlit side of a body, which is
-  where a silhouette matters most.
+**Sleep dimming removed.** `Palette.For` drew a sleeping body at a third brightness to make the engine's sleep
+behaviour visible. It went: a settled pile is the *common* case, so most of the scene sat dimmed most of the time,
+and the one thing it degraded was the lighting — the whole point of the shaded renderer. It also read as a lighting
+*bug* rather than as information, because bodies fall asleep on the same tick and dim together while the selected
+one (which bypasses `Palette.For`) stays bright — indistinguishable from a light moving. Nothing is lost: the awake
+count is in the footer and the `step` readout visibly drops when the solver stops working.
 
-- **`ShadeLevels` is a runtime dial**, on `MeshRenderer` so both solid renderers have one, clamped and rounded to
-  [2, 24] and defaulting to 7 (shaded) / 5 (solid). Exposed through `SceneView.ShadeLevels` / `SetShadeLevels` and a
-  **Shades** slider in both sidebars. It greys out under the *wireframe* rather than under the non-shaded renderers,
-  which is the opposite gating from the Edges/Occlusion dials — worth noticing when adding the next one.
+**`ShadeLevels` is a runtime dial** — on `MeshRenderer`, so both solid renderers have one; rounded and clamped to
+[2, 24]; defaults 7 (shaded) / 5 (solid). `SceneView.ShadeLevels`/`SetShadeLevels` plus a **Shades** slider in both
+sidebars. Note it greys out under the *wireframe*, the opposite gating from Edges/Occlusion. It is the quality knob
+*and* the largest performance lever, which used to argue for pinning it — the argument changed once the demo
+started being recorded, where nothing waits on the terminal.
 
-  It is the quality knob *and* the largest performance lever, which used to be an argument for pinning it. The
-  argument changed when the demo started being **recorded**: nothing is waiting on the terminal in a capture, so a
-  fine ramp is free there and ruinous live. That tension is now the user's to resolve with a slider.
+**Edge smoothing (cheap AA) — implemented, and it disappoints.** `HalfBlockSurface.SmoothEdges` blends each edge
+sub-pixel and its neighbours toward the local average, reusing what `DetectEdges` already marks, so cost tracks
+silhouette *perimeter* not screen *area*. `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, **Smooth**
+slider in both sidebars.
 
-- **A crash the shade dial found by accident, and the more valuable result of the session.**
-  `HalfBlockSurface.Render` clamped its row loop against `ActualHeight` but its **column loop against `PixelWidth`**,
-  the pixel buffer's own width. The buffer is sized at `BeginFrame`; a re-layout between that and the next paint can
-  leave the control *smaller* than the frame drawn into it, and the write then runs off the end of the console
-  buffer. **Collapsing the sidebar with `u` and restoring it does exactly that** — so `u`, `u` with a solid or shaded
-  renderer active could take the app down. Fixed by clamping both axes.
+The measured result was not what the plan predicted. I expected the cost to be the colour count; it barely moved
+(**93 → 99** distinct fg/bg pairs at full strength). The real limit is spatial: it blends **whole sub-pixels** where
+coverage AA blends *within* one. On a sphere twelve sub-pixels across, a one-sub-pixel ring is ~8% of the diameter
+per side, so **1.0 reads as erosion** — the body visibly shrinks and desaturates — and 0.3–0.4 merely softens the
+staircase. It also cannot touch the checkerboard or the shade-band contours, which are *colour* boundaries and so
+invisible to a depth-based detector; those are arguably the blockier things on screen.
 
-  It had gone unseen because the harness pressed `v` early, leaving the *wireframe* (a `Canvas`, not a
-  `HalfBlockSurface`) active for the sidebar-toggle checks. Selecting a mesh renderer for the new dial checks put a
-  half-block surface on that path for the first time and it crashed immediately. **A test that leaves global state
-  behind can hide a bug from every test after it** — the same class as the scroll-position problem noted above.
+**This is the evidence for doing quadrant glyphs next rather than supersampling.** A cell carries exactly two
+colours and a silhouette is exactly a two-colour boundary, so a quadrant glyph (`▘▝▖▗`…) can place that boundary at
+2×2 resolution *within* the cell at **zero colour cost** — spatial precision instead of smeared colour, which is
+precisely what this experiment shows is missing. Picking the pattern needs per-quadrant coverage, so supersampling,
+but only at cells the edge pass already flagged. Check quadrant-block font coverage (U+2596–259F) with the existing
+multi-font snapshot test before committing.
 
-- **Two more pieces of prose justified themselves by the removed sleep dimming** and were rewritten: both silhouette
-  comments in `HalfBlockSurface`. The historical record in `3D Sandbox Plan.md` was *annotated* rather than edited,
-  since it documents what was true when the work happened.
+Two mechanical notes: `DetectEdges` no longer self-gates on `EdgeStyle` (it takes a `wanted` flag, since two
+consumers want the edge set), and `SmoothEdges` reads from a copy so the result does not depend on scan order.
+Frame cost with the pass **off** is unchanged within noise; the cost with it **on** was never measured.
 
-- **Edge smoothing (cheap AA) implemented, and honestly it is a taste dial rather than a quality win.**
-  `HalfBlockSurface.SmoothEdges` blends each edge sub-pixel and its neighbours toward the local average, reusing the
-  sub-pixels `DetectEdges` already marks — so cost tracks silhouette **perimeter**, not screen **area**.
-  `ShadedRenderer.EdgeSmoothing` (0–1, default 0) drives it, with a **Smooth** slider in both sidebars.
+### Quadrant sampling — the second stage, and this one delivers
 
-  **The measured result is worth recording, because it is not what the plan predicted.** I expected the cost to be
-  the colour count; it barely moved (93 → 99 distinct fg/bg pairs at full strength). The real limit is spatial: the
-  pass blends **whole sub-pixels**, where coverage AA blends *within* one. On a sphere twelve sub-pixels across, a
-  one-sub-pixel ring is ~8% of the diameter per side, so **strength 1.0 reads as erosion, not smoothing** — the body
-  visibly shrinks and desaturates. Around **0.3–0.4** it softens the staircase without that. Default 0 stands.
+`HalfBlockSurface.QuadrantSampling` samples **twice per column** and composites each 2×2 block into whichever of the
+sixteen quadrant glyphs best fits its four colours. Surfaced as `MeshRenderer.QuadrantSampling` (so **both** solid
+renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, a **Quadrant AA** switch
+in both sidebars beside `Smooth`, and an unshortcutted item in both Render menus.
 
-  It also cannot touch the checkerboard or the shade-band contours: those are colour boundaries, and the detector is
-  a *depth* second-difference test, so they are invisible to it. Those are arguably the more blocky things on screen.
+**It came out simpler than the plan, and the simplification is the interesting part.** The plan said "picking the
+pattern needs per-quadrant coverage, so supersampling, but only at cells the edge pass already flagged" — a second,
+sparse rasterising pass. It needs neither. The compositor's whole job is a **two-means partition of four colours**:
+seven candidate splits (a mask and its complement are one partition, and one group of four can never beat a split),
+each scored by the colour spread it leaves inside its two groups. No detector, no flag, no second pass.
 
-  **This is direct evidence for the quadrant-glyph approach over supersampling.** A cell carries exactly two colours
-  and a silhouette is exactly a two-colour boundary, so a quadrant glyph places that boundary at 2×2 resolution
-  *within* the cell at zero colour cost — spatial precision instead of smeared colour, which is precisely what this
-  experiment shows is missing.
+Three things fall out of that, and none were in the plan:
 
-  Two mechanical notes for whoever extends it: `DetectEdges` no longer self-gates on `EdgeStyle` (it takes a
-  `wanted` flag, since two consumers now want the edge set), and `SmoothEdges` reads from a copy so the result does
-  not depend on scan order — blending in place smears along the scan direction. Perf with the pass OFF is unchanged
-  within noise; the cost with it ON was **not** measured.
+- **`▀` is one of the sixteen patterns**, so it wins whenever a block's structure really is horizontal. The pass can
+  therefore only *add* resolution — there is no case where it trades the vertical resolution away, which was the
+  worry that made `SilhouetteStyle.Glyph` a "genuine trade".
+- **A block whose two columns agree needs no search at all.** That is every flat interior, so the partition runs
+  along boundaries only and the compositing stays cheap despite being on the whole-screen path.
+- **No detector means no blind spot.** `SmoothEdges` cannot see the checkerboard or the shade-band contours because
+  they are colour boundaries and its detector reads depth. This gives them the same half-cell precision it gives a
+  silhouette, and in the PNGs the near-field checkerboard diagonals are the most obviously improved thing on screen.
 
-- **I deleted a line of working code and it shipped in `fd3ca75`.** `DetectEdges` ended with
-  `if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);` — the entire visible effect of
-  the `Line` outline style. A comment above it was being replaced, the replacement consumed one line too many, and
-  because the result was a *complete statement removal* it compiled clean. `Line` marked its edges and drew nothing
-  for two commits.
+**Measured** (`--aa`, a 3-unit sphere against the sky at 120×40): the silhouette's placement error **halves**,
+0.65 → **0.32** half-cells RMS, and **11 of 21** silhouette rows move to a boundary *inside* a cell where before
+none could. Cost, at 200×50: shaded+ao **2.9 → 4.4 ms** and **18.1 → 25.7 KB** of ANSI a frame; solid
+**1.7 → 2.4 ms** and **12.0 → 17.4 KB**. So ~1.5× a frame, not 2× — the fill doubles, the emit and paint do not.
 
-  **The same slip happened twice in one session**; the other ate `var ink = Brighten(fg, EdgeBoost);` and was caught
-  instantly by the compiler. The difference is the whole lesson: an edit that removes a self-contained statement has
-  no syntactic evidence, so nothing but a test can find it.
+**The one place the plan was wrong: "at zero colour cost" is half true, and the wrong half is the one that shows up
+in a capture.** The *palette* genuinely does not grow — each group is represented by one of its own **members** (the
+medoid), never their average, so every colour emitted is one the renderer already produced, and there is a check
+asserting exactly that against the sub-pixel buffer. But emission still rises **42%**, because a boundary that now
+falls *between* two columns makes a cell differ from its neighbour where the two used to coalesce. Colours and runs
+are separate currencies and this spends the second one. Worth remembering before the next "free" idea: on this
+medium, *anything* that adds detail is paid for in run length.
 
-  **And no test could have.** Every silhouette check read the *detector* — which sub-pixels got marked — and not one
-  read what the marking then does to the picture. Two new checks close that: render with `Edges=None` and `Edges=Line`
-  and require the cells to differ (31 do), and require `Glyph` to differ from `Line`. Verified non-vacuous by
-  re-deleting the line: both fail with `0 cells differ`.
+**Two lessons from the measurement, which was wrong twice before it was right.**
 
-  **Generalisable rule for this codebase:** a check that asserts an internal mark is only half a check. `DetectEdges`
-  had 0-false-positive coverage on its *classification* and none at all on its *output*. Prefer asserting the pixels.
+1. **The obvious jaggedness metrics cannot see antialiasing at all.** Total zigzag (Σ|second difference| along the
+   silhouette) is nearly *invariant* here — an antialiased edge bends twice as often by half as much — and the first
+   version, a median absolute bend, reported **0.00 for every case including the broken ones**. What works is
+   *quantisation error*: how far each row's boundary sits from the midpoint of its two neighbours, RMS. A staircase
+   can only place a boundary on whole cells, so a row that should sit half a cell along is a whole half-cell out.
+2. **The scene has to be built for the measurement.** The `--aa` scene was a 0.6-unit sphere seen from 20 units; its
+   left silhouette gave 18 *scattered* rows and every placement statistic came back empty — which reads as "no
+   effect" rather than "nothing measured". It is now a 3-unit sphere at distance 11. Related: a "silhouette row" has
+   to be *defined* as one where sky was crossed to reach the boundary, or every row the ground fills edge to edge
+   reports a boundary in the first column — always an even one — and outnumbers the real silhouettes six to one.
+
+**The font gate the plan asked for passed**, and is now a permanent test rather than a one-off:
+[`SnapshotQuadrantFontTests`](../../tests/Jumbee.Console.Tests/SnapshotQuadrantFontTests.cs) renders each of the
+sixteen patterns and requires its ink to land in the quadrants it names. All sixteen are covered by the default
+snapshot font. Same failure shape as the Braille one — a missing glyph draws the *same box* for all sixteen, and no
+text assertion can see it.
+
+**And the sidebar constants moved for the fourth session running.** `SpacedRows` 61 → **63** (exact: it is the sum
+of the sections, 7+21+11+13+6+5). The harness's own floors moved too — `--shell` 36 → **37**, `--shell viewer`
+50 → **52** — because those checks read a panel by finding its text on screen, and one more row pushes the last
+section below the fold. Both are documented in the harness README now. This is the fourth time; open question 3.
+
+### Two bugs I caused, and what each one says about the tests
+
+**A crash, found by accident.** `HalfBlockSurface.Render` clamped its row loop against `ActualHeight` but its
+**column loop against `PixelWidth`** — the pixel buffer's own width. The buffer is sized at `BeginFrame`; a
+re-layout before the next paint can leave the control *smaller* than the frame drawn into it, and the write runs
+off the end of the console buffer. **Collapsing the sidebar with `u` and restoring it does exactly that**, so
+`u`, `u` with a solid or shaded renderer active could take the app down. Fixed by clamping both axes.
+
+It had hidden because the harness presses `v` early, leaving the *wireframe* — a `Canvas`, not a
+`HalfBlockSurface` — active for the sidebar-toggle checks. **A check that leaves global state behind hides bugs
+from every check after it.**
+
+**A deleted line of working code, which shipped.** `DetectEdges` ended with
+`if (EdgeStyle == SilhouetteStyle.Line) color[i] = Brighten(color[i], EdgeBoost);` — the entire visible effect of
+the `Line` outline style. A comment above it was being replaced, the replacement consumed one line too many, and
+because the result was a *complete statement removal* it compiled clean. `Line` marked its edges and drew nothing
+for two commits, until the user noticed a model looking wrong.
+
+The same slip happened twice in one session; the other ate `var ink = Brighten(fg, EdgeBoost);` and the compiler
+caught it in seconds. That difference is the lesson: **an edit that removes a self-contained statement leaves no
+syntactic evidence, so only a test can find it.**
+
+And no test could have. Every silhouette check read the *detector* — which sub-pixels got marked — and none read
+what the marking does to the picture. Two new checks close it (render with `Edges=None` vs `Edges=Line`, require
+the cells to differ; require `Glyph` to differ from `Line`), verified non-vacuous by re-deleting the line.
+**Generalisable rule: a check that asserts an internal mark is only half a check. Assert the pixels.**
 
 ### The sandbox sidebar scrolls, and the trap in making it
 
 `SpacedRows` is demoted rather than deleted: the panel still picks the compact layout in a short terminal, because
 seeing the whole panel beats scrolling for the camera pad. Scrolling is the **backstop** under that, so a stale
 `SpacedRows` now costs a scroll instead of a section, and the undocumented compact floor (42 rows, and 40 and 36
-before it) is gone — the harness passes at every height from **34** rows up, where the old floor was 42, and the app
-itself renders and scrolls correctly at 30.
+before it) is gone — the harness passes at every height from **37** rows up (re-measured after the Shades, Smooth and
+Quadrant AA rows), where the old floor was 42; the app itself renders and scrolls correctly below that.
 
 **The trap: the tier must be measured against the FRAME'S VIEWPORT, not the panel's `ActualHeight`.** Inside a
 scrolling frame a control is laid out at the height `IScrollable.MeasureHeight` reports (`Control.CalculateSize`
@@ -300,8 +330,8 @@ sections, so it *scrolls*). Sections are now grouped by which renderer owns them
 all three, **Shaded detail** (Edges + Half-Lambert light + Occlusion), **Wireframe mesh detail** (Even over screen
 + Detail + Scan).
 
-**The sidebar layout constants are hand-maintained and bit three times this session.** `SidebarPanel.SpacedRows` is
-now 53 and the compact tier's floor is a 40-row terminal; neither is derived from anything. A stale `SpacedRows`
+**The sidebar layout constants are hand-maintained and bit three times that session.** `SidebarPanel.SpacedRows` was
+53 then and is **63** now; neither it nor the harness floors are derived from anything. A stale `SpacedRows`
 fails only in the narrow band just above the threshold, where the spaced layout is chosen and then does not fit —
 so sweep heights, don't spot-check one. `--shell 200xH` asserts the camera pad is on screen.
 
@@ -479,9 +509,17 @@ uncommitted or unpushed work gives consumers 404s, or worse, source that silentl
 
 ## Backlog, in order
 
-Still open from the vtop eval loop. Evidence for each is in `eval-findings.md`.
+1. **Quadrant-glyph silhouette AA** — the agreed next task, and the sequel to the edge blend that shipped and
+   underwhelmed. A cell carries exactly two colours; a silhouette is exactly a two-colour boundary; so a quadrant
+   glyph places that boundary at 2×2 resolution *within* the cell at zero colour cost. Needs per-quadrant coverage,
+   so supersampling — but only at cells `DetectEdges` already flagged, making the cost track perimeter not area.
+   **First step is a font check**: quadrant blocks are U+2596–259F; run them through the multi-font snapshot test
+   before building anything. The `EdgeStyle.Glyph` path already does "substitute a glyph at an edge cell", so the
+   machinery exists.
 
-1. **V-13 — `ControlFrame` can't put a second label on a border edge.** Four separate runs hit this; it's why
+The rest are still open from the vtop eval loop; evidence for each is in `eval-findings.md`.
+
+2. **V-13 — `ControlFrame` can't put a second label on a border edge.** Four separate runs hit this; it's why
    vtop's `─ CPU Usage ──────── 19% ─` can't be expressed and everyone prints into the content area instead.
    Highest evidence count of anything still open. Now also noted as a known limitation in
    `docs/controls/Control Model.md`.
@@ -534,6 +572,12 @@ bespoke delegate types while everything else is now `EventHandler`.
   consecutive clean 976/976 runs — the cleanest the suite has been. If a stray failure returns, **check whether the
   class touches `UI.Overlay`, `UI.SetFocus` or `ConsoleSnapshot`'s static mouse state without resetting it** before
   suspecting a regression.
+
+  **It has not gone away.** This session it recurred once as
+  `ValueTypeEqualityTests.BehavesAsAValueType(type: "Character")` — 1035/1036 — then three consecutive clean
+  1036/1036 runs with no change in between, and nothing in the session went near `Character`. The signature is
+  unchanged: a *different* test each time, always green in isolation. Treat a lone full-suite failure as this until
+  a second run reproduces it.
 - **A doc example can be compile-clean and visibly broken.** See open question 1. When touching a doc snippet that
   builds a layout, render it — the three-line check is `ConsoleSnapshot.ToText(layout, w, h)` plus reading
   `ActualWidth` on each child.

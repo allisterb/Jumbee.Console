@@ -206,6 +206,35 @@ internal static class ShellChecks
         view.SetShadeLevels(ShadedRenderer.DefaultShadeLevels);
         Draw();
 
+        // The other resolution dial, and a switch rather than a slider -- so it is read back off the SCREEN by
+        // requiring its row to change, which no glyph is hard-coded into. A switch wired to nothing, or laid out at
+        // zero width, fails here; asserting view.QuadrantSampling alone would pass in both cases.
+        // Sliced to the SIDEBAR's columns, not the whole row. The row also crosses the viewport, where a live
+        // physics scene changes every frame — so comparing whole rows would pass whatever the switch did.
+        static string SwitchRow(ILayout root, int width, int height, string label)
+        {
+            var lines = ConsoleSnapshot.ToLines(ConsoleSnapshot.Render(root, width, height));
+            var line = Array.Find(lines, l => l.Contains(label));
+            if (line is null) return "";
+            var from = Math.Max(0, Math.Min(line.Length, width - SidebarPanel.Columns));
+            return line[from..];
+        }
+
+        view.SetQuadrantSampling(false);
+        Draw();
+        var quadOffRow = SwitchRow(root, width, height, "Quadrant AA");
+        view.SetQuadrantSampling(true);
+        Draw();
+        var quadOnRow = SwitchRow(root, width, height, "Quadrant AA");
+        Check("the quadrant switch is on the panel", quadOffRow.Length > 0, quadOffRow.Trim());
+        Check("and follows the renderer", quadOnRow != quadOffRow && view.QuadrantSampling == true,
+            $"{quadOffRow.Trim()} -> {quadOnRow.Trim()}");
+        Check("and the renderer really doubled its sampling",
+            view.Renderer is MeshRenderer { Surface: HalfBlockSurface { SamplesPerColumn: 2 } },
+            $"{(view.Renderer.Surface as HalfBlockSurface)?.SamplesPerColumn} samples per column");
+        view.SetQuadrantSampling(false);
+        Draw();
+
         Console.WriteLine("\nno feedback loop:");
         var refreshes = 0;
         view.Spawn.Changed += () => refreshes++;

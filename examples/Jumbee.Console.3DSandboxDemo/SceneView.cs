@@ -48,13 +48,33 @@ public sealed class SceneView : CompositeControl
     /// <summary>The renderer currently drawing the scene.</summary>
     public ISceneRenderer Renderer => renderer;
 
+    /// <summary>
+    /// Whether this scene has a selection at all — true for the sandbox, false for the model viewer.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the source rather than set by the shell, because it is a fact about the scene and not a
+    /// preference: selecting is only meaningful where something can be grabbed, thrown or deleted, and all three go
+    /// through a <see cref="PhysicsRunner"/>. A scene without one has a single subject that is always the subject.
+    /// <para>
+    /// It exists because selecting in the viewer was <b>actively harmful</b>: a selected body is tinted
+    /// <see cref="Palette.Selection"/> (white), which silently overrode the Colour drop-down — and since nothing in
+    /// the viewer's key map clears a selection, the model stayed white for the rest of the session and through every
+    /// model after it.
+    /// </para>
+    /// </remarks>
+    public bool SupportsSelection => runner is not null;
+
     /// <summary>The selected body's id, or <see langword="null"/>. Selection is by id, not index, so it survives
-    /// bodies being deleted around it.</summary>
+    /// bodies being deleted around it. Always <see langword="null"/> when <see cref="SupportsSelection"/> is not
+    /// set.</summary>
     public int? Selected
     {
         get => selected;
         set
         {
+            // Refused here rather than at each caller: the mouse, Tab and the select-the-newest-spawn tick all
+            // write this, and a guard on one of the three is a bug waiting for the next route to be added.
+            if (!SupportsSelection) value = null;
             var changed = selected != value;
             selected = value;
             renderer.Selected = value;
@@ -170,6 +190,21 @@ public sealed class SceneView : CompositeControl
         RendererChanged?.Invoke();
     }
 
+
+    /// <summary>Whether the active renderer samples twice per column, or <see langword="null"/> under the wireframe,
+    /// which draws no half-block cells to composite.</summary>
+    /// <remarks>Like <see cref="ShadeLevels"/> and unlike the shaded-only dials, BOTH solid renderers have this and
+    /// each keeps its own setting across a renderer swap.</remarks>
+    public bool? QuadrantSampling => renderer is MeshRenderer m ? m.QuadrantSampling : null;
+
+    /// <summary>Turns quadrant sampling on or off. A no-op under the wireframe. See
+    /// <see cref="MeshRenderer.QuadrantSampling"/>.</summary>
+    public void SetQuadrantSampling(bool on)
+    {
+        if (renderer is not MeshRenderer mesh || mesh.QuadrantSampling == on) return;
+        mesh.QuadrantSampling = on;
+        RendererChanged?.Invoke();
+    }
 
     /// <summary>How hard silhouettes are blended into their surroundings, or <see langword="null"/> under a renderer
     /// that has no edge pass.</summary>
@@ -370,7 +405,11 @@ public sealed class SceneView : CompositeControl
         CaptureMouse();
 
         var snapshot = Drawn ?? source.Snapshot;
-        var hit = renderer.Pick(position.X, position.Y, snapshot, Camera);
+        // Not merely "the pick is ignored": a scene with nothing to grab must ORBIT here, or a press on the model
+        // is dead — neither selecting nor turning it, which is how this read as "sometimes it rotates and sometimes
+        // it goes white". Which you got depended on whether the pointer landed within the pick radius of the
+        // model's projected CENTRE, so the bunny's ears orbited and its body did not.
+        var hit = SupportsSelection ? renderer.Pick(position.X, position.Y, snapshot, Camera) : null;
         if (hit is not { } id)
         {
             orbiting = true;

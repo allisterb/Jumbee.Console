@@ -59,6 +59,9 @@ public static class SceneMenu
                 Enabled = view.WrapLighting is not null,
                 Shortcut = "w",
             },
+            // No shortcut, like the Shades and Smooth dials it sits beside in the sidebar: it is a quality setting
+            // you pick once, not something to reach for mid-orbit, and the key map is crowded enough.
+            QuadrantItem(view),
         ]);
 
         bar.Add("Spawn", () =>
@@ -137,6 +140,7 @@ public static class SceneMenu
                 Enabled = view.WrapLighting is not null,
                 Shortcut = "w",
             },
+            QuadrantItem(view),
             MenuItem.Separator,
             .. MeshDetailItems(view),
         ]);
@@ -154,6 +158,15 @@ public static class SceneMenu
     #endregion
 
     #region Private methods
+    // Greyed out under the wireframe rather than under the non-shaded renderers: both solid renderers composite
+    // through the half-block surface, so both have it — the same gating the Shades dial uses.
+    private static MenuItem QuadrantItem(SceneView view) =>
+        new MenuItem("Quadrant antialiasing", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
+        {
+            Checked = view.QuadrantSampling ?? false,
+            Enabled = view.QuadrantSampling is not null,
+        };
+
     private static IEnumerable<MenuItem> EdgeItems(SceneView view) =>
         new[] { SilhouetteStyle.None, SilhouetteStyle.Line, SilhouetteStyle.Glyph }.Select(style =>
             new MenuItem("Edges: " + style.ToString().ToLowerInvariant(), () => view.SetEdgeStyle(style))
