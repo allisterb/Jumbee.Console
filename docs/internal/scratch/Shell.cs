@@ -297,9 +297,9 @@ internal static class ShellChecks
         view.SetQuadrantSampling(false);
         Draw();
         // The label, not the property name -- so a rename in the panel fails HERE rather than silently reading an
-        // empty row. It has been "Quadrant AA", "AA" and now "Anti-Aliasing"; each rename broke this line, which is
-        // the check doing its job. Held in one constant so the next one is a single edit.
-        const string aaLabel = "Anti-Aliasing";
+        // empty row. It has been "Quadrant AA", "AA", "Anti-Aliasing" and now "Quadrant glyphs"; each rename broke
+        // this line, which is the check doing its job. Held in one constant so the next one is a single edit.
+        const string aaLabel = "Quadrant glyphs";
         var quadOffRow = SwitchRow(root, width, height, aaLabel);
         view.SetQuadrantSampling(true);
         Draw();

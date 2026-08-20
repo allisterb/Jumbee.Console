@@ -1,11 +1,72 @@
-# Handoff — the 3D demo (living note, last updated 2026-08-19)
+# Handoff — the 3D demos (living note, last updated 2026-08-20)
 
-Living "where we are / what's next" note. Companion to [`eval-findings.md`](eval-findings.md), which is the full
-backlog with evidence; this is the short version plus the operational context you'd otherwise have to rediscover.
-It is written newest-first: the sections under **2026-08-19** and **2026-08-17** are each a session's findings, and
-everything from *Where things stand* down is standing context.
+Living "where we are / what's next" note, now covering two arcs: the **Wolf3D walkthrough** (newest) and the
+**3D sandbox**. Companion to [`eval-findings.md`](eval-findings.md), which is the full backlog with evidence; this
+is the short version plus the operational context you'd otherwise have to rediscover. Written newest-first — each
+dated section is one session, and the standing context for each arc sits under its own *Where things stand*.
 
-## Next session starts here
+## Next session starts here — Wolf3D
+
+**HEAD is `77eefa9` "Add weapons, sprites, working doors. Fix quad draw surface bug."** and the tree is clean.
+The demo runs, is walkable, and every check passes.
+
+```bash
+examples.cmd wolf3d                          # play it
+dotnet run --project docs/internal/scratch/wolf3d -c Release             # 49 checks
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- surfaces # the glyph-grid measurements
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- perf     # ANSI bytes per frame
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
+```
+
+### The three things most likely to bite
+
+1. **The running demo locks its own exe.** Every session hit `MSB3021`/`MSB3026` at least twice. Close it before
+   building, or use `-t:Compile` to type-check without linking. "I don't see my change" is always this.
+2. **A quadrant sub-pixel is NOT square** — half a cell wide, a whole half-cell tall. Anything assuming squareness
+   breaks; the vendored sprite projector does, and every sprite rendered at half width for a while before anyone
+   noticed. `Wolf3DRenderer` compensates by rendering the framebuffer at `h × SamplesPerColumn` and row-sampling
+   back. If you add any sprite or image drawing, check it in **both** surface modes.
+3. **`engine/` is vendored upstream and must not be edited.** The only addition is `Logger.cs`, a shim so the
+   copied files stay byte-identical. Everything Jumbee-specific lives one directory up.
+
+### What is unfinished, in order
+
+- **`--verify` is not wired into any build script** — there is a task chip for this. `build-docker.*` build and tag
+  both images with nothing checking them, and `audio-scope` / `3dsandbox` still have no `--verify` at all.
+- **The pad's Open/Fire are the only game verbs.** `GameSession` (1,502 vendored lines) also has pushwalls,
+  elevators, pickups and level progression, none of them driven. Pushwalls are the cheapest next one.
+- **Sextants are blocked, not rejected.** Worth only ~10% over quadrant, and gated on `Character.Content` being
+  `char?` (U+1FB00+ is non-BMP) *and* on a Cascadia new enough to have the glyphs. Revisit if either changes.
+- **The observed-palette quantiser** measured as a real mid-range Pareto win (32 colours: 125% error at 59% bytes
+  vs the 10-level lattice's 113% at 68%) but needs a per-level LUT to be fast. Not implemented.
+- **`HalfBlockSurface` is duplicated** between this demo and the 3D sandbox — 507 identical lines but for the
+  namespace. A second consumer is the argument for promoting it into the library; it did not happen because the
+  sandbox has uncommitted work and `scratch/render3d.csproj` compiles that directory by path.
+
+### Where things stand — Wolf3D
+
+`examples/Jumbee.Console.Wolf3DDemo`: **2,273 lines of demo over 7,780 vendored** from
+[Wolfenshine](https://github.com/deanthecoder/Wolfenshine). Real maps, textures, scenery sprites, doors that open,
+and a firing pistol, on a half-block pixel surface. Game data is not redistributable and is gitignored — and
+excluded from the Docker context separately, because Docker does not read `.gitignore`.
+
+The measurements that drove every decision are in the demo's
+[README](../../examples/Jumbee.Console.Wolf3DDemo/README.md); the short version:
+
+| finding | number |
+|---|---|
+| ANSI cost tracks colour **runs**, not colour count | 25–34 bytes per run, every configuration |
+| A moving frame at 200×52 | 46 KB quantised, 86 KB not — ~1.4 MB/s at 30 fps |
+| Quantiser default, measured (non-monotonic — 10 beats 12) | **10 levels**: 113% of full-palette error at 68% of bytes |
+| The two-colour-per-cell ceiling caps the whole glyph ladder | best possible is −33% error; sextant over quadrant is −10% |
+| Compute is never the constraint | raycast ~0.5 ms, emit dominates |
+
+Two design notes worth not rediscovering. **A terminal has no key-up event**, so `Wolf3DView.Axis` infers held keys
+from the auto-repeat stream — one window per *axis* so the opposite key reverses, the window sized from the
+*measured* repeat interval, and a coast that covers the OS initial delay. **All input enters through
+`Wolf3DView.Send`**, so the sidebar pad is literally a key tap rather than a synthetic keystroke.
+
+## Next session starts here — the 3D sandbox
 
 ### State of the tree
 
@@ -56,6 +117,37 @@ Each has a section below with the measurements and what they cost to learn.
 settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture decisions that outweigh
 every encoder setting.
 
+## 2026-08-20 — Wolf3D, from feasibility question to walkable demo
+
+One session, start to finish: "could we render pseudo-3D from the real game assets?" to a playable walkthrough with
+a tuning sidebar. What it cost to learn, in the order it was learned.
+
+**The feasibility answer was a grep.** Wolfenshine's `Rendering/ Maps/ Graphics/ Resources/ Game/` have zero
+Avalonia and zero SkiaSharp imports and no threads, and `SoftwareRaycastRenderer` writes into a plain
+`Span<byte>`. SkiaSharp lives only in the enhanced renderer (an SKSL GPU shader, unportable) and a `#if DEBUG`
+screenshot path. That one check turned "is this feasible" into "which 2,000 lines do we copy".
+
+**Vendor the layer whole, do not cherry-pick.** The Stage 0 spike cherry-picked 33 files and hit the missing-file
+wall twice in one build. Copying all 64 unmodified means `GameSession` is already there when it is wanted — which
+is exactly how doors got implemented for almost nothing later in the session.
+
+**Three bugs found by playing, none by the tests.** The input dead zone (per-key sustain windows summing to zero on
+reversal), the focus trap (three separate causes: `WantsMouse => false`, Tab hijacked as a global hotkey, and
+Escape quitting unconditionally), and the half-width sprites in quadrant mode. Each became a check afterwards; none
+would have been caught by the checks that existed before. **Play the demo.**
+
+**Measure before building.** Sextants looked like the obvious next step and the measurements killed it — 10% over
+quadrant, against a core hot-path type change plus a font that this machine does not have. The same harness then
+found the change actually worth making, which was a one-constant quantiser default worth 27%.
+
+**Prove a fix by reverting it.** The sprite-aspect fix was confirmed by forcing the old path back and watching the
+check fail: 23 cells vs 12. Two other "bugs" this session turned out to be my own misreading of a PNG, both settled
+by dumping the buffer instead of squinting.
+
+**Correct yourself in public when the numbers move.** Quadrant was reported at "45% of half-block's error" before
+the ground truth was re-based to a neutral 2×12 grid; the honest figure is 86%. The earlier number flattered
+quadrant because the truth was sampled at quadrant's own resolution.
+
 ## 2026-08-19 — antialiasing, a bug from play, and STL
 
 Four arcs, in the order they happened. Each records what was measured as well as what was built, because in three
@@ -65,8 +157,8 @@ of the four the measurement is what changed the decision.
 
 `HalfBlockSurface.QuadrantSampling` samples **twice per column** and composites each 2×2 block into whichever of the
 sixteen quadrant glyphs best fits its four colours. Surfaced as `MeshRenderer.QuadrantSampling` (so **both** solid
-renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, an **Anti-Aliasing** switch
-in both sidebars (under Half-Lambert, with the post-processing settings) and an unshortcutted item in both Render menus.
+renderers have it, like `ShadeLevels`), `SceneView.QuadrantSampling`/`SetQuadrantSampling`, a **Quadrant glyphs**
+switch in both sidebars (first of the switches, ahead of Half-Lambert) and an unshortcutted item in both Render menus.
 
 **It came out simpler than the plan, and the simplification is the interesting part.** The plan said "picking the
 pattern needs per-quadrant coverage, so supersampling, but only at cells the edge pass already flagged" — a second,
@@ -122,9 +214,11 @@ text assertion can see it.
 Once quadrant AA existed, the user's read on the first stage was that it *"didn't do much"* — which is what the
 numbers had already said — so `ShadedRenderer.EdgeSmoothing`, `HalfBlockSurface.SmoothEdges`, its `blend` buffer,
 `SceneView.EdgeSmoothing`/`SetEdgeSmoothing` and the **Smooth** slider in both sidebars are all gone. The remaining
-toggle is relabelled — **AA** at first, then **Anti-Aliasing**, in the sidebars and the menu alike; the property
-stays `QuadrantSampling`, which names
-the mechanism rather than the feature and is still accurate.
+toggle is relabelled — **AA** at first, then **Anti-Aliasing**, and finally **Quadrant glyphs**, in the sidebars and
+the menu alike. The last rename was the user's, and it settles what the earlier ones fudged: nothing here is blended,
+so "antialiasing" named the effect and not the mechanism. The label now matches the property, which was always
+`QuadrantSampling`. It also moved above Half-Lambert in both panels and both menus — it changes the picture far more
+than the lighting toggle does, and was sitting second.
 
 **The measurement that decided it**, from `--aa` with both live at once — they are independent stages, so this was a
 real question rather than a choice between two implementations of one thing:

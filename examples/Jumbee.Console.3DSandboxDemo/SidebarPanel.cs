@@ -292,7 +292,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
             // a large model is examined and does nothing to a model below that cap.
             new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                wrapLighting, quadrants, occlusion, shade, stratify, density, Labelled("Scan", scanCap)),
+                quadrants, wrapLighting, occlusion, shade, stratify, density, Labelled("Scan", scanCap)),
                 9 + (8 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
@@ -383,14 +383,19 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     private readonly Slider shade = Param("Shade Levels", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "F0");
 
-    // The antialiasing toggle. Off by default -- it costs about half again as much per frame, and this is a demo
-    // that should look cheap until you ask it not to. Both solid renderers composite through the surface, so it
-    // greys out only under the wireframe -- same gating as Shades.
+    // Half-cell horizontal resolution: the surface samples twice per column and composites each 2x2 block into the
+    // best-fitting quadrant glyph. Named for what it draws rather than for what it resembles -- nothing is blended,
+    // so calling it antialiasing described the effect and not the mechanism. Off by default: it costs about half
+    // again as much per frame, and this is a demo that should look cheap until you ask it not to. Both solid
+    // renderers composite through the surface, so it greys out only under the wireframe -- same gating as Shades.
     //
-    // There was a second AA control here, a Smooth slider blending detected edge sub-pixels. It was removed once
-    // this one existed: measured, it made the silhouette placement slightly WORSE while costing 43% more distinct
-    // fg/bg pairs, and having two controls where one of them does nothing you can see is worse than having one.
-    private readonly Switch quadrants = new Switch("Anti-Aliasing");
+    // First of the switches, ahead of Half-Lambert: of everything in this section it moves the picture the most.
+    //
+    // There was a second control here, a Smooth slider blending detected edge sub-pixels -- the one thing here that
+    // WAS antialiasing. It was removed once this one existed: measured, it made the silhouette placement slightly
+    // WORSE while costing 43% more distinct fg/bg pairs, and having two controls where one of them does nothing you
+    // can see is worse than having one.
+    private readonly Switch quadrants = new Switch("Quadrant glyphs");
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =
         new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };

@@ -67,3 +67,29 @@ Adding Quadrant AA took them to 37 and 52; removing the Smooth slider brought th
 The `--solid` ASCII dump is kept only for quick structural checks. **Do not judge a render from it** — piping it
 through a shell mangles `▀`, braille and `◆◇◈◊` into `?`, and it is very easy to mistake that for the renderer's
 output. Use `--png`, which sets `FontFamily = "Cascadia Mono"` for glyph coverage.
+
+## wolf3d/ — the Wolf3D walkthrough harness
+
+A second parked harness, same idea and the same standing argument for promotion: **49 checks**, and it has caught
+several shipped bugs (the sprite-aspect break under quadrant sampling, the pad's focus trap, the input dead zone).
+
+```bash
+dotnet run --project docs/internal/scratch/wolf3d -c Release             # the 49 checks
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- surfaces # glyph-grid + quantiser measurements
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- perf     # ANSI bytes per frame
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- rows     # buffer rows as text, to settle "is that spill?"
+```
+
+It needs the demo's game data present at `examples/Jumbee.Console.Wolf3DDemo/GameData` (see that folder's README).
+
+**`render3d.csproj` now carries a `<Compile Remove="wolf3d\**\*.cs" />`** — the SDK's default glob would otherwise
+sweep this harness's sources into it and break it. Any future sibling harness needs the same line.
+
+Two lessons from writing the checks that are worth keeping:
+
+- **Test what reaches the screen, not what a counter says.** The `--verify` path and the sprite-aspect check both
+  assert against composited cells; a frame drawn before the first layout renders nothing at all, and would have
+  passed any check that trusted the renderer's own numbers.
+- **Reset the scene between measurements.** The first bandwidth run left the camera buried in a wall by row three,
+  and every row after that was measuring a static frame while looking like a real result.

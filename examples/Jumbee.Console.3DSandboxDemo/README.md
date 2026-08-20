@@ -127,10 +127,11 @@ under the wireframe, which composites no cells.
 Raising it smooths the banding on a curved surface and costs ANSI bytes, because neighbouring cells stop sharing a
 colour and the emitter's runs break up.
 
-**Anti-Aliasing** is the space axis. The surface samples twice per column and each 2×2 block is composited into whichever of
-the sixteen quadrant glyphs (`▘▝▖▗▌▐▞▚▛▜▙▟▀▄█`) best fits its four colours — so a silhouette can land *between* two
-columns instead of only on the boundary between them. `▀` is one of those sixteen and wins whenever the block's
-structure really is horizontal, so this only ever adds resolution; it never trades the vertical resolution away.
+**Quadrant glyphs** is the space axis. The surface samples twice per column and each 2×2 block is composited
+into whichever of the sixteen quadrant glyphs (`▘▝▖▗▌▐▞▚▛▜▙▟▀▄█`) best fits its four colours — so a silhouette
+can land *between* two columns instead of only on the boundary between them. `▀` is one of those sixteen and
+wins whenever the block's structure really is horizontal, so this only ever adds resolution; it never trades the
+vertical resolution away.
 The two colours it emits are members of the block, never a blend of them, so the palette is untouched — everything
 stays on the quantised ramp.
 
@@ -142,10 +143,14 @@ that used to coalesce. Off by default for that reason.
 
 ### The blend that came first, and why it is gone
 
-There was a second AA control here, a **Smooth** slider. It blended each detected edge sub-pixel toward its
-neighbours: no extra sampling, and a cost tracking silhouette *perimeter* rather than screen *area*, which made it
-much the cheaper idea. Two things were wrong with it, and both are worth knowing before reaching for the same trick
-elsewhere.
+The switch was called **Anti-Aliasing** for a while, and the name was wrong: nothing here is blended. It buys its
+smoothness by subdividing the sample grid and quantising each block better, and every colour it emits is one that
+was already in the block. It is named for that now.
+
+There was a second control here that genuinely was antialiasing, a **Smooth** slider. It blended each detected
+edge sub-pixel toward its neighbours: no extra sampling, and a cost tracking silhouette *perimeter* rather than
+screen *area*, which made it much the cheaper idea. Two things were wrong with it, and both are worth knowing
+before reaching for the same trick elsewhere.
 
 It blends **whole** sub-pixels where real antialiasing blends *within* one. On a body a dozen sub-pixels across a
 one-sub-pixel ring is ~8% of the diameter per side, so full strength reads as erosion — the body visibly shrinks —

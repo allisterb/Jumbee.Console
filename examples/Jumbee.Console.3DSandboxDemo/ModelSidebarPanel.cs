@@ -78,7 +78,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
             // the shaded renderer's, so they belong together.
             new Section("Shaded detail",
-                Spaced(Labelled("Edges", edges), wrapLighting, quadrants, occlusion, shade), 9),
+                Spaced(Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade), 9),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -275,9 +275,12 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "Shade Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
 
-    // The antialiasing toggle: half-cell horizontal resolution on every boundary, silhouette or not. See
-    // HalfBlockSurface.QuadrantSampling. Greys out under the wireframe only, like Shades.
-    private readonly Switch quadrants = new Switch("Anti-Aliasing");
+    // Half-cell horizontal resolution on every boundary, silhouette or not: the surface samples twice per column
+    // and each 2x2 block becomes the quadrant glyph that best fits it. See HalfBlockSurface.QuadrantSampling. Named
+    // for the mechanism rather than for the effect -- nothing is blended, so it is not really antialiasing. First
+    // of the switches: it moves the picture more than anything else here. Greys out under the wireframe only, like
+    // Shades.
+    private readonly Switch quadrants = new Switch("Quadrant glyphs");
 
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =

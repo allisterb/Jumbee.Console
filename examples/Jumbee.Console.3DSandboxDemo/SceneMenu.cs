@@ -53,15 +53,16 @@ public static class SceneMenu
             MenuItem.Separator,
             .. MeshDetailItems(view),
             MenuItem.Separator,
+            // Ahead of Half-Lambert, as in the sidebar: it changes the picture more than anything else in here. No
+            // shortcut, like the Shades dial it sits beside: it is a quality setting you pick once, not something to
+            // reach for mid-orbit, and the key map is crowded enough.
+            QuadrantItem(view),
             new MenuItem("Half-Lambert lighting", () => view.SetWrapLighting(!(view.WrapLighting ?? false)))
             {
                 Checked = view.WrapLighting ?? false,
                 Enabled = view.WrapLighting is not null,
                 Shortcut = "w",
             },
-            // No shortcut, like the Shades dial it sits beside in the sidebar: it is a quality setting
-            // you pick once, not something to reach for mid-orbit, and the key map is crowded enough.
-            QuadrantItem(view),
         ]);
 
         bar.Add("Spawn", () =>
@@ -134,13 +135,13 @@ public static class SceneMenu
             }),
             MenuItem.Separator,
             .. EdgeItems(view),
+            QuadrantItem(view),
             new MenuItem("Half-Lambert lighting", () => view.SetWrapLighting(!(view.WrapLighting ?? false)))
             {
                 Checked = view.WrapLighting ?? false,
                 Enabled = view.WrapLighting is not null,
                 Shortcut = "w",
             },
-            QuadrantItem(view),
             MenuItem.Separator,
             .. MeshDetailItems(view),
         ]);
@@ -161,7 +162,7 @@ public static class SceneMenu
     // Greyed out under the wireframe rather than under the non-shaded renderers: both solid renderers composite
     // through the half-block surface, so both have it — the same gating the Shades dial uses.
     private static MenuItem QuadrantItem(SceneView view) =>
-        new MenuItem("Anti-Aliasing", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
+        new MenuItem("Quadrant glyphs", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
         {
             Checked = view.QuadrantSampling ?? false,
             Enabled = view.QuadrantSampling is not null,
