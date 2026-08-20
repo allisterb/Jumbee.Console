@@ -14,14 +14,30 @@ using ConsoleGUI.Space;
 /// <para>
 /// <b>A terminal reports key presses, not key state.</b> There is no key-up event, so "is W held?" cannot be
 /// answered — holding a key produces one press, a pause of a few hundred milliseconds, then the OS auto-repeat
-/// stream. Moving one step per press therefore gives a lurch, a stall, then a stutter, which is nothing like
-/// walking.
+/// stream. Moving one step per press gives a lurch, a stall, then a stutter, which is nothing like walking.
 /// </para>
 /// <para>
-/// So each press opens a <see cref="SustainMs"/> window instead, and the frame clock — not the key — integrates
-/// movement while a window is open. Auto-repeat keeps extending it, releasing lets it lapse. The cost is that
-/// movement overruns the release by up to that window; the window is sized to just outstrip a typical auto-repeat
-/// interval, which is the shortest value that still bridges the gap between repeats.
+/// So each press opens a sustain window and the frame clock — not the key — integrates movement while it is open.
+/// Three things make that feel like holding a key rather than like lag:
+/// </para>
+/// <list type="number">
+/// <item><b>The window belongs to an <see cref="Axis"/>, not to a key.</b> Forward/back, strafe left/right and
+/// turn left/right are one axis each, carrying a single direction. Pressing the opposite key <em>reverses</em> the
+/// axis at once instead of opening a second window that cancels the first out to nothing. Two independent windows
+/// was the first version, and it read as heavy input lag: after turning right, a left press bought exactly zero
+/// turn until the right window lapsed.</item>
+/// <item><b>The window is measured from the repeat stream, not guessed.</b> Presses arriving closer together than
+/// <see cref="RepeatGapMs"/> are auto-repeat, so their spacing is the real repeat interval; the window becomes a
+/// small multiple of it. That is far tighter than any fixed value — release stops the player in about a repeat and
+/// a half rather than in a fixed quarter-second.</item>
+/// <item><b>Before the first repeat arrives, speed decays instead of stopping.</b> The OS initial repeat delay is
+/// longer than any window short enough to make a tap feel like a tap, so a fixed window <em>always</em> stalls
+/// once at the start of a hold. Coasting turns that unavoidable gap into a slight slow-down that the first repeat
+/// restores. Once repeats are flowing we know the key is genuinely held, so release goes back to being crisp.</item>
+/// </list>
+/// <para>
+/// What remains is a tap moving a little further than the key was down for, which is the irreducible cost of not
+/// being told when the key came up.
 /// </para>
 /// </remarks>
 public sealed class Wolf3DView : CompositeControl
@@ -83,31 +99,31 @@ public sealed class Wolf3DView : CompositeControl
         if (inputEventArgs.InputEvent is not { } inputEvent) return false;
 
         var key = inputEvent.Key;
-        var running = (key.Modifiers & ConsoleModifiers.Shift) != 0;
+        var run = (key.Modifiers & ConsoleModifiers.Shift) != 0;
         var handled = true;
         switch (key.Key)
         {
-            case ConsoleKey.UpArrow: Press(ref forwardUntil, running); break;
-            case ConsoleKey.DownArrow: Press(ref backUntil, running); break;
-            case ConsoleKey.LeftArrow: Press(ref turnLeftUntil, running); break;
-            case ConsoleKey.RightArrow: Press(ref turnRightUntil, running); break;
-            default: handled = HandleChar(char.ToLowerInvariant(key.KeyChar), running); break;
+            case ConsoleKey.UpArrow: Press(move, +1, run); break;
+            case ConsoleKey.DownArrow: Press(move, -1, run); break;
+            case ConsoleKey.LeftArrow: Press(turn, -1, run); break;
+            case ConsoleKey.RightArrow: Press(turn, +1, run); break;
+            default: handled = HandleChar(char.ToLowerInvariant(key.KeyChar), run); break;
         }
 
         if (handled) inputEvent.Handled = true;
         return handled;
     }
 
-    private bool HandleChar(char c, bool running)
+    private bool HandleChar(char c, bool run)
     {
         switch (c)
         {
-            case 'w': Press(ref forwardUntil, running); return true;
-            case 's': Press(ref backUntil, running); return true;
-            case 'a': Press(ref turnLeftUntil, running); return true;
-            case 'd': Press(ref turnRightUntil, running); return true;
-            case 'q': Press(ref strafeLeftUntil, running); return true;
-            case 'e': Press(ref strafeRightUntil, running); return true;
+            case 'w': Press(move, +1, run); return true;
+            case 's': Press(move, -1, run); return true;
+            case 'a': Press(turn, -1, run); return true;
+            case 'd': Press(turn, +1, run); return true;
+            case 'q': Press(strafe, -1, run); return true;
+            case 'e': Press(strafe, +1, run); return true;
             case '[': Scene.LoadLevel(Scene.LevelIndex - 1); Changed?.Invoke(); return true;
             case ']': Scene.LoadLevel(Scene.LevelIndex + 1); Changed?.Invoke(); return true;
             case 'r': Scene.Restart(); Changed?.Invoke(); return true;
@@ -115,12 +131,11 @@ public sealed class Wolf3DView : CompositeControl
         }
     }
 
-    // Opens (or extends) this axis's sustain window. Running widens the step rather than the window, so a run does
-    // not also make the overrun longer.
-    private void Press(ref long until, bool running)
+    // Running widens the step rather than the window, so a run does not also lengthen the overrun.
+    private void Press(Axis axis, int direction, bool run)
     {
-        until = clock.ElapsedMilliseconds + SustainMs;
-        this.running = running;
+        axis.Press(direction, clock.ElapsedMilliseconds);
+        running = run;
         Focus();
     }
 
@@ -148,18 +163,17 @@ public sealed class Wolf3DView : CompositeControl
     {
         var now = clock.ElapsedMilliseconds;
         var speed = (running ? RunTilesPerSecond : WalkTilesPerSecond) * dt;
-        var turn = (running ? RunTurnRadians : WalkTurnRadians) * dt;
-        var forward = (Held(forwardUntil, now) ? speed : 0) - (Held(backUntil, now) ? speed : 0);
-        var strafe = (Held(strafeRightUntil, now) ? speed : 0) - (Held(strafeLeftUntil, now) ? speed : 0);
-        var rotate = (Held(turnRightUntil, now) ? turn : 0) - (Held(turnLeftUntil, now) ? turn : 0);
+        var radians = (running ? RunTurnRadians : WalkTurnRadians) * dt;
+
+        var rotate = turn.Advance(dt, now) * radians;
+        var forward = move.Advance(dt, now) * speed;
+        var sideways = strafe.Advance(dt, now) * speed;
         if (rotate != 0) Scene.Turn(rotate);
-        if (forward != 0 || strafe != 0) Scene.Move(forward, strafe);
+        if (forward != 0 || sideways != 0) Scene.Move(forward, sideways);
 
         Renderer.Draw(surface);
         CountFrame(now);
         Changed?.Invoke();
-
-        static bool Held(long until, long now) => now < until;
     }
 
     private void CountFrame(long now)
@@ -172,9 +186,89 @@ public sealed class Wolf3DView : CompositeControl
     }
     #endregion
 
+    #region Child types
+    /// <summary>
+    /// One movement axis — forward/back, strafe, or turn — driven by presses that never say when they stopped.
+    /// </summary>
+    /// <remarks>
+    /// Holds a single direction, so the opposite key reverses rather than cancelling; learns the auto-repeat
+    /// interval from the presses themselves; and coasts rather than stopping until the first repeat proves the key
+    /// is being held. See the notes on <see cref="Wolf3DView"/>.
+    /// </remarks>
+    private sealed class Axis
+    {
+        /// <summary>Registers a press in <paramref name="direction"/> (-1 or +1) at <paramref name="now"/> ms.</summary>
+        public void Press(int direction, long now)
+        {
+            if (direction != this.direction)
+            {
+                // A reversal, or the first press after a stop. Either way the repeat stream has restarted, so what
+                // was learned about the old one says nothing about this one.
+                this.direction = direction;
+                sawRepeat = false;
+                repeatMs = 0;
+                scale = 1.0;
+                until = now + FirstPressMs;
+            }
+            else if (now - lastPressMs <= RepeatGapMs)
+            {
+                // Close enough to be auto-repeat. Track the SHORTEST gap seen: the first repeat after the initial
+                // delay can arrive late, and a window sized from that would overrun every release.
+                var gap = (int)Math.Max(1, now - lastPressMs);
+                repeatMs = sawRepeat ? Math.Min(repeatMs, gap) : gap;
+                sawRepeat = true;
+                until = now + Math.Clamp(repeatMs * RepeatWindows, MinSustainMs, MaxSustainMs);
+            }
+            else
+            {
+                until = now + FirstPressMs;
+            }
+
+            lastPressMs = now;
+        }
+
+        /// <summary>The signed speed multiplier for this frame: -1..+1, and exactly 0 when the axis is idle.</summary>
+        public double Advance(double dt, long now)
+        {
+            if (direction == 0) return 0.0;
+            if (now < until)
+            {
+                scale = 1.0;
+            }
+            else if (sawRepeat)
+            {
+                // Repeats were flowing and have stopped: the key is genuinely up. Stop crisply.
+                direction = 0;
+                scale = 0.0;
+            }
+            else
+            {
+                // Still inside the OS initial repeat delay, or it was a tap — indistinguishable until the delay
+                // elapses. Coast down so a hold sags briefly instead of stalling, and a tap eases to a halt.
+                scale *= Math.Exp(-dt / CoastSeconds);
+                if (scale < 0.02) { direction = 0; scale = 0.0; }
+            }
+
+            return direction * scale;
+        }
+
+        private const int FirstPressMs = 150;
+        private const int RepeatGapMs = 250;
+        private const int RepeatWindows = 3;
+        private const int MinSustainMs = 90;
+        private const int MaxSustainMs = 320;
+        private const double CoastSeconds = 0.22;
+
+        private int direction;
+        private long until;
+        private long lastPressMs = long.MinValue / 2;
+        private int repeatMs;
+        private bool sawRepeat;
+        private double scale;
+    }
+    #endregion
+
     #region Fields
-    // Just past a typical auto-repeat interval (~30-50 ms), with headroom for a frame the UI thread was late to.
-    private const int SustainMs = 220;
     private const int FeedJoinMs = 500;
     private const double WalkTilesPerSecond = 3.4;
     private const double RunTilesPerSecond = 6.0;
@@ -186,7 +280,9 @@ public sealed class Wolf3DView : CompositeControl
     private readonly HalfBlockSurface surface = new() { Background = new ConsoleGUI.Data.Color(0, 0, 0) };
     private readonly FeedHandle feed;
     private readonly Stopwatch clock = new();
-    private long forwardUntil, backUntil, strafeLeftUntil, strafeRightUntil, turnLeftUntil, turnRightUntil;
+    private readonly Axis move = new();
+    private readonly Axis strafe = new();
+    private readonly Axis turn = new();
     private long lastTickMs, fpsWindowMs;
     private int framesThisSecond;
     private bool running;

@@ -38,6 +38,33 @@ argument for promoting it into the library.)
 `SoftwareRaycastRenderer`, and blits the result. The RGBA intermediate is deliberate: it keeps the vendored
 renderer byte-for-byte the original, so what you see is the reference engine's output.
 
+## Movement, without a key-up event
+
+A terminal reports key *presses*, not key *state*. There is no key-up, so "is W held?" cannot be answered: holding a
+key gives one press, a pause of a few hundred milliseconds, then the OS auto-repeat stream. Wolfenshine's own
+`PlayerInput` is a struct of held booleans that a desktop toolkit fills in trivially and a terminal simply cannot.
+
+Each press therefore opens a sustain window, and the frame clock rather than the key integrates movement while it is
+open. Three details separate that from feeling like input lag:
+
+**The window belongs to an axis, not a key.** Forward/back, strafe and turn are one axis each, carrying a single
+direction, so the opposite key *reverses* it on the next frame. The first version gave every key its own window and
+summed them — which meant pressing `a` while `d`'s window was still open bought exactly **zero** turn until it
+lapsed. It read as heavy lag, and it was really a dead zone.
+
+**The window is measured, not guessed.** Presses closer together than 250 ms are auto-repeat, so their spacing *is*
+the repeat interval; the window becomes a small multiple of it. That is far tighter than any fixed value — release
+stops the player in about a repeat and a half instead of a fixed quarter-second.
+
+**Speed decays instead of stopping until the first repeat arrives.** The OS initial repeat delay is longer than any
+window short enough to make a tap feel like a tap, so a fixed window *always* stalls once at the start of a hold.
+Coasting turns that unavoidable gap into a slight slow-down that the first repeat cancels. Once repeats are flowing
+the key is known to be held, so release goes back to being crisp.
+
+What is left is a tap travelling about 1.3 tiles — further than the key was actually down for. That is the
+irreducible cost of never being told when it came up, and it is the one knob to turn: `Axis.CoastSeconds` and
+`Axis.FirstPressMs` trade a tap's overshoot against how much a hold sags before its first repeat.
+
 ## What it cost, and what that taught us
 
 Median of 90 frames of the assembled app — border, footer and all — through the real `ConsoleManager` at 200×52:
