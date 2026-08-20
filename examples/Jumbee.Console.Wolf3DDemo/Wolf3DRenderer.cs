@@ -2,6 +2,7 @@
 
 namespace Jumbee.Console.Wolf3DDemo;
 
+using Wolfenshine.Game;
 using Wolfenshine.Rendering;
 
 using CColor = ConsoleGUI.Data.Color;
@@ -38,6 +39,12 @@ public sealed class Wolf3DRenderer
     /// <summary>Draws plane-one scenery as depth-sorted billboards.</summary>
     public bool DrawSprites { get; set; } = true;
 
+    /// <summary>Draws the player's weapon over the scene, as the original always does.</summary>
+    public bool DrawWeapon { get; set; } = true;
+
+    /// <summary>Which of the weapon's five frames to draw; 0 is at rest. Set by the view's fire animation.</summary>
+    public int WeaponFrame { get; set; }
+
     /// <summary>
     /// Use the original's projection plane (0.66, a 66° horizontal FOV) rather than one derived from the surface.
     /// </summary>
@@ -68,34 +75,58 @@ public sealed class Wolf3DRenderer
 
         var w = surface.PixelWidth;
         var h = surface.PixelHeight;
-        if (columns.Length != w) columns = new WallColumn[w];
-        if (pixels.Length != w * h * 4) pixels = new byte[w * h * 4];
 
-        // A sub-pixel is square without quadrant sampling and half as wide as tall with it, so the plane length that
-        // leaves the world un-stretched is pixelAspect * W / 2H.
-        var pixelAspect = 1.0 / surface.SamplesPerColumn;
-        var camera = scene.GetCamera(AuthenticFov ? AuthenticPlaneLength : pixelAspect * w / (2.0 * h));
+        // The framebuffer is rendered TALLER than the surface by exactly the horizontal sampling factor, then row-
+        // sampled back down on the way out. That keeps a framebuffer pixel SQUARE in both modes, and squareness is
+        // load-bearing: the vendored sprite projector computes a single RenderedSize and uses it for width and
+        // height alike, so a sprite is a square in framebuffer space. Under quadrant sampling the surface's own
+        // sub-pixels are twice as tall as they are wide, and drawing that square straight onto them rendered every
+        // sprite — and the weapon — at half its proper width, while the walls (drawn per column from ray angles)
+        // stayed correct and hid the cause.
+        var rows = surface.SamplesPerColumn;
+        var bufferHeight = h * rows;
+        if (columns.Length != w) columns = new WallColumn[w];
+        if (pixels.Length != w * bufferHeight * 4) pixels = new byte[w * bufferHeight * 4];
+
+        // With square framebuffer pixels the un-stretched plane length is simply W / 2H, in both modes.
+        var camera = scene.GetCamera(AuthenticFov ? AuthenticPlaneLength : w / (2.0 * bufferHeight));
 
         Raycaster.Cast(scene.Map, scene.Doors, camera, columns);
-        SoftwareRaycastRenderer.Render(columns, h, h, pixels, scene.WallTextures, scene.Palette);
+        SoftwareRaycastRenderer.Render(columns, bufferHeight, bufferHeight, pixels, scene.WallTextures, scene.Palette);
 
         if (DrawSprites && scene.StaticObjects.Count > 0)
         {
             if (projected.Length < scene.StaticObjects.Count)
                 projected = new ProjectedWorldSprite[scene.StaticObjects.Count];
-            var visible = WorldSpriteProjector.Project(scene.StaticObjects, camera, w, h, h, projected);
+            var visible = WorldSpriteProjector.Project(
+                scene.StaticObjects, camera, w, bufferHeight, bufferHeight, projected);
             SoftwareRaycastRenderer.DrawWorldSprites(
-                projected.AsSpan(0, visible), scene.Sprites, scene.Palette, columns, pixels, w, h);
+                projected.AsSpan(0, visible), scene.Sprites, scene.Palette, columns, pixels, w, bufferHeight);
         }
 
-        Blit(surface, w, h);
+        // Last, and over everything: the weapon is screen furniture rather than part of the world, so it takes no
+        // part in the depth sort. A square the height of the view, bottom-aligned and centred, which is the
+        // original's own composition.
+        if (DrawWeapon)
+        {
+            SoftwareRaycastRenderer.DrawSprite(
+                scene.Sprites.GetWeaponFrame(PlayerWeapon.Pistol, Math.Clamp(WeaponFrame, 0, 4)),
+                scene.Palette, w / 2, bufferHeight, bufferHeight + 1, pixels, w, bufferHeight);
+        }
+
+        Blit(surface, w, h, rows);
         surface.EndFrame();
     }
 
-    private void Blit(HalfBlockSurface surface, int w, int h)
+    private void Blit(HalfBlockSurface surface, int w, int h, int rows)
     {
         // Depth is already resolved in the framebuffer, so every sub-pixel goes in at the same reciprocal depth and
         // the z-test always passes. The surface is a compositor here, not a z-buffer.
+        //
+        // Row-SAMPLED, not averaged: the framebuffer is `rows` times taller than the surface, and taking one row of
+        // each group keeps every emitted colour an exact palette entry. Averaging would invent colours between
+        // palette entries, and this demo's whole cost model is that bytes track colour RUNS — new colours in the
+        // middle of a wall would fragment them for no visible gain.
         var quantize = QuantizeLevels > 1;
         var step = quantize ? 255.0 / (QuantizeLevels - 1) : 0.0;
         distinct.Clear();
@@ -103,7 +134,7 @@ public sealed class Wolf3DRenderer
         {
             for (var x = 0; x < w; x++)
             {
-                var o = ((y * w) + x) * 4;
+                var o = (((y * rows) * w) + x) * 4;
                 byte r = pixels[o], g = pixels[o + 1], b = pixels[o + 2];
                 if (quantize)
                 {
@@ -146,8 +177,18 @@ public sealed class Wolf3DRenderer
     #endregion
 
     #region Fields
-    /// <summary>The shipped quantisation level, and what the Display tab's slider opens on.</summary>
-    public const int DefaultQuantizeLevels = 6;
+    /// <summary>
+    /// The shipped quantisation level, and what the Display tab's slider opens on.
+    /// </summary>
+    /// <remarks>
+    /// Measured, not guessed. Against a 2×12 sub-pixel ground truth over six levels, 6 levels/channel sat at 155%
+    /// of the full-palette colour error for 55% of the bytes, while <b>10 sits at 113% for 68%</b> — a 27% error
+    /// reduction that still saves a third of the bandwidth, and the point at which the banding stops being
+    /// obvious on a gradient. The sweep is also <em>non-monotonic</em> (10 beats 12), because the source art is
+    /// itself on a lattice — the original VGA palette expands six-bit channels — so an even RGB grid lands well or
+    /// badly depending on how it aligns. Pick this empirically; do not reason it upward.
+    /// </remarks>
+    public const int DefaultQuantizeLevels = 10;
 
     private const double AuthenticPlaneLength = 0.66;
     private readonly Wolf3DScene scene;

@@ -36,10 +36,10 @@ public sealed class Wolf3DFooter : Control
                      $"x {scene.X,5:F1}  y {scene.Y,5:F1}  {scene.Bearing,3:F0}°  │  " +
                      $"{view.FramesPerSecond,4:F0} fps  {colors} colours  {cost}  " +
                      $"{(view.Renderer.QuantizeLevels > 1 ? $"q{view.Renderer.QuantizeLevels}" : "full")}" +
-                     $"{(view.QuadrantSampling ? " · AA" : "")}";
+                     $"{(view.Sampling == SurfaceMode.Quadrant ? " · quad" : "")}";
 
         const string Keys = " w/s move · a/d turn · q/e strafe · shift run · [] level · r restart · " +
-                            "1 quantize · 2 AA · 3 fov · u sidebar · tab page · F1 keys · esc quit";
+                            "space open · f fire · 1 quantize · 2 surface · 3 fov · u sidebar · esc view/quit";
 
         WriteRow(0, status, new Color(206, 210, 220), new Color(28, 30, 38));
         WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));

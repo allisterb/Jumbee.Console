@@ -1,7 +1,7 @@
 # Wolfenstein 3D walkthrough
 
 Walk through the original 1992 game's levels in a terminal. Real maps, real wall textures, real scenery sprites,
-cast by a real raycaster — no enemies, no doors opening, no weapons, no sound.
+cast by a real raycaster, with doors that open and a weapon that fires — no enemies, no pickups, no sound.
 
 ```bash
 dotnet run --project examples/Jumbee.Console.Wolf3DDemo -c Release
@@ -16,24 +16,32 @@ redistributable and are not in this repository.
 | `a` `d` | turn |
 | `q` `e` | strafe |
 | `shift` | run |
+| `space` / `enter` | open or close the door you are facing |
+| `f` | fire |
 | `[` `]` | previous / next level |
 | `r` | back to the start marker |
 | `1` `2` `3` | colour quantisation, quadrant sampling, field of view |
 | `u` | show/hide the sidebar |
-| `tab` | next sidebar page |
-| `esc` | quit |
+| `ctrl+tab` | next sidebar page |
+| `esc` | back to the viewport, or quit if it already has focus |
 
 ## The sidebar
 
 A `TabPanel` on the right, one page per group of knobs, all live:
 
-- **Display** — quantisation level, anti-aliasing, authentic field of view, scenery sprites. Dragging Quantize and
+- **Display** — quantisation level, surface mode, authentic field of view, scenery sprites, weapon. Dragging Quantize and
   watching the footer's run count halve while the picture barely moves is the fastest way to see this demo's
   central finding. (The cost readouts stay in the footer: they are true of the app rather than of a page, and the
   footer is the one thing that cannot be hidden.)
-- **Input** — the held-key inference (first press, coast, repeat gap, windows) and the movement speeds, plus
-  **the auto-repeat interval measured from your own keystrokes**. That last one is a property of your machine
-  rather than of the demo, and it is the number the other knobs should be set against.
+- **Input** — a **movement pad** (forward/back, turn, strafe, open, fire), the held-key inference (first press, coast, repeat
+  gap, windows) and the movement speeds, plus **the auto-repeat interval measured from your own keystrokes**. That
+  last one is a property of your machine rather than of the demo, and it is the number the other knobs should be
+  set against.
+
+The pad does not synthesise keystrokes. Its buttons call `Wolf3DView.Send`, the same entry point the keys use, so
+**a click is exactly a key tap** — same sustain window, same coast, same Input-tab knobs governing both. That also
+means a click moves as far as a tap does, about a tile; turn `Coast` and `First press` down if you want finer
+steps, and the keyboard tightens identically because there is only one path.
 
 Widgets and keys stay in agreement because neither talks to the other: the state objects own the truth and raise a
 change event, a widget writes to the state, and the panel reads it back. Hiding the sidebar collapses it to zero
@@ -106,12 +114,45 @@ with colours. It does not — authentic Wolfenstein does no distance shading at 
 a colour run and forces another SGR. Across every configuration measured, bytes land at a near-constant 25–34 per
 run, which is why `LastRuns` rather than `LastColors` is what the footer reports.
 
-That is also why snapping colours to 6 levels a channel halves the bill — it merges neighbouring texels back into
-runs — while being very hard to see. Press `1` to compare.
+That is also why snapping colours to a coarse ramp cuts the bill — it merges neighbouring texels back into runs.
+Press `1` to compare, or use Display ▸ Quantize.
 
-**Quadrant sampling is nearly free here**, unlike in the 3D sandbox where it costs 42% more bytes. It adds about
-10% (46.0 → 50.5 KB) because a picture already fragmented by texture detail gains few new run breaks from extra
-horizontal resolution. It does cost roughly double the scene time. Press `2`.
+**The level is measured, not guessed.** Against a 2×12 sub-pixel ground truth over six levels and four viewpoints:
+
+| levels | colour error vs full palette | bytes vs full |
+|---|---|---|
+| 4 | 296% | 45% |
+| 6 | 155% | 55% |
+| 8 | 152% | 63% |
+| **10** *(default)* | **113%** | **68%** |
+| 12 | 122% | 72% |
+| 16 | 113% | 77% |
+
+Ten levels lands within 13% of the full palette while still saving a third of the bandwidth, and is where the
+banding on a gradient stops being obvious. Note the sweep is **non-monotonic** — 10 beats 12 — because the source
+art is itself on a lattice (the original VGA palette expands six-bit channels), so an even RGB grid lands well or
+badly depending on alignment. Pick this empirically; do not reason it upward.
+
+**Quadrant sampling is nearly free in bandwidth**, unlike in the 3D sandbox where it costs 42% more bytes. It adds
+about 9% (44.9 → 48.7 KB) because a picture already fragmented by texture detail gains few new run breaks from
+extra horizontal resolution. Press `2`, or pick it from Display ▸ Surface.
+
+It is not free in *fill*, though, and the reason is a trap worth knowing. A quadrant sub-pixel is half a cell wide
+but a whole half-cell tall — **twice as tall as it is wide** — so anything assuming a square pixel breaks. The
+vendored sprite projector does assume one: it derives a single `RenderedSize` and applies it to both axes, which
+rendered every sprite and the weapon at *half* their proper width, while the walls (drawn per column from ray
+angles) stayed correct and hid the cause. The fix is to render the framebuffer at double height in that mode and
+sample rows back on the way out, restoring square pixels for the vendored code rather than patching its maths.
+That roughly doubles the scene time, to about 1.1 ms of a 33 ms budget.
+
+But note what it does *not* buy. **Every character cell gets exactly two colours — one foreground, one background
+— whatever glyph is used.** Half blocks are therefore *exact*: two samples, two colours, no quantisation error at
+all. Quadrants take four samples and must squeeze them back into the same two, so they buy placement accuracy with
+colour accuracy. A finer sub-cell grid is a trade, not a quality dial, and which way it goes depends on the
+content: flat-shaded geometry has little colour per cell to lose, dense texture has little placement detail to
+gain. Sextants (2×3) and octants (2×4) extend the grid further but never lift the two-colour ceiling; that ceiling
+is the whole difference between this and a pixel protocol such as Sixel, which addresses a hundred-odd real device
+pixels per cell, each independently coloured.
 
 **The authentic 66° field of view is also the cheaper one** — the derived ~90° view that fills a wide terminal
 costs about 15–20% more bytes for geometry the level was never composed for. Press `3`.
@@ -119,5 +160,16 @@ costs about 15–20% more bytes for geometry the level was never composed for. P
 ## What is deliberately not here
 
 The enhanced renderer (`F2` in Wolfenshine) is an SKSL GPU shader and cannot follow us into a terminal. Actors,
-weapons, pickups and level progression all exist in the vendored `GameSession` and are simply not driven — a
-static walkthrough was the goal. Doors render as wall faces because nothing opens them.
+pickups and level progression all exist in the vendored `GameSession` and are simply not driven — a static
+walkthrough was the goal.
+
+Doors **do** open: the vendored engine already has the whole state machine (`Operate`, the slide animation, the
+locks), so `space` drives it and the raycaster was already drawing a partly-retracted panel correctly. One
+deliberate fiction — the player is assumed to hold every key, because a walkthrough has no pickups and an
+authentic empty key ring would wall off parts of most levels, which reads as a broken demo rather than as
+fidelity. Two things that bite if you try this yourself: a door tile reads as **solid** in map plane zero, so
+collision has to ask about doors *before* testing walls or an open doorway stays an invisible wall; and the
+animation needs ticking every frame or the panel never moves.
+
+`f` fires. There is nothing to shoot in a static scene, so it animates the pistol and no more — the weapon sprite
+is real, out of VSWAP's weapon pages, and the Display tab can turn it off.

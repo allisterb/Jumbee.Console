@@ -20,4 +20,7 @@ if errorlevel 1 exit /b 1
 echo Building 3D sandbox demo...
 dotnet build examples\Jumbee.Console.3DSandboxDemo\Jumbee.Console.3DSandboxDemo.csproj /p:Configuration=Release
 if errorlevel 1 exit /b 1
+echo Building Wolf3D demo...
+dotnet build examples\Jumbee.Console.Wolf3DDemo\Jumbee.Console.Wolf3DDemo.csproj /p:Configuration=Release
+if errorlevel 1 exit /b 1
 echo Jumbee.Console build complete.

@@ -25,6 +25,7 @@ public sealed class InputPanel : CompositeControl
     public InputPanel(Wolf3DView view, Action<Action> push)
     {
         this.view = view;
+        pad = new Wolf3DPad(view);
         var tuning = view.Tuning;
 
         firstPress.ValueChanged += (_, v) => push(() => tuning.FirstPressMs = v);
@@ -60,6 +61,10 @@ public sealed class InputPanel : CompositeControl
                 5 + (3 * gap)),
             new Panel.Section("Speed", Panel.Stack(spaced, walk, run, turn, runTurn), 4 + (3 * gap)),
             new Panel.Section("Tuning", Panel.Row(reset), 1),
+            // LAST, and never spaced. Last because it is the only thing here you aim a mouse at repeatedly, and a
+            // misfire lands on a slider and silently retunes the input; never spaced because the cross is one
+            // control, and a gap through the middle of it reads as two.
+            new Panel.Section("Move", new VerticalStackPanel(pad), Wolf3DPad.Rows),
         ];
 
         Rows = sections.Sum(s => s.OuterRows);
@@ -89,6 +94,7 @@ public sealed class InputPanel : CompositeControl
 
     #region Fields
     private readonly Wolf3DView view;
+    private readonly Wolf3DPad pad;
 
     private readonly Slider firstPress =
         Panel.Knob("First press", 40, 600, Wolf3DTuning.DefaultFirstPressMs, 10, "0");

@@ -112,6 +112,30 @@ public sealed class Wolf3DScene
         DirectionY = dy;
     }
 
+    /// <summary>
+    /// Operates the door the player is facing, if one is within reach. Returns whether anything happened.
+    /// </summary>
+    /// <remarks>
+    /// <b>Every key is assumed.</b> A static walkthrough has no pickups, so an authentic empty key ring would make
+    /// the locked doors permanently impassable and wall off parts of most levels — which reads as a broken demo
+    /// rather than as fidelity. The lock logic itself is the vendored engine's; only the key ring is a fiction.
+    /// </remarks>
+    public bool Use()
+    {
+        // One tile ahead, then the tile the player stands in — the original checks the facing tile first so that
+        // standing in a doorway and pressing use closes the door behind you rather than re-opening the one ahead.
+        var aheadX = (int)(X + (DirectionX * UseReach));
+        var aheadY = (int)(Y + (DirectionY * UseReach));
+        var door = Doors.Get(aheadX, aheadY) ?? Doors.Get((int)X, (int)Y);
+        return door is not null && door.Operate(canClose: true, keyMask: AllKeys);
+    }
+
+    /// <summary>Advances every door's slide. Call once a frame.</summary>
+    /// <remarks>A door never closes on the player: the predicate refuses the tile they are standing in, which is
+    /// the engine's own guard and the reason <c>Update</c> takes one at all.</remarks>
+    public void TickDoors(double elapsedSeconds) =>
+        Doors.Update(elapsedSeconds, door => door.X != (int)X || door.Y != (int)Y);
+
     /// <summary>Whether the tile under a point is solid — a wall, or blocking scenery.</summary>
     /// <remarks>
     /// Scenery blocks using the original <c>statinfo</c> flags (see <see cref="WolfensteinStaticObjects"/>), so a
@@ -121,13 +145,23 @@ public sealed class Wolf3DScene
     {
         var tileX = (int)x;
         var tileY = (int)y;
-        if (Map.IsSolid(tileX, tileY)) return true;
         if (tileX < 0 || tileX >= Map.Width || tileY < 0 || tileY >= Map.Height) return true;
+
+        // A door tile reads as solid in plane zero, so it must be asked BEFORE the wall test or an open door stays
+        // an invisible wall — the panel slides aside on screen and the player walks into nothing. Passable only
+        // once the panel has retracted far enough to fit through, matching what the raycaster is drawing.
+        if (Doors.Get(tileX, tileY) is { } door) return door.OpenAmount < DoorPassable;
+
+        if (Map.IsSolid(tileX, tileY)) return true;
         return WolfensteinStaticObjects.BlocksMovement(Map.GetObject(tileX, tileY));
     }
     #endregion
 
     #region Fields
     private const double Radius = 0.25;
+    private const double UseReach = 0.75;
+    private const double DoorPassable = 0.8;
+    // Gold and silver, the only two the original has. See the note on Use.
+    private const int AllKeys = 0b11;
     #endregion
 }

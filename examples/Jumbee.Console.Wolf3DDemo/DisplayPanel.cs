@@ -18,10 +18,19 @@ public sealed class DisplayPanel : CompositeControl
     {
         this.view = view;
 
-        quantize.ValueChanged += (_, v) => push(() => view.Renderer.QuantizeLevels = (int)Math.Round(v));
-        antiAliasing.Changed += (_, on) => push(() => view.QuadrantSampling = on);
+        // The switch owns on/off and the slider owns the level, so "off" is not a magic value hiding at one end of
+        // a track. The slider keeps its last level while disabled, which is what makes toggling back and forth a
+        // usable comparison rather than a reset.
+        quantizeOn.Changed += (_, on) => push(() =>
+            view.Renderer.QuantizeLevels = on ? (int)Math.Round(quantize.Value) : 0);
+        quantize.ValueChanged += (_, v) => push(() =>
+        {
+            if (quantizeOn.IsChecked) view.Renderer.QuantizeLevels = (int)Math.Round(v);
+        });
+        sampling.SelectionChanged += (_, _) => push(() => view.Sampling = (SurfaceMode)sampling.SelectedIndex);
         authenticFov.Changed += (_, on) => push(() => view.Renderer.AuthenticFov = on);
         sprites.Changed += (_, on) => push(() => view.Renderer.DrawSprites = on);
+        weapon.Changed += (_, on) => push(() => view.Renderer.DrawWeapon = on);
 
         Build(spaced: true);
     }
@@ -42,9 +51,15 @@ public sealed class DisplayPanel : CompositeControl
             // The note is a readout of the slider above it, so it stays flush against it either way — the gap
             // belongs between CONTROLS, not inside one control's own block.
             new Panel.Section("Colour", spaced
-                ? new VerticalStackPanel(quantize, quantizeNote)
-                : new VerticalStackPanel(quantize, quantizeNote), 2),
-            new Panel.Section("Sampling", Panel.Stack(spaced, antiAliasing, authenticFov, sprites), 3 + (2 * gap)),
+                ? new VerticalStackPanel(quantizeOn, Panel.Spacer(), quantize, quantizeNote)
+                : new VerticalStackPanel(quantizeOn, quantize, quantizeNote), 3 + gap),
+            new Panel.Section("Sampling",
+                spaced
+                    ? new VerticalStackPanel(Panel.Labelled("Surface", sampling), samplingNote, Panel.Spacer(),
+                        authenticFov, Panel.Spacer(), sprites, Panel.Spacer(), weapon)
+                    : new VerticalStackPanel(Panel.Labelled("Surface", sampling), samplingNote, authenticFov,
+                        sprites, weapon),
+                5 + (3 * gap)),
         ];
 
         Rows = sections.Sum(s => s.OuterRows);
@@ -58,23 +73,36 @@ public sealed class DisplayPanel : CompositeControl
     public void Refresh()
     {
         var levels = view.Renderer.QuantizeLevels;
-        quantize.Value = levels;
-        quantizeNote.Text = levels > 1 ? $" {levels} levels/channel" : " off — full palette";
-        antiAliasing.IsChecked = view.QuadrantSampling;
+        var on = levels > 1;
+        quantizeOn.IsChecked = on;
+        // Only follow the renderer while quantising; when off it holds the level it would return to.
+        if (on) quantize.Value = levels;
+        quantize.Enabled = on;
+        quantizeNote.Text = on ? $" {levels} levels/channel" : " off — full palette";
+        sampling.SelectedIndex = (int)view.Sampling;
+        // Says what the mode COSTS, not what it is -- both give two colours a cell, so the samples-per-cell figure
+        // is the whole difference and "more" is not automatically "better".
+        samplingNote.Text = view.Sampling == SurfaceMode.Quadrant
+            ? " 4 samples · 2 colours/cell"
+            : " 2 samples · 2 colours/cell";
         authenticFov.IsChecked = view.Renderer.AuthenticFov;
         sprites.IsChecked = view.Renderer.DrawSprites;
+        weapon.IsChecked = view.Renderer.DrawWeapon;
     }
     #endregion
 
     #region Fields
     private readonly Wolf3DView view;
 
-    // 0 and 1 both mean "no quantisation", so dragging to the left end turns it off rather than clamping at 1.
+    private readonly Switch quantizeOn = new("Quantize", true);
+    // From 2 up: "off" is the switch's job now, so the track need not reserve its left end for it.
     private readonly Slider quantize =
-        Panel.Knob("Quantize", 0, 12, Wolf3DRenderer.DefaultQuantizeLevels, 1, "0");
-    private readonly Switch antiAliasing = new("Anti-Aliasing");
+        Panel.Knob("Levels", 2, 16, Wolf3DRenderer.DefaultQuantizeLevels, 1, "0");
+    private readonly Select sampling = new Select("Half block", "Quadrant") { FitContent = true };
+    private readonly TextLabel samplingNote = Panel.Line("", Panel.Muted);
     private readonly Switch authenticFov = new("Authentic FOV");
     private readonly Switch sprites = new("Scenery sprites");
+    private readonly Switch weapon = new("Weapon");
     private readonly TextLabel quantizeNote = Panel.Line("", Panel.Muted);
     #endregion
 }

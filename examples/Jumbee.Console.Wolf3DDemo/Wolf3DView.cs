@@ -85,6 +85,20 @@ public sealed class Wolf3DView : CompositeControl
         set { surface.QuadrantSampling = value; Changed?.Invoke(); }
     }
 
+    /// <summary>
+    /// How sub-cell samples are mapped onto glyphs.
+    /// </summary>
+    /// <remarks>
+    /// Both modes get the same <b>two colours per cell</b> — one foreground, one background — which is the hard
+    /// ceiling of character-cell rendering. They differ in how many samples share that budget, so this is a trade
+    /// rather than a quality dial: see <see cref="SurfaceMode"/>.
+    /// </remarks>
+    public SurfaceMode Sampling
+    {
+        get => surface.QuadrantSampling ? SurfaceMode.Quadrant : SurfaceMode.HalfBlock;
+        set => QuadrantSampling = value == SurfaceMode.Quadrant;
+    }
+
     /// <summary>Frames actually drawn per second, averaged over the last second.</summary>
     public double FramesPerSecond { get; private set; }
 
@@ -94,8 +108,15 @@ public sealed class Wolf3DView : CompositeControl
     /// <summary>Raised on the UI thread after each frame, and whenever a setting changes.</summary>
     public event Action? Changed;
 
+    // Load-bearing, despite the viewport having nothing to click ON. Movement keys only arrive while this control
+    // holds focus, so once a sidebar widget took it there was no way back: the viewport ignored the mouse, and Tab
+    // was registered as a global hotkey, so neither route out existed and the player simply stopped responding.
     /// <inheritdoc/>
-    protected override bool WantsMouse => false;
+    protected override bool WantsMouse => true;
+
+    /// <summary>Clicking the viewport returns focus to it, which is what re-arms the movement keys.</summary>
+    /// <inheritdoc/>
+    protected override void OnMousePress(Position position) => Focus();
     #endregion
 
     #region Methods
@@ -120,10 +141,12 @@ public sealed class Wolf3DView : CompositeControl
         var handled = true;
         switch (key.Key)
         {
-            case ConsoleKey.UpArrow: Press(move, +1, run); break;
-            case ConsoleKey.DownArrow: Press(move, -1, run); break;
-            case ConsoleKey.LeftArrow: Press(turn, -1, run); break;
-            case ConsoleKey.RightArrow: Press(turn, +1, run); break;
+            case ConsoleKey.UpArrow: Send(Wolf3DCommand.Forward, run); break;
+            case ConsoleKey.DownArrow: Send(Wolf3DCommand.Back, run); break;
+            case ConsoleKey.LeftArrow: Send(Wolf3DCommand.TurnLeft, run); break;
+            case ConsoleKey.RightArrow: Send(Wolf3DCommand.TurnRight, run); break;
+            case ConsoleKey.Spacebar: Send(Wolf3DCommand.Open); break;
+            case ConsoleKey.Enter: Send(Wolf3DCommand.Open); break;
             default: handled = HandleChar(char.ToLowerInvariant(key.KeyChar), run); break;
         }
 
@@ -135,16 +158,50 @@ public sealed class Wolf3DView : CompositeControl
     {
         switch (c)
         {
-            case 'w': Press(move, +1, run); return true;
-            case 's': Press(move, -1, run); return true;
-            case 'a': Press(turn, -1, run); return true;
-            case 'd': Press(turn, +1, run); return true;
-            case 'q': Press(strafe, -1, run); return true;
-            case 'e': Press(strafe, +1, run); return true;
+            case 'w': Send(Wolf3DCommand.Forward, run); return true;
+            case 's': Send(Wolf3DCommand.Back, run); return true;
+            case 'a': Send(Wolf3DCommand.TurnLeft, run); return true;
+            case 'd': Send(Wolf3DCommand.TurnRight, run); return true;
+            case 'q': Send(Wolf3DCommand.StrafeLeft, run); return true;
+            case 'e': Send(Wolf3DCommand.StrafeRight, run); return true;
             case '[': Scene.LoadLevel(Scene.LevelIndex - 1); Changed?.Invoke(); return true;
             case ']': Scene.LoadLevel(Scene.LevelIndex + 1); Changed?.Invoke(); return true;
+            case 'f': Send(Wolf3DCommand.Fire); return true;
             case 'r': Scene.Restart(); Changed?.Invoke(); return true;
             default: return false;
+        }
+    }
+
+    /// <summary>
+    /// Applies one movement command, exactly as a key press of the same intent would.
+    /// </summary>
+    /// <remarks>
+    /// The single entry point into the held-key inference: the keyboard and the sidebar pad both come through
+    /// here, so a pad click IS a key tap rather than something that merely resembles one, and the Input tab's
+    /// knobs govern both. Nothing synthesises a <see cref="ConsoleKeyInfo"/>.
+    /// </remarks>
+    public void Send(Wolf3DCommand command, bool running = false)
+    {
+        switch (command)
+        {
+            case Wolf3DCommand.Forward: Press(move, +1, running); break;
+            case Wolf3DCommand.Back: Press(move, -1, running); break;
+            case Wolf3DCommand.TurnLeft: Press(turn, -1, running); break;
+            case Wolf3DCommand.TurnRight: Press(turn, +1, running); break;
+            case Wolf3DCommand.StrafeLeft: Press(strafe, -1, running); break;
+            case Wolf3DCommand.StrafeRight: Press(strafe, +1, running); break;
+
+            // Events, not axes: they fire once and have no sustain window, so they bypass Axis entirely. A door
+            // does not open further for being asked twice, and a re-fire mid-animation would only restart it.
+            case Wolf3DCommand.Open:
+                Scene.Use();
+                Focus();
+                break;
+            case Wolf3DCommand.Fire:
+                if (fireFrame == 0) fireElapsed = 0;
+                fireFrame = Math.Max(fireFrame, 1);
+                Focus();
+                break;
         }
     }
 
@@ -187,10 +244,23 @@ public sealed class Wolf3DView : CompositeControl
         var sideways = strafe.Advance(dt, now) * speed;
         if (rotate != 0) Scene.Turn(rotate);
         if (forward != 0 || sideways != 0) Scene.Move(forward, sideways);
+        Scene.TickDoors(dt);
+        TickWeapon(dt);
 
+        Renderer.WeaponFrame = fireFrame;
         Renderer.Draw(surface);
         CountFrame(now);
         Changed?.Invoke();
+    }
+
+    // Frames 1..4 are the swing; 0 is the weapon at rest and is what it returns to. Driven by elapsed time rather
+    // than by frame count so the animation lasts the same wall-clock time whatever the frame rate is set to.
+    private void TickWeapon(double dt)
+    {
+        if (fireFrame == 0) return;
+        fireElapsed += dt;
+        var frame = 1 + (int)(fireElapsed / FireFrameSeconds);
+        fireFrame = frame > WeaponFrames - 1 ? 0 : frame;
     }
 
     private void CountFrame(long now)
@@ -293,6 +363,8 @@ public sealed class Wolf3DView : CompositeControl
 
     #region Fields
     private const int FeedJoinMs = 500;
+    private const int WeaponFrames = 5;
+    private const double FireFrameSeconds = 0.07;
     // Clamps a long stall so a late frame cannot teleport the player through a wall.
     private const double MaxStepSeconds = 0.1;
 
@@ -303,6 +375,8 @@ public sealed class Wolf3DView : CompositeControl
     private readonly Axis strafe;
     private readonly Axis turn;
     private long lastTickMs, fpsWindowMs;
+    private int fireFrame;
+    private double fireElapsed;
     private int framesThisSecond;
     private bool running;
     private volatile bool stopping;

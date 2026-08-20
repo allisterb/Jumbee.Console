@@ -8,4 +8,6 @@ dotnet build examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj -c 
 dotnet build examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj -c Release "$@"
 dotnet build examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj -c Release "$@"
 dotnet build examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj -c Release "$@"
+dotnet build examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj -c Release "$@"
+dotnet build examples/Jumbee.Console.Wolf3DDemo/Jumbee.Console.Wolf3DDemo.csproj -c Release "$@"
 echo "Jumbee.Console build complete."

@@ -43,16 +43,31 @@ public static class Wolf3DShell
                 view.Renderer.QuantizeLevels > 1 ? 0 : Wolf3DRenderer.DefaultQuantizeLevels;
             Report();
         });
-        UI.RegisterHotKey(UI.HotKeys.Char('2'), () => view.QuadrantSampling = !view.QuadrantSampling);
+        UI.RegisterHotKey(UI.HotKeys.Char('2'), () =>
+        {
+            view.Sampling = view.Sampling == SurfaceMode.HalfBlock ? SurfaceMode.Quadrant : SurfaceMode.HalfBlock;
+            Report();
+        });
         UI.RegisterHotKey(UI.HotKeys.Char('3'), () =>
         {
             view.Renderer.AuthenticFov = !view.Renderer.AuthenticFov;
             Report();
         });
         UI.RegisterHotKey(UI.HotKeys.Char('u'), () => ToggleSidebar(sidebar));
-        UI.RegisterHotKey(UI.HotKeys.Char('\t'), () => sidebar.Tabs.SelectedIndex =
+
+        // Ctrl+Tab, NOT Tab. Registering plain Tab globally swallowed it before the focus manager saw it, so once a
+        // sidebar widget had focus there was no keyboard route back to the viewport -- and the movement keys only
+        // fire while the viewport holds focus. Tab now walks the widgets as it should.
+        UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.Tab), () => sidebar.Tabs.SelectedIndex =
             (sidebar.Tabs.SelectedIndex + 1) % Math.Max(1, sidebar.Tabs.TabCount));
-        UI.RegisterHotKey(UI.HotKeys.Escape, UI.Stop);
+
+        // Escape means "back to the game" while a knob has focus, and only quits from the viewport itself. Quitting
+        // out from under someone who was reaching for the sidebar is a bad trade for one keystroke.
+        UI.RegisterHotKey(UI.HotKeys.Escape, () =>
+        {
+            if (view.IsFocused) UI.Stop();
+            else view.Focus();
+        });
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
 
         void Report()

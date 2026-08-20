@@ -24,6 +24,9 @@ internal static class Panel
     /// </remarks>
     public const int LabelWidth = 12;
 
+    /// <summary>Where a labelled control starts: the caption column plus the gutter a slider appends itself.</summary>
+    public const int LabelColumn = LabelWidth + 1;
+
     public static readonly Color Heading = new(200, 205, 215);
     public static readonly Color Text = new(170, 176, 190);
     public static readonly Color Muted = new(130, 136, 150);
@@ -72,6 +75,10 @@ internal static class Panel
 
         return new VerticalStackPanel([.. rows]);
     }
+
+    /// <summary>A caption and a control on one row, sharing the sliders' caption column so everything lines up.</summary>
+    public static ILayout Labelled(string caption, Control control) =>
+        new Grid([1], [LabelColumn, Columns - 2 - LabelColumn], [[Line(caption, Muted), control]]);
 
     /// <summary>A single button occupying the left half of a row, as the sandbox's sections do.</summary>
     public static ILayout Row(Button only) =>
