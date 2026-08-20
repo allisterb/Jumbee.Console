@@ -2,8 +2,7 @@
 # Entry point for the SLIM NativeAOT image (Dockerfile.aot). Unlike the full image's examples.sh — which runs each
 # demo via `dotnet <dll>` — this execs the pre-compiled NATIVE binaries. Only the AOT-eligible apps are bundled:
 # the examples browser, the agent-harness demo, the AudioScope demo and the 3D sandbox. The IDE demo is NOT here: it
-# needs the in-container .NET SDK (you edit a project and run `dotnet build`/`run` in its terminal pane), which the
-# slim runtime image does not ship — use the full `jumbee-console` image for it.
+# is not AOT-eligible — use the full `jumbee-console` image for it.
 #
 #   docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #   docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
@@ -25,19 +24,24 @@ audioscope=/app/audioscope/Jumbee.Console.AudioScopeDemo
 sandbox=/app/sandbox/Jumbee.Console.3DSandboxDemo
 
 case "${1:-}" in
-  agent-harness|agent|ah)  shift; exec "$agent" "$@" ;;
-  audio-scope|audioscope|scope)
+  agent-harness)           shift; exec "$agent" "$@" ;;
+  audio-scope)
                            shift; exec "$audioscope" "$@" ;;
-  3dsandbox|3d|sandbox)    shift; exec "$sandbox" "$@" ;;
-  examples|browser)        shift; exec "$examples" "$@" ;;
+  3dsandbox)               shift; exec "$sandbox" "$@" ;;
+  browser)                 shift; exec "$examples" "$@" ;;
   ide)
-    echo "The IDE demo needs the .NET SDK and is not in the slim AOT image." >&2
+    echo "The IDE demo is not AOT-eligible and is not in the slim image." >&2
     echo "Use the full image:  docker run --rm -it jumbee-console ide" >&2
     exit 2 ;;
   -h|--help|help)
-    echo "Slim AOT image apps:  examples (default) | agent-harness | audio-scope | 3dsandbox"
-    echo "(The IDE demo needs the SDK — use the full 'jumbee-console' image.)"
+    echo "Slim AOT image apps:  browser (default) | agent-harness | audio-scope | 3dsandbox"
+    echo "(The IDE demo is not AOT-eligible — use the full 'jumbee-console' image.)"
     exit 0 ;;
   '')                      exec "$examples" ;;
-  *)                       exec "$examples" "$@" ;;   # unrecognized → default browser (mirrors examples.sh)
+  # An OPTION rather than a verb goes to the default browser; a mistyped target is an error (mirrors examples.sh).
+  -*)                      exec "$examples" "$@" ;;
+  *)
+    echo "Unknown target: $1" >&2
+    echo "Slim AOT image apps:  browser (default) | agent-harness | audio-scope | 3dsandbox" >&2
+    exit 2 ;;
 esac

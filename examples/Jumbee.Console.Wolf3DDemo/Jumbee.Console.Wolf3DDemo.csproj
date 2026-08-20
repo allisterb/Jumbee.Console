@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Jumbee.Console\Jumbee.Console.csproj" />
+    <!-- For the `verify` smoke check only, as the IDE demo and the agent harness do: laying the tree out offscreen is
+         the only way to draw a frame without a terminal, and the viewport has no size (so renders nothing) until it has. -->
+    <ProjectReference Include="..\..\src\Jumbee.Console.Snapshot\Jumbee.Console.Snapshot.csproj" />
   </ItemGroup>
 
   <ItemGroup>

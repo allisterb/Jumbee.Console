@@ -8,8 +8,8 @@
 # demo and the 3D sandbox — each compiled to a self-contained native binary with
 # NativeAOT.
 # No .NET runtime and no SDK in the final image. The IDE demo is excluded on
-# purpose: it needs the in-container `dotnet` (edit + build/run a project in its
-# terminal pane), so keep using ./Dockerfile for that one.
+# purpose: it is not AOT-eligible (its terminal emulator and file-browser paths do
+# not survive trimming), so keep using ./Dockerfile for that one.
 #
 #     docker build -f Dockerfile.aot -t jumbee-console-aot .
 #     docker run --rm -it jumbee-console-aot                 # examples browser (default)

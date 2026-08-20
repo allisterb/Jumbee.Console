@@ -39,7 +39,7 @@ public sealed class Wolf3DFooter : Control
                      $"{(view.QuadrantSampling ? " · AA" : "")}";
 
         const string Keys = " w/s move · a/d turn · q/e strafe · shift run · [] level · r restart · " +
-                            "1 quantize · 2 AA · 3 fov · F1 keys · esc quit";
+                            "1 quantize · 2 AA · 3 fov · u sidebar · tab page · F1 keys · esc quit";
 
         WriteRow(0, status, new Color(206, 210, 220), new Color(28, 30, 38));
         WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));

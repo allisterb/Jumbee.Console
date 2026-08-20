@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Single entry point for the Jumbee.Console demos. The first argument picks which app to run; with no argument (or an
-# unrecognized one) the interactive examples browser runs. Any remaining arguments are passed through to the chosen
-# app. This is also the Docker image entry point, so the same selection works there:
+# Single entry point for the Jumbee.Console demos. The first argument picks which app to run; with no argument the
+# interactive examples browser runs, and an unrecognized one is an error. Any remaining arguments are passed through
+# to the chosen app. This is also the Docker image entry point, so the same selection works there:
 #
 #   ./examples.sh                       docker run --rm -it jumbee-console
 #   ./examples.sh agent-harness         docker run --rm -it jumbee-console agent-harness
 #   ./examples.sh ide [project-dir]     docker run --rm -it jumbee-console ide [project-dir]
 #   ./examples.sh audio-scope           docker run --rm -it jumbee-console audio-scope
 #   ./examples.sh 3dsandbox             docker run --rm -it jumbee-console 3dsandbox
+#   ./examples.sh wolf3d                docker run --rm -it jumbee-console wolf3d
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -15,13 +16,15 @@ usage() {
   cat <<'EOF'
 Jumbee.Console demos — pick one to run:
 
-  examples          Interactive examples browser (default)
+  browser           Interactive examples browser (default)
   agent-harness     Claude-style agent harness demo
   audio-scope       Real-time oscilloscope, vectorscope and spectroscope reading audio from a file or recording device
                     (no arguments plays the bundled sample track; --help lists --path, --live, --scheme and the rest)
   ide  [dir]        VS Code-style IDE demo (opens an optional project directory)
   3dsandbox [args]  Real-time 3D rigid-body sandbox and OBJ model viewer, three renderers over one scene
                     (`3dsandbox obj [path]` opens the model viewer instead; --help lists the rest)
+  wolf3d [args]     The Wolf3D game engine ported to the terminal
+                    (needs the game data -- see examples/Jumbee.Console.Wolf3DDemo/GameData/README.md)
 
 Usage:
   ./examples.sh [target] [args...]
@@ -50,6 +53,7 @@ agent="examples/Jumbee.Console.AgentHarnessDemo/bin/Release/net10.0/Jumbee.Conso
 ide="examples/Jumbee.Console.IdeDemo/bin/Release/net10.0/Jumbee.Console.IdeDemo.dll"
 audioscope="examples/Jumbee.Console.AudioScopeDemo/bin/Release/net10.0/Jumbee.Console.AudioScopeDemo.dll"
 sandbox="examples/Jumbee.Console.3DSandboxDemo/bin/Release/net10.0/Jumbee.Console.3DSandboxDemo.dll"
+wolf3d="examples/Jumbee.Console.Wolf3DDemo/bin/Release/net10.0/Jumbee.Console.Wolf3DDemo.dll"
 
 # The 3D sandbox looks for a `models` folder in its WORKING DIRECTORY (falling back to a generated torus knot), so it
 # runs from its own project directory rather than from the repo root. One line, and it makes the bundled models work
@@ -58,13 +62,21 @@ sandbox="examples/Jumbee.Console.3DSandboxDemo/bin/Release/net10.0/Jumbee.Consol
 sandboxdir="examples/Jumbee.Console.3DSandboxDemo"
 
 case "${1:-}" in
-  agent-harness|agent|ah)  shift; run "agent harness demo" "$agent"       "$@" ;;
+  agent-harness)           shift; run "agent harness demo" "$agent"       "$@" ;;
   ide)                     shift; run "IDE demo"           "$ide"         "$@" ;;
-  audio-scope|audioscope|scope)
+  audio-scope)
                            shift; run "audio scope demo"   "$audioscope"  "$@" ;;
-  3dsandbox|3d|sandbox)    shift; workdir="$sandboxdir" run "3D sandbox demo" "$sandbox" "$@" ;;
-  examples|browser)        shift; run "examples browser"   "$examples"    "$@" ;;
+  3dsandbox)               shift; workdir="$sandboxdir" run "3D sandbox demo" "$sandbox" "$@" ;;
+  wolf3d)                  shift; run "Wolf3D demo"        "$wolf3d"         "$@" ;;
+  browser)                 shift; run "examples browser"   "$examples"    "$@" ;;
   -h|--help|help)          usage; exit 0 ;;
   '')                      run "examples browser" "$examples" ;;
-  *)                       run "examples browser" "$examples" "$@" ;;   # unrecognized → default browser
+  # An OPTION rather than a verb (--legacy, --verify, …) goes to the default browser. Only a bare word is treated
+  # as a target, so a mistyped one is an error instead of silently opening the browser with junk in its argv.
+  -*)                      run "examples browser" "$examples" "$@" ;;
+  *)
+    echo "Unknown target: $1" >&2
+    echo >&2
+    usage >&2
+    exit 2 ;;
 esac

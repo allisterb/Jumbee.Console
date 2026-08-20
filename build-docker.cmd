@@ -17,6 +17,8 @@ dotnet build examples\Jumbee.Console.AudioScopeDemo\Jumbee.Console.AudioScopeDem
 if errorlevel 1 exit /b 1
 dotnet build examples\Jumbee.Console.3DSandboxDemo\Jumbee.Console.3DSandboxDemo.csproj /p:Configuration=Release
 if errorlevel 1 exit /b 1
+dotnet build examples\Jumbee.Console.Wolf3DDemo\Jumbee.Console.Wolf3DDemo.csproj /p:Configuration=Release
+if errorlevel 1 exit /b 1
 
 rem The AudioScope demo defaults to the bundled sample track, which is not tracked in git — warn before an image is
 rem built without it (see docker.md for the download link).
@@ -45,7 +47,7 @@ docker build %* -t jumbee-console:%VERSION% -t jumbee-console:latest .
 if errorlevel 1 exit /b 1
 
 rem Also build the slim NativeAOT image (examples browser, agent harness and AudioScope as native binaries; see
-rem Dockerfile.aot — the IDE demo is excluded there because it needs the in-container SDK).
+rem Dockerfile.aot). The IDE demo is not in the AOT image.
 echo Building NativeAOT Docker image jumbee-console-aot:%VERSION% (also tagged latest)...
 docker build %* -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest .
 if errorlevel 1 exit /b 1

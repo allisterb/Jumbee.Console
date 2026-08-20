@@ -19,7 +19,25 @@ redistributable and are not in this repository.
 | `[` `]` | previous / next level |
 | `r` | back to the start marker |
 | `1` `2` `3` | colour quantisation, quadrant sampling, field of view |
+| `u` | show/hide the sidebar |
+| `tab` | next sidebar page |
 | `esc` | quit |
+
+## The sidebar
+
+A `TabPanel` on the right, one page per group of knobs, all live:
+
+- **Display** — quantisation level, anti-aliasing, authentic field of view, scenery sprites. Dragging Quantize and
+  watching the footer's run count halve while the picture barely moves is the fastest way to see this demo's
+  central finding. (The cost readouts stay in the footer: they are true of the app rather than of a page, and the
+  footer is the one thing that cannot be hidden.)
+- **Input** — the held-key inference (first press, coast, repeat gap, windows) and the movement speeds, plus
+  **the auto-repeat interval measured from your own keystrokes**. That last one is a property of your machine
+  rather than of the demo, and it is the number the other knobs should be set against.
+
+Widgets and keys stay in agreement because neither talks to the other: the state objects own the truth and raise a
+change event, a widget writes to the state, and the panel reads it back. Hiding the sidebar collapses it to zero
+width rather than removing it from the tree, so every knob is where you left it when it comes back.
 
 ## How it is put together
 
@@ -62,8 +80,10 @@ Coasting turns that unavoidable gap into a slight slow-down that the first repea
 the key is known to be held, so release goes back to being crisp.
 
 What is left is a tap travelling about 1.3 tiles — further than the key was actually down for. That is the
-irreducible cost of never being told when it came up, and it is the one knob to turn: `Axis.CoastSeconds` and
-`Axis.FirstPressMs` trade a tap's overshoot against how much a hold sags before its first repeat.
+irreducible cost of never being told when it came up, and it is the trade the Input tab exposes: **Coast** and
+**First press** buy a tap's precision against how much a hold sags before its first repeat. None of these can be
+shipped as a constant, because the repeat rate and initial delay behind them are per-OS, per-keyboard and
+user-adjustable — which is why they are knobs rather than numbers in the source.
 
 ## What it cost, and what that taught us
 

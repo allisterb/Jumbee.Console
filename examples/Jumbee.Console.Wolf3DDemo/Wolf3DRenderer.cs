@@ -32,8 +32,8 @@ public sealed class Wolf3DRenderer
     #endregion
 
     #region Properties
-    /// <summary>Levels per colour channel to snap to; 0 leaves the palette untouched. 6 roughly halves ANSI bytes.</summary>
-    public int QuantizeLevels { get; set; } = 6;
+    /// <summary>Levels per colour channel to snap to; 0 or 1 leaves the palette untouched. 6 roughly halves ANSI bytes.</summary>
+    public int QuantizeLevels { get; set; } = DefaultQuantizeLevels;
 
     /// <summary>Draws plane-one scenery as depth-sorted billboards.</summary>
     public bool DrawSprites { get; set; } = true;
@@ -146,6 +146,9 @@ public sealed class Wolf3DRenderer
     #endregion
 
     #region Fields
+    /// <summary>The shipped quantisation level, and what the Display tab's slider opens on.</summary>
+    public const int DefaultQuantizeLevels = 6;
+
     private const double AuthenticPlaneLength = 0.66;
     private readonly Wolf3DScene scene;
     private readonly HashSet<int> distinct = [];

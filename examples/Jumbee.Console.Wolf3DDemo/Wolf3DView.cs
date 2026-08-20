@@ -27,7 +27,7 @@ using ConsoleGUI.Space;
 /// was the first version, and it read as heavy input lag: after turning right, a left press bought exactly zero
 /// turn until the right window lapsed.</item>
 /// <item><b>The window is measured from the repeat stream, not guessed.</b> Presses arriving closer together than
-/// <see cref="RepeatGapMs"/> are auto-repeat, so their spacing is the real repeat interval; the window becomes a
+/// <see cref="Wolf3DTuning.RepeatGapMs"/> are auto-repeat, so their spacing is the real repeat interval; the window becomes a
 /// small multiple of it. That is far tighter than any fixed value — release stops the player in about a repeat and
 /// a half rather than in a fixed quarter-second.</item>
 /// <item><b>Before the first repeat arrives, speed decays instead of stopping.</b> The OS initial repeat delay is
@@ -44,10 +44,14 @@ public sealed class Wolf3DView : CompositeControl
 {
     #region Constructors
     /// <summary>Creates the viewport over <paramref name="scene"/>, redrawing at <paramref name="fps"/>.</summary>
-    public Wolf3DView(Wolf3DScene scene, int fps = 30)
+    public Wolf3DView(Wolf3DScene scene, Wolf3DTuning? tuning = null, int fps = 30)
     {
         Scene = scene;
+        Tuning = tuning ?? new Wolf3DTuning();
         Renderer = new Wolf3DRenderer(scene);
+        move = new Axis(Tuning);
+        strafe = new Axis(Tuning);
+        turn = new Axis(Tuning);
         SetContent(new Boundary(surface));
         clock.Start();
         feed = Feed(Tick, Math.Max(1, 1000 / Math.Max(1, fps)));
@@ -60,6 +64,19 @@ public sealed class Wolf3DView : CompositeControl
 
     /// <summary>The renderer, whose settings the sidebar and keys change.</summary>
     public Wolf3DRenderer Renderer { get; }
+
+    /// <summary>The movement and key-handling knobs the Input tab turns.</summary>
+    public Wolf3DTuning Tuning { get; }
+
+    /// <summary>
+    /// The auto-repeat interval measured from the keys actually being pressed, in ms, or 0 if none has been seen.
+    /// </summary>
+    /// <remarks>
+    /// A property of the machine, not of the demo, and the number every key-handling knob should be set against —
+    /// which is why the Input tab shows it live rather than leaving it to be guessed at.
+    /// </remarks>
+    public int MeasuredRepeatMs =>
+        Math.Max(move.MeasuredRepeatMs, Math.Max(turn.MeasuredRepeatMs, strafe.MeasuredRepeatMs));
 
     /// <summary>Doubles the horizontal sample rate, compositing each 2×2 block into a quadrant glyph.</summary>
     public bool QuadrantSampling
@@ -162,8 +179,8 @@ public sealed class Wolf3DView : CompositeControl
     private void Step(double dt)
     {
         var now = clock.ElapsedMilliseconds;
-        var speed = (running ? RunTilesPerSecond : WalkTilesPerSecond) * dt;
-        var radians = (running ? RunTurnRadians : WalkTurnRadians) * dt;
+        var speed = (running ? Tuning.RunSpeed : Tuning.WalkSpeed) * dt;
+        var radians = (running ? Tuning.RunTurnDegrees : Tuning.TurnDegrees) * (Math.PI / 180.0) * dt;
 
         var rotate = turn.Advance(dt, now) * radians;
         var forward = move.Advance(dt, now) * speed;
@@ -195,8 +212,13 @@ public sealed class Wolf3DView : CompositeControl
     /// interval from the presses themselves; and coasts rather than stopping until the first repeat proves the key
     /// is being held. See the notes on <see cref="Wolf3DView"/>.
     /// </remarks>
-    private sealed class Axis
+    private sealed class Axis(Wolf3DTuning tuning)
     {
+        /// <summary>The auto-repeat interval measured on this axis, or 0 if no repeat has been seen yet.</summary>
+        /// <remarks>Surfaced because it is the number every other key-handling constant should be set against, and
+        /// it is a property of the machine rather than of the demo — see <see cref="Wolf3DTuning.RepeatGapMs"/>.</remarks>
+        public int MeasuredRepeatMs => sawRepeat ? repeatMs : 0;
+
         /// <summary>Registers a press in <paramref name="direction"/> (-1 or +1) at <paramref name="now"/> ms.</summary>
         public void Press(int direction, long now)
         {
@@ -208,20 +230,20 @@ public sealed class Wolf3DView : CompositeControl
                 sawRepeat = false;
                 repeatMs = 0;
                 scale = 1.0;
-                until = now + FirstPressMs;
+                until = now + (long)tuning.FirstPressMs;
             }
-            else if (now - lastPressMs <= RepeatGapMs)
+            else if (now - lastPressMs <= tuning.RepeatGapMs)
             {
                 // Close enough to be auto-repeat. Track the SHORTEST gap seen: the first repeat after the initial
                 // delay can arrive late, and a window sized from that would overrun every release.
                 var gap = (int)Math.Max(1, now - lastPressMs);
                 repeatMs = sawRepeat ? Math.Min(repeatMs, gap) : gap;
                 sawRepeat = true;
-                until = now + Math.Clamp(repeatMs * RepeatWindows, MinSustainMs, MaxSustainMs);
+                until = now + (long)Math.Clamp(repeatMs * tuning.RepeatWindows, MinSustainMs, MaxSustainMs);
             }
             else
             {
-                until = now + FirstPressMs;
+                until = now + (long)tuning.FirstPressMs;
             }
 
             lastPressMs = now;
@@ -241,23 +263,24 @@ public sealed class Wolf3DView : CompositeControl
                 direction = 0;
                 scale = 0.0;
             }
+            else if (tuning.CoastSeconds <= 0.0)
+            {
+                direction = 0;
+                scale = 0.0;
+            }
             else
             {
                 // Still inside the OS initial repeat delay, or it was a tap — indistinguishable until the delay
                 // elapses. Coast down so a hold sags briefly instead of stalling, and a tap eases to a halt.
-                scale *= Math.Exp(-dt / CoastSeconds);
+                scale *= Math.Exp(-dt / tuning.CoastSeconds);
                 if (scale < 0.02) { direction = 0; scale = 0.0; }
             }
 
             return direction * scale;
         }
 
-        private const int FirstPressMs = 150;
-        private const int RepeatGapMs = 250;
-        private const int RepeatWindows = 3;
         private const int MinSustainMs = 90;
         private const int MaxSustainMs = 320;
-        private const double CoastSeconds = 0.22;
 
         private int direction;
         private long until;
@@ -270,19 +293,15 @@ public sealed class Wolf3DView : CompositeControl
 
     #region Fields
     private const int FeedJoinMs = 500;
-    private const double WalkTilesPerSecond = 3.4;
-    private const double RunTilesPerSecond = 6.0;
-    private const double WalkTurnRadians = 2.2;
-    private const double RunTurnRadians = 3.4;
     // Clamps a long stall so a late frame cannot teleport the player through a wall.
     private const double MaxStepSeconds = 0.1;
 
     private readonly HalfBlockSurface surface = new() { Background = new ConsoleGUI.Data.Color(0, 0, 0) };
     private readonly FeedHandle feed;
     private readonly Stopwatch clock = new();
-    private readonly Axis move = new();
-    private readonly Axis strafe = new();
-    private readonly Axis turn = new();
+    private readonly Axis move;
+    private readonly Axis strafe;
+    private readonly Axis turn;
     private long lastTickMs, fpsWindowMs;
     private int framesThisSecond;
     private bool running;

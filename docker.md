@@ -10,15 +10,16 @@ No clone, no build. Docker pulls the image ([`allisterb/jumbee-console`](https:/
 docker run --rm -it --pull=always allisterb/jumbee-console
 ```
 
-One image bundles five apps. The first argument picks which; with none, the examples browser runs:
+One image bundles six apps. The first argument picks which; with none, the examples browser runs:
 
 | Argument | App |
 | --- | --- |
 | *(none)* | Interactive examples browser |
 | `agent-harness` | Claude-desktop-style agent UI (session rail, transcript, live task list) |
-| `ide` | VS Code–style IDE demo — edit and `dotnet build`/`run` a sample project in its terminal pane |
+| `ide` | VS Code–style IDE demo — file explorer, multi-tab editor and a working terminal pane over a sample project |
 | `audio-scope` | Real-time oscilloscope, vectorscope and spectroscope over a bundled audio track |
 | `3dsandbox` | Real-time 3D rigid-body sandbox over three terminal renderers; `3dsandbox obj` opens its OBJ model viewer |
+| `wolf3d` | Wolfenstein 3D walkthrough — real maps and textures through a raycaster (needs game data, see below) |
 
 ```sh
 docker run --rm -it --pull=always allisterb/jumbee-console audio-scope
@@ -31,6 +32,15 @@ interactive terminal — the `-i` (keep stdin open) and `-t` (allocate a TTY) fl
 - On exit the app restores your terminal (it renders on the alternate screen buffer).
 - `--rm` removes the container when you quit.
 - If colours or box-drawing look off, forward your terminal type: `docker run --rm -it -e TERM=$TERM allisterb/jumbee-console`.
+
+Every app also takes **`--verify`**: a headless smoke check that renders its layout offscreen, prints one line and
+exits. That is the way to test the image where there is no terminal to look at — a build, or CI. Without a TTY the
+apps otherwise paint escape codes at a pipe until something times out.
+
+```sh
+docker run --rm jumbee-console wolf3d --verify
+# PASS  Wolf3D verify — Shareware data, 10 levels, 'Wolf1 Map1' renders (9082 lit cells, 7968 half-blocks, 1352 runs).
+```
 
 ### Getting the current image
 
@@ -53,18 +63,25 @@ docker run --rm -it allisterb/jumbee-console:0.1.6 audio-scope
 
 ## Build it yourself
 
-The [`Dockerfile`](Dockerfile) uses the full **.NET 10 SDK** image (Ubuntu 24.04) — not just the runtime — so the
-`dotnet` build tools stay available inside the container. It copies the repo and builds the examples project in
-Release, baking the build into the image.
+The [`Dockerfile`](Dockerfile) is a two-stage build: the **.NET 10 SDK** compiles every demo, and only the **.NET 10
+runtime** ships. The runtime stage copies the built output plus the two directories the demos actually read from
+disk (`media/`, the sandbox's `models/`) — the sources, the `ext/` submodules and the `obj/` intermediates all stay
+behind in the build stage, because the examples browser carries its side-by-side source as embedded resources and
+the IDE demo copies its sample project out of its own output directory.
 
 ```sh
 # Make sure the vendored submodules are present first:
 git submodule update --init --recursive
 
-# --pull refreshes the SDK base image and re-applies the latest OS security patches (see below).
+# --pull refreshes both base images and re-applies the latest OS security patches (see below).
 docker build --pull -t jumbee-console .
 docker run --rm -it jumbee-console
 ```
+
+> **The image no longer carries the .NET SDK.** It used to, so the IDE demo's terminal pane could `dotnet build`
+> and `dotnet run` its sample project in-container. That one trick cost several hundred megabytes and brought the
+> whole build-tool CVE surface with it, so it was dropped; the pane is still a real terminal, and a much smaller
+> toolchain can be wired in later to make the same point. Everything else the demos do is unchanged.
 
 ### The AudioScope demo's sample track
 
@@ -112,6 +129,24 @@ bundle them. Where the two images put them differs, because only one of them has
 > non-commercial terms, and `THIRD-PARTY-NOTICES.TXT` is where this repo records that kind of thing. Any `.txt`
 > alongside the `.obj` files is copied into the slim image for exactly this.
 
+### The Wolf3D demo's game data
+
+`wolf3d` reads the original 1992 game's own files. **They are not redistributable and are deliberately excluded
+from the build context** ([`.dockerignore`](.dockerignore)), so no published image contains them — note that
+Docker ignores `.gitignore` entirely, which is why the exclusion has to be stated in both places.
+
+Without them the demo prints what it needs and exits. Mount a directory holding the eight free shareware `.WL1`
+files (or the full game's `.WL6` files) over the demo's `GameData` folder to play:
+
+```sh
+docker run --rm -it \
+  -v /path/to/wolf3d-data:/src/examples/Jumbee.Console.Wolf3DDemo/bin/Release/net10.0/GameData \
+  jumbee-console wolf3d
+```
+
+See [`examples/Jumbee.Console.Wolf3DDemo/GameData/README.md`](examples/Jumbee.Console.Wolf3DDemo/GameData/README.md)
+for which files are needed and where the shareware archive comes from.
+
 ### Scoping a live audio device (Linux hosts)
 
 `audio-scope` can capture a real input instead of the file. Both images ship the ALSA runtime, so all that is needed
@@ -146,13 +181,14 @@ A few caveats worth knowing:
   Add `RUN apt-get update && apt-get install -y libasound2-plugins` to a derived image to get the plugin. `--loopback`
   on Linux means pointing at a sink's `.monitor` source rather than a WASAPI loopback endpoint.
 
-The build patches the base OS packages (`apt-get upgrade`) to trim the CVEs Docker Scout reports in the SDK image's
-build tools. Those are mostly medium-severity issues in tools (`git`, `wget`, `tar`, …) the running TUI never uses, so
-the practical risk is low — but rebuilding periodically with **`--pull`** keeps both the base image and the patch layer
-current.
+The runtime stage patches its base OS packages (`apt-get upgrade`) before installing ALSA. Shipping the runtime
+rather than the SDK is what removed most of what Docker Scout used to report: those findings were overwhelmingly
+medium-severity issues in build tools (`git`, `wget`, `tar`, …) that the running TUI never touched but that shipped
+anyway. Rebuilding periodically with **`--pull`** keeps both the base image and the patch layer current.
 
-> For a smaller image, change the base tag in the `Dockerfile` to `mcr.microsoft.com/dotnet/sdk:10.0-alpine`.
-> The examples set `InvariantGlobalization=true`, so no ICU package is required on either base.
+> For a smaller image still, change the runtime tag in the `Dockerfile` to `mcr.microsoft.com/dotnet/runtime:10.0-alpine`
+> (and the build tag to match). The examples set `InvariantGlobalization=true`, so no ICU package is required on
+> either base; Alpine needs `alsa-lib` via `apk` instead of the `apt-get` block.
 
 ## Publishing (maintainers)
 

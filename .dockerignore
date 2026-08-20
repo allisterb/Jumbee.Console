@@ -15,6 +15,12 @@
 reference/
 tests/
 BenchmarkDotNet.Artifacts/
+# id Software game assets. GameData/.gitignore keeps these out of git, but Docker build contexts do not
+# read .gitignore -- and Dockerfile does `COPY . .`, so without this a machine that has the files would bake
+# non-redistributable assets into a pushed image.
+examples/Jumbee.Console.Wolf3DDemo/GameData/*
+!examples/Jumbee.Console.Wolf3DDemo/GameData/README.md
+
 # Packed .nupkg output (pack.ps1). The demos build from source, so shipping the packages would only bloat the image
 # and bust the COPY cache on every release.
 artifacts/
