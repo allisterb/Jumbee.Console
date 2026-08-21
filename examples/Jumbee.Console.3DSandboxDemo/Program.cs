@@ -67,9 +67,18 @@ objCommand.SetAction(async (parse, ct) =>
     return await Run(ShellType.ModelViewer, start);
 });
 
+// A headless smoke check, on the ROOT so one invocation covers both scenes -- that is what a container build wants
+// to run, and a flag it had to repeat per subcommand would get one of them checked and the other forgotten.
+var verify = new Option<bool>("--verify")
+{
+    Description = "Render both scenes offscreen through every renderer, print one PASS/FAIL line and exit. For CI " +
+                  "and container builds, where there is no terminal to look at.",
+};
+
 var root = new RootCommand("A real-time 3D rigid-body sandbox in the terminal, with three renderers.")
 {
     sandboxModels,
+    verify,
     objCommand,
 };
 
@@ -79,6 +88,9 @@ root.SetAction(async (parse, ct) =>
     // self-occlusion to be compared on, and it means the mesh path works with no third-party asset.
     Meshes.Register(Meshes.TorusKnot(), "knot");
     if (!LoadModels(parse.GetValue(sandboxModels))) return 1;
+    // Before the UI, and after the models: verifying is instead of running, and the viewer half of the check wants
+    // whatever was loaded to be registered so a --model that fails to parse fails the check too.
+    if (parse.GetValue(verify)) return Verify.Run();
     return await Run(ShellType.Sandbox, 0);
 });
 

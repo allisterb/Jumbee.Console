@@ -1,13 +1,125 @@
 #!/usr/bin/env bash
-# Build the Jumbee.Console Examples projects (and thee dependency chain: core, Styles, VtNetCore, …).
-# Extra args are passed through to `dotnet build`, e.g. ./build -c Release
+# Build Jumbee.Console. The first argument picks WHAT to build; with no argument the three core libraries are built
+# and nothing else. Targets mirror examples.sh, so `./build wolf3d && ./examples.sh wolf3d` names the same thing
+# twice. Remaining arguments pass through to `dotnet build`.
+#
+#   ./build                      the three packable libraries
+#   ./build examples             every example app
+#   ./build wolf3d               one example app
+#   ./build all --verify         everything, then run each demo's headless smoke check
 set -euo pipefail
 cd "$(dirname "$0")"
-echo "Building Jumbee.Console..."
-dotnet build examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj -c Release "$@"
-dotnet build examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj -c Release "$@"
-dotnet build examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj -c Release "$@"
-dotnet build examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj -c Release "$@"
-dotnet build examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj -c Release "$@"
-dotnet build examples/Jumbee.Console.Wolf3DDemo/Jumbee.Console.Wolf3DDemo.csproj -c Release "$@"
+
+usage() {
+  cat <<'EOF'
+Build Jumbee.Console — pick what to build:
+
+  (no target)       The three core libraries: Jumbee.Console, .Documents, .Snapshot (default)
+  examples          Every example app (the six the Docker images ship)
+  all               Core libraries, then every example app
+
+  browser           Interactive examples browser
+  agent-harness     Claude-style agent harness demo
+  ide               VS Code-style IDE demo
+  audio-scope       Oscilloscope / vectorscope / spectroscope demo
+  3dsandbox         3D rigid-body sandbox and model viewer
+  wolf3d            Wolf3D game engine port
+
+Usage:
+  ./build [target] [--verify] [dotnet build args...]
+
+  --verify   After building, run each built demo's headless smoke check (--verify) and
+             fail if any does not print PASS. Libraries have no check and are skipped.
+
+Anything else is passed to `dotnet build`, e.g. `./build examples -v n`.
+EOF
+}
+
+# Paths are declared once and shared by the target lists below, so a renamed project is a single edit.
+core_libs=(
+  "src/Jumbee.Console/Jumbee.Console.csproj"
+  "src/Jumbee.Console.Documents/Jumbee.Console.Documents.csproj"
+  "src/Jumbee.Console.Snapshot/Jumbee.Console.Snapshot.csproj"
+)
+
+# name → project, in the order the images build them. Bash 3 has no nested arrays, so this is two parallel lists
+# indexed together; `demo_index` maps a target name to a slot.
+demo_names=(browser        agent-harness      ide          audio-scope       3dsandbox            wolf3d)
+demo_projects=(
+  "examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj"
+  "examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj"
+  "examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj"
+  "examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj"
+  "examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj"
+  "examples/Jumbee.Console.Wolf3DDemo/Jumbee.Console.Wolf3DDemo.csproj"
+)
+
+demo_index() {
+  local i
+  for i in "${!demo_names[@]}"; do
+    [[ "${demo_names[$i]}" == "$1" ]] && { echo "$i"; return 0; }
+  done
+  return 1
+}
+
+# Split the target off the front, then pull --verify out of what is left: everything still standing after that is
+# for `dotnet build`, so a flag this script understands can never reach the compiler by accident.
+target=""
+case "${1:-}" in
+  -h|--help|help) usage; exit 0 ;;
+  # An OPTION rather than a verb goes to the default target with the flag kept, matching examples.sh. Only a bare
+  # word is a target, so a mistyped one is an error instead of silently building something else.
+  -*|'')          ;;
+  *)              target="$1"; shift ;;
+esac
+
+verify=0
+args=()
+for a in "$@"; do
+  if [[ "$a" == "--verify" ]]; then verify=1; else args+=("$a"); fi
+done
+
+projects=()
+demos=()
+case "$target" in
+  ''|core)  projects=("${core_libs[@]}") ;;
+  examples) projects=("${demo_projects[@]}"); demos=("${demo_names[@]}") ;;
+  all)      projects=("${core_libs[@]}" "${demo_projects[@]}"); demos=("${demo_names[@]}") ;;
+  *)
+    if i=$(demo_index "$target"); then
+      projects=("${demo_projects[$i]}")
+      demos=("${demo_names[$i]}")
+    else
+      echo "Unknown target: $target" >&2
+      echo >&2
+      usage >&2
+      exit 2
+    fi ;;
+esac
+
+echo "Restoring Jumbee.Console..."
+dotnet restore src/Jumbee.Console.sln
+
+for p in "${projects[@]}"; do
+  echo "Building $p..."
+  dotnet build "$p" -c Release ${args[@]+"${args[@]}"}
+done
+
+if [[ $verify -eq 1 ]]; then
+  if [[ ${#demos[@]} -eq 0 ]]; then
+    echo "Nothing to verify: the libraries have no headless check (build 'examples' or a demo)."
+  else
+    echo
+    echo "Verifying..."
+    for d in "${demos[@]}"; do
+      # Through examples.sh rather than by invoking the dll directly, so the check exercises the SAME launcher the
+      # Docker images use as their entry point -- a demo whose path or working directory is wrong there fails here.
+      if ! ./examples.sh "$d" --verify; then
+        echo "FAIL  $d did not verify." >&2
+        exit 1
+      fi
+    done
+  fi
+fi
+
 echo "Jumbee.Console build complete."

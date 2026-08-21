@@ -66,7 +66,9 @@ Note that Jumbee.Console uses its own compatible version of the Spectre.Console 
 * Clone the repo with submodules:
   `git clone --recurse-submodules https://github.com/allisterb/Jumbee.Console`
   
-* Switch to the repo dir and run the build script: `.\build.cmd` or `./build`
+* Switch to the repo dir and run the build script: `.\build.cmd` or `./build`. With no target that builds the three
+  libraries; `build examples` builds all the demo apps and `build wolf3d` (or any other name from `build --help`)
+  builds just one.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more details on building and testing.
 

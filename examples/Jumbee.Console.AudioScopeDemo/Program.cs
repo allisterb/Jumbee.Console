@@ -106,10 +106,16 @@ var listDevicesOpt = new Option<bool>("--list-devices")
     Description = "Print the live capture endpoints --device can select (honours --loopback) and exit.",
 };
 
+var verifyOpt = new Option<bool>("--verify")
+{
+    Description = "Assemble the scopes, decode one frame, render the layout offscreen, print one PASS/FAIL line and " +
+                  "exit. For CI and container builds, where there is no terminal to look at.",
+};
+
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
     inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt,
-    overlapOpt, tickOpt, schemeOpt, listDevicesOpt,
+    overlapOpt, tickOpt, schemeOpt, listDevicesOpt, verifyOpt,
 };
 
 root.SetAction(async (parse, ct) =>
@@ -135,6 +141,7 @@ root.SetAction(async (parse, ct) =>
     var scheme = ScopeTheme.FromName(parse.GetValue(schemeOpt));
     UI.SetTheme(scheme, UI.GlyphTheme);
     var live = input.Equals("live", StringComparison.OrdinalIgnoreCase);
+    var verifying = parse.GetValue(verifyOpt);
 
     // --list-devices is a query, not a run: print the endpoints --device selects and exit before any UI starts.
     if (parse.GetValue(listDevicesOpt))
@@ -165,9 +172,14 @@ root.SetAction(async (parse, ct) =>
     // axis the way scope-tui's raw-sample-space plot does, without touching the interactive Scale knob.
     const double AmplitudeGain = 5.0;
     IAudioSource audio;
+    // Verifying without the bundled track falls back to a generated tone rather than failing. The track is not
+    // redistributable and so is not in git, which makes "absent" the normal case for an image or a fresh clone; a
+    // check that hard-failed there would break every build that skipped the download, and a gate everyone has to
+    // switch off is not a gate. See VerifyToneSource.
+    var syntheticAudio = verifying && !live && !File.Exists(filePath);
     try
     {
-        audio = live
+        audio = syntheticAudio ? new VerifyToneSource(bufferSamples) : live
             // A live device already hands out a rolling latest-window, so overlapping is purely a matter of sampling
             // it more often -- nothing to configure on the source. A file has to retain the previous frame's tail.
             ? new RecordingAudioSource(bufferSamples, RecordingAudioSource.ResolveDevice(deviceSpec, loopback), loopback, mono)
@@ -198,6 +210,11 @@ root.SetAction(async (parse, ct) =>
     // otherwise run the pump ~750 times a second and fan out to three pane computes on each. Below that floor the
     // feed no longer keeps up with the audio, so windows have gaps -- acceptable, since 64 samples is a degenerate
     // display anyway, and the alternative is a self-inflicted busy loop.
+    // How long --verify will keep pulling frames looking for signal before calling it silence. In SECONDS, not
+    // frames: a frame count means a different duration at every --buffer, and the bundled track opens with ~1.8s of
+    // digital silence -- so a 40-frame scan covered 1.7s at the default buffer and failed, while the same 40 frames
+    // at --buffer 4096 covered 3.4s and passed. The flag would have been reporting the buffer size, not the audio.
+    const double MaxSilentSeconds = 8.0;
     const int MinFeedMs = 4;
     TimeSpan FeedIntervalFor(double ov) => TimeSpan.FromMilliseconds(
         Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples * (1.0 - ov) / audio.SampleRate)));
@@ -351,6 +368,59 @@ root.SetAction(async (parse, ct) =>
     // Prime the bus with one frame so the panes have data to draw on their very first tick (decoded here on the main
     // thread, before the UI loop starts -- fine, it's the same single-threaded reader the pump will continue from).
     bus.Publish(audio.NextFrame());
+
+    // Verify AFTER the bus is primed and the whole tree is assembled, but BEFORE any feed or pump starts: the check
+    // then covers the real layout and a real decoded frame while starting no background threads at all, so it cannot
+    // hang the build that called it.
+    if (verifying)
+    {
+        var frame = bus.Latest?.Channels;
+        var decoded = frame?.Sum(c => c.Length) ?? 0;
+        static double Peak(double[][]? f) =>
+            f is null ? 0.0 : f.SelectMany(c => c).Select(Math.Abs).DefaultIfEmpty(0).Max();
+
+        // Keep pulling until there is actually SIGNAL, not just samples. Real tracks open on silence -- this one's
+        // first frame is all zeros -- so a check content with "4096 samples decoded" would pass just as happily on a
+        // decoder that returned nothing but zeros, which is the failure most worth catching here.
+        var maxFrames = Math.Max(1, (int)Math.Ceiling(MaxSilentSeconds * audio.SampleRate / bufferSamples));
+        var peak = Peak(frame);
+        var scanned = 1;
+        while (peak == 0.0 && scanned < maxFrames)
+        {
+            peak = Peak(audio.NextFrame());
+            scanned++;
+        }
+
+        var scannedSeconds = (double)scanned * bufferSamples / audio.SampleRate;
+
+        const int VerifyWidth = 110, VerifyHeight = 30;
+        var buffer = Jumbee.Console.Snapshot.ConsoleSnapshot.Render(rootLayout, VerifyWidth, VerifyHeight);
+        var lit = 0;
+        for (var y = 0; y < VerifyHeight; y++)
+            for (var x = 0; x < VerifyWidth; x++)
+                if (buffer[x, y].Character.Foreground is not null) lit++;
+
+        // A tenth of the screen: three framed panes and a status bar light a good deal of it on borders alone, so a
+        // threshold this low still catches a tree that failed to compose without being tuned to the waveforms.
+        var problems = new List<string>();
+        if (audio.Channels < 1) problems.Add($"{audio.Channels} channels");
+        if (decoded < bufferSamples) problems.Add($"decoded {decoded} samples, expected at least {bufferSamples}");
+        if (peak == 0.0) problems.Add($"{scannedSeconds:F1}s of audio decoded to pure silence");
+        if (lit < VerifyWidth * VerifyHeight / 10) problems.Add($"layout drew {lit} lit cells");
+
+        pump.DisposeAudio();
+        var origin = syntheticAudio ? "generated tone" : live ? "live capture" : Path.GetFileName(filePath);
+        if (problems.Count > 0)
+        {
+            Console.WriteLine("FAIL  AudioScope verify — " + string.Join("; ", problems));
+            return 1;
+        }
+
+        Console.WriteLine($"PASS  AudioScope verify — {origin}, {audio.Channels}ch @ {audio.SampleRate}Hz, " +
+                          $"{decoded} samples, signal after {scannedSeconds:F2}s (peak {peak:F3}), " +
+                          $"3 scopes render ({lit} lit cells).");
+        return 0;
+    }
 
     // --- The fan-out: each pane runs its OWN self-driving compute feed off the one shared bus. -------------------
     // Factored into a function because [ / ] retune the feed at runtime, and a FeedHandle's interval is fixed when it

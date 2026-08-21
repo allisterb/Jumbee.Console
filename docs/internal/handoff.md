@@ -31,8 +31,13 @@ dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
 
 ### What is unfinished, in order
 
-- **`--verify` is not wired into any build script** — there is a task chip for this. `build-docker.*` build and tag
-  both images with nothing checking them, and `audio-scope` / `3dsandbox` still have no `--verify` at all.
+- ~~**`--verify` is not wired into any build script**~~ — **done 2026-08-20.** `audio-scope` and `3dsandbox` now
+  implement it (`AudioScopeDemo/Program.cs`, `3DSandboxDemo/Verify.cs`), `build`/`build.cmd` take `--verify` after
+  any demo target, and `build-docker.*` verify **both images by default** by running every app they ship, with
+  `--no-verify` to skip. Two things the wiring turned up: `wolf3d --verify` can never pass inside an image
+  (`.dockerignore` keeps the game data out, and `docker.md` used it as its example — fixed), and the AudioScope
+  check has to scan for signal by **duration** rather than frame count, because the bundled track opens on ~1.8s of
+  digital silence and a fixed frame count reports the `--buffer` size rather than the audio.
 - **The pad's Open/Fire are the only game verbs.** `GameSession` (1,502 vendored lines) also has pushwalls,
   elevators, pickups and level progression, none of them driven. Pushwalls are the cheapest next one.
 - **Sextants are blocked, not rejected.** Worth only ~10% over quadrant, and gated on `Character.Content` being

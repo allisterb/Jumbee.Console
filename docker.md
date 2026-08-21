@@ -38,8 +38,19 @@ exits. That is the way to test the image where there is no terminal to look at �
 apps otherwise paint escape codes at a pipe until something times out.
 
 ```sh
-docker run --rm jumbee-console wolf3d --verify
-# PASS  Wolf3D verify — Shareware data, 10 levels, 'Wolf1 Map1' renders (9082 lit cells, 7968 half-blocks, 1352 runs).
+docker run --rm jumbee-console 3dsandbox --verify
+# PASS  3DSandbox verify — sandbox (shaded 5110, wireframe 2682, solid 5110), viewer (shaded 5025, ...).
+```
+
+`build-docker.sh` / `build-docker.cmd` run exactly that against both images after building them, over every app the
+image ships, and fail the build if any does not pass. Pass `--no-verify` to skip it.
+
+**`wolf3d --verify` is the one that cannot pass inside an image.** The id Software assets are not redistributable,
+so `.dockerignore` keeps them out of the build context and no image carries game data — the app exits with a message
+saying where to put the files. Run it against a mounted data directory instead:
+
+```sh
+docker run --rm -v /path/to/WL1:/data jumbee-console wolf3d /data --verify
 ```
 
 ### Getting the current image

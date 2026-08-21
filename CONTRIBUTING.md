@@ -14,7 +14,17 @@ Or from an existing clone:
     .\build.cmd     # Windows
     ./build         # Linux/macOS
 
-Either script restores and builds the library and the example apps. To build the whole solution directly:
+With no target that builds the three packable libraries — `Jumbee.Console`, `.Documents` and `.Snapshot` — and
+nothing else. A target picks something bigger or narrower, using the same names `examples.cmd` / `examples.sh` use
+to *run* them:
+
+    .\build.cmd examples        # every example app
+    .\build.cmd wolf3d          # just one
+    .\build.cmd all             # libraries, then every example app
+    .\build.cmd --help          # the full list
+
+Add `--verify` to run each demo's headless smoke check after building it, failing if any does not pass. Anything
+else is handed to `dotnet build`, so `./build examples -v n` works. To build the whole solution directly:
 
     dotnet build src/Jumbee.Console.sln
 

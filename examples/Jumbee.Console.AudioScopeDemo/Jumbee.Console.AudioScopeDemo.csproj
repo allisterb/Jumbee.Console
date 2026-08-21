@@ -24,6 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Jumbee.Console\Jumbee.Console.csproj" />
+    <!-- Snapshot is what the verify flag renders through: it composites the real control tree into an
+         offscreen buffer, so the check judges what would reach the screen. -->
+    <ProjectReference Include="..\..\src\Jumbee.Console.Snapshot\Jumbee.Console.Snapshot.csproj" />
   </ItemGroup>
 
 </Project>

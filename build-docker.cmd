@@ -1,23 +1,25 @@
 @echo off
-setlocal
+rem Build the examples projects, then BOTH Docker images tagged with the shared ProjectAssemblyVersion: the full
+rem playground image (Dockerfile) and the slim NativeAOT image (Dockerfile.aot). Each image is then VERIFIED by
+rem running every app it ships with --verify, so a broken image fails here rather than for whoever pulls it.
+rem `--no-verify` skips that; any other argument is passed through to `docker build`. Mirrors build-docker.sh.
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-echo Restoring Jumbee.Console...
-dotnet restore src\Jumbee.Console.sln
-if errorlevel 1 exit /b 1
+rem --no-verify is consumed here so it can never reach `docker build`, which would reject it.
+set "VERIFY=1"
+set "DOCKERARGS="
+:parse
+if "%~1"=="" goto parsed
+if /i "%~1"=="--no-verify" (set "VERIFY=") else (set "DOCKERARGS=!DOCKERARGS! %~1")
+shift
+goto parse
+:parsed
 
-echo Building Jumbee.Console examples projects...
-dotnet build examples\Jumbee.Console.Examples\Jumbee.Console.Examples.csproj /p:Configuration=Release
-if errorlevel 1 exit /b 1
-dotnet build examples\Jumbee.Console.AgentHarnessDemo\Jumbee.Console.AgentHarnessDemo.csproj /p:Configuration=Release
-if errorlevel 1 exit /b 1
-dotnet build examples\Jumbee.Console.IdeDemo\Jumbee.Console.IdeDemo.csproj /p:Configuration=Release
-if errorlevel 1 exit /b 1
-dotnet build examples\Jumbee.Console.AudioScopeDemo\Jumbee.Console.AudioScopeDemo.csproj /p:Configuration=Release
-if errorlevel 1 exit /b 1
-dotnet build examples\Jumbee.Console.3DSandboxDemo\Jumbee.Console.3DSandboxDemo.csproj /p:Configuration=Release
-if errorlevel 1 exit /b 1
-dotnet build examples\Jumbee.Console.Wolf3DDemo\Jumbee.Console.Wolf3DDemo.csproj /p:Configuration=Release
+rem Through build.cmd rather than an inline list, so the set of example projects is defined in exactly one place and
+rem a new demo cannot end up in the images but not the build script (or the reverse).
+echo Building the examples projects (Release)...
+call "%~dp0build.cmd" examples
 if errorlevel 1 exit /b 1
 
 rem The AudioScope demo defaults to the bundled sample track, which is not tracked in git — warn before an image is
@@ -43,13 +45,42 @@ if not defined VERSION (
 )
 
 echo Building Docker image jumbee-console:%VERSION% (also tagged latest)...
-docker build %* -t jumbee-console:%VERSION% -t jumbee-console:latest .
+docker build !DOCKERARGS! -t jumbee-console:%VERSION% -t jumbee-console:latest .
 if errorlevel 1 exit /b 1
+call :verify jumbee-console:%VERSION% browser agent-harness ide audio-scope 3dsandbox
+if errorlevel 1 exit /b 1
+rem wolf3d is deliberately absent above: .dockerignore excludes the id Software assets from the build context (they
+rem are not redistributable), so the images never carry game data and `wolf3d --verify` inside one cannot pass.
+if defined VERIFY echo   (wolf3d not verified: .dockerignore keeps the game data out of the image.)
 
 rem Also build the slim NativeAOT image (examples browser, agent harness and AudioScope as native binaries; see
 rem Dockerfile.aot). The IDE demo is not in the AOT image.
 echo Building NativeAOT Docker image jumbee-console-aot:%VERSION% (also tagged latest)...
-docker build %* -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest .
+docker build !DOCKERARGS! -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest .
+if errorlevel 1 exit /b 1
+rem Four apps, not five: the IDE demo is not AOT-eligible and is not in the slim image (see examples-aot.sh).
+call :verify jumbee-console-aot:%VERSION% browser agent-harness audio-scope 3dsandbox
 if errorlevel 1 exit /b 1
 
 echo Done: jumbee-console:%VERSION% and jumbee-console-aot:%VERSION% (both also tagged latest).
+exit /b 0
+
+rem Runs every app an image ships with --verify. Each prints one PASS/FAIL line and exits, so this is the whole
+rem smoke test: no TTY needed, and a container that cannot compose its layout fails the build.
+:verify
+set "IMAGE=%~1"
+if not defined VERIFY (
+  echo Skipping verification of %IMAGE% ^(--no-verify^).
+  exit /b 0
+)
+echo Verifying %IMAGE%...
+shift
+:verify_loop
+if "%~1"=="" exit /b 0
+docker run --rm %IMAGE% %~1 --verify
+if errorlevel 1 (
+  echo FAIL  %IMAGE%: '%~1 --verify' did not pass. 1>&2
+  exit /b 1
+)
+shift
+goto verify_loop
