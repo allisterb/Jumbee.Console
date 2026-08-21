@@ -6,7 +6,12 @@ using Jumbee.Console.Wolf3DDemo;
 // keys through the ROOT LAYOUT the way the live loop does — a key routed straight at a control takes a different
 // path and can pass while the running app receives nothing.
 const string GameData = @"C:\Projects\Jumbee.Console\examples\Jumbee.Console.Wolf3DDemo\GameData";
-const int W = 200, H = 52;
+// Overridable as a bare WxH argument: a sidebar bug is usually a bug at ONE height, and the compact layout only
+// appears below the threshold the pages derive for themselves.
+var size = args.FirstOrDefault(a => a.Contains('x') && a.All(c => char.IsDigit(c) || c == 'x'))?.Split('x');
+var W = size is null ? 200 : int.Parse(size[0]);
+var H = size is null ? 52 : int.Parse(size[1]);
+
 
 var failures = 0;
 void Check(string what, bool ok, string? detail = null)
@@ -50,6 +55,42 @@ if (mode == "png")
 
 if (mode == "surfaces") return Surfaces.Run(scene, 200, 50);
 
+if (mode == "braille") return BrailleProbe.Run(outDir);
+
+if (mode == "rowfilter")
+{
+    RowFilterCheck.Run(scene, 200, 50);
+
+    // The blit score above isolates the filter; this charges it end to end over the assembled shell, where the
+    // quadrant compositor sits downstream of both strategies and only the emitted bytes matter.
+    Console.WriteLine("\n  End to end, quadrant sampling, 200x52:\n");
+    Console.WriteLine("  size      motion  fov    quant  quad  filter     scene    paint     emit    TOTAL   ANSI B/frame   runs");
+    Measure(200, 52, 'w', "walk", true, 10, true, RowFilter.Nearest, quiet: true);
+    foreach (var quant in new[] { 0, 10 })
+        foreach (var filter in new[] { RowFilter.Nearest, RowFilter.Box })
+            Measure(200, 52, 'w', "walk", true, quant, true, filter);
+
+    // PNGs last, and of the SAME scene under both filters, because the numbers above cannot say whether the
+    // reconstructed detail reads as detail or as mush. Cascadia Mono: a shell dump would mangle the quadrant glyphs.
+    Directory.CreateDirectory(outDir);
+    var filterOptions = new SnapshotImageOptions { FontFamily = "Cascadia Mono" };
+    view.Sampling = SurfaceMode.Quadrant;
+    foreach (var (quant, rowFilter) in
+             new[] { (10, RowFilter.Nearest), (10, RowFilter.Box), (0, RowFilter.Nearest), (0, RowFilter.Box) })
+    {
+        view.Renderer.QuantizeLevels = quant;
+        view.Renderer.RowFilter = rowFilter;
+        _ = ConsoleSnapshot.ToText(shell.Root, W, H);
+        view.DrawFrame();
+        var name = $"rowfilter-{(quant == 0 ? "full" : quant + "ch")}-{rowFilter.ToString().ToLowerInvariant()}.png";
+        ConsoleSnapshot.SavePng(ConsoleSnapshot.Render(shell.Root, W, H), Path.Combine(outDir, name), filterOptions);
+        Console.WriteLine($"  {name,-32} colours {view.LastCost.Colors,4}");
+    }
+
+    Console.WriteLine();
+    return 0;
+}
+
 if (mode == "rows")
 {
     // Left 44 columns and right 36 of the top rows, to see where a control's text is actually landing.
@@ -66,7 +107,8 @@ if (mode == "perf")
 {
     // The frame cost of the ASSEMBLED shell -- border, footer and all -- over the real ConsoleManager, so the
     // published numbers describe the app rather than a bare surface.
-    Console.WriteLine("\n  size      motion  fov    quant  quad     scene    paint     emit    TOTAL   ANSI B/frame   runs");
+    Console.WriteLine("\n  size      motion  fov    quant  quad  filter     scene    paint     emit    TOTAL   ANSI B/frame   runs");
+    Measure(200, 52, 'w', "walk", true, 10, false, RowFilter.Nearest, quiet: true);
     foreach (var (w, h) in new[] { (120, 32), (200, 52), (240, 62) })
     {
         foreach (var (motion, label) in new[] { ('\0', "still"), ('w', "walk"), ('d', "turn") })
@@ -87,55 +129,6 @@ if (mode == "perf")
     }
 
     return 0;
-
-    void Measure(int w, int h, char motion, string label, bool authentic, int quant, bool quad)
-    {
-        var s = new Wolf3DScene(GameData);
-        using var sh = Wolf3DShell.Build(s);
-        sh.View.Renderer.AuthenticFov = authentic;
-        sh.View.Renderer.QuantizeLevels = quant;
-        sh.View.Sampling = quad ? SurfaceMode.Quadrant : SurfaceMode.HalfBlock;
-
-        long frameBytes = 0;
-        ConsoleGUI.ConsoleManager.AnsiEnabled = true;
-        ConsoleGUI.ConsoleManager.AnsiOutput = sb => { frameBytes += sb.ToString()!.Length; return Task.CompletedTask; };
-        ConsoleGUI.ConsoleManager.Console = new NullConsole { Size = new ConsoleGUI.Space.Size(w, h) };
-        ConsoleGUI.ConsoleManager.Setup();
-        ConsoleGUI.ConsoleManager.Content = sh.Root.CControl;
-        UI.PaintFrame();
-        ConsoleGUI.ConsoleManager.Draw();
-        sh.View.Focus();
-
-        const int Warmup = 15, N = 90;
-        List<double> draws = [], paints = [], emits = [];
-        List<long> bytes = [];
-        List<int> runs = [];
-        var sw = new System.Diagnostics.Stopwatch();
-        for (var i = 1; i <= Warmup + N; i++)
-        {
-            if (motion != '\0') Send(sh.Root, motion);
-            // A gentle drift, or the walk runs into the first wall it meets and every measured frame after that is
-            // a stationary one -- which reads as "walking is free" when it is the opposite.
-            if (label == "walk" && i % 3 == 0) Send(sh.Root, 'd');
-            sw.Restart(); sh.View.DrawFrame(1.0 / 30.0); sw.Stop();
-            var d = sw.Elapsed.TotalMicroseconds;
-            sw.Restart(); UI.PaintFrame(); sw.Stop();
-            var p = sw.Elapsed.TotalMicroseconds;
-            frameBytes = 0;
-            sw.Restart(); ConsoleGUI.ConsoleManager.Draw(); sw.Stop();
-            ConsoleGUI.ConsoleManager.OutputIdle.GetAwaiter().GetResult();
-            var e = sw.Elapsed.TotalMicroseconds;
-            if (i <= Warmup) continue;
-            draws.Add(d); paints.Add(p); emits.Add(e); bytes.Add(frameBytes); runs.Add(sh.View.LastCost.Runs);
-        }
-
-        draws.Sort(); paints.Sort(); emits.Sort(); bytes.Sort(); runs.Sort();
-        var total = draws[N / 2] + paints[N / 2] + emits[N / 2];
-        Console.WriteLine(
-            $"  {w}x{h,-4} {label,7}  {(authentic ? "66deg" : "wide"),-5}  {(quant == 0 ? "none" : quant + "/ch"),6}  " +
-            $"{(quad ? "on" : "off"),-4}  {draws[N / 2],6:F0}us {paints[N / 2],6:F0}us {emits[N / 2],6:F0}us " +
-            $"{total,7:F0}us  {bytes[N / 2],9:N0} B  {runs[N / 2],6:N0}");
-    }
 }
 
 Console.WriteLine($"\n{scene.Edition} data · {scene.Levels.Count} levels · '{scene.Map.Name}'\n");
@@ -314,7 +307,8 @@ view.DrawFrame();
 var displayTab = Panel(shell.Root, W, H);
 Check("the sidebar shows both tabs", displayTab.Contains("Display") && displayTab.Contains("Input"));
 Check("the Display tab lists its knobs",
-    displayTab.Contains("Quantize") && displayTab.Contains("Surface") && displayTab.Contains("Authentic FOV"));
+    displayTab.Contains("Quantize") && displayTab.Contains("Surface") && displayTab.Contains("Row filter")
+        && displayTab.Contains("Authentic FOV"));
 // The cost readout belongs to the footer alone -- it is true of the app rather than of a page, and the footer is
 // the one thing that cannot be hidden. Assert both halves: the footer has it, the panel does not duplicate it.
 // (Sliced above the footer rows, since the footer spans the full width and so ends inside the sidebar's columns.)
@@ -572,8 +566,124 @@ Check("and the same width in both — sprites are not squeezed by quadrant sampl
     Math.Abs(halfWidth - quadWidth) <= Math.Max(2, halfWidth / 10),
     $"half {halfWidth} vs quadrant {quadWidth} cells");
 
+// --- the row filter ----------------------------------------------------------------------------------------------
+// Compared as PICTURES rather than by asserting the property, because the filter reduces rows that only exist under
+// quadrant sampling: reading RowFilter back would pass just as happily if the blit ignored it.
+string Picture(SurfaceMode sampling, RowFilter filter)
+{
+    view.Sampling = sampling;
+    view.Renderer.RowFilter = filter;
+    _ = ConsoleSnapshot.ToText(shell.Root, W, H);
+    view.DrawFrame();
+    var buffer = ConsoleSnapshot.Render(shell.Root, W, H);
+    var sb = new System.Text.StringBuilder();
+    for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var ch = buffer[x, y].Character;
+            sb.Append(ch.Content).Append(ch.Foreground).Append(ch.Background);
+        }
+
+    return sb.ToString();
+}
+
+Check("the row filter defaults to Box", view.Renderer.RowFilter == RowFilter.Box, $"{view.Renderer.RowFilter}");
+Check("it changes the picture under quadrant sampling",
+    Picture(SurfaceMode.Quadrant, RowFilter.Nearest) != Picture(SurfaceMode.Quadrant, RowFilter.Box),
+    "nearest and box differ");
+// The framebuffer is only taller than the surface when there are extra columns to compensate for, so under half
+// block there is nothing to average and the two must be the same code path -- not merely similar.
+Check("and is a no-op under half block, where there are no extra rows",
+    Picture(SurfaceMode.HalfBlock, RowFilter.Nearest) == Picture(SurfaceMode.HalfBlock, RowFilter.Box),
+    "identical frames");
+// The dial, driven the way a user drives it: through the Select, not by setting the property it writes to.
+shell.Sidebar.Tabs.SelectedIndex = 0;
+view.Sampling = SurfaceMode.Quadrant;
+shell.Sidebar.Refresh();
+view.DrawFrame();
+var rowsDial = shell.Sidebar.Display.RowFilterDial;
+Check("the Rows dial is enabled under quadrant sampling", rowsDial.Enabled);
+Check("and reads back the renderer's filter", rowsDial.SelectedIndex == (int)view.Renderer.RowFilter,
+    $"dial {rowsDial.SelectedIndex}, renderer {view.Renderer.RowFilter}");
+
+rowsDial.SelectedIndex = (int)RowFilter.Nearest;
+view.DrawFrame();
+Check("and changing it reaches the renderer", view.Renderer.RowFilter == RowFilter.Nearest,
+    $"{view.Renderer.RowFilter}");
+rowsDial.SelectedIndex = (int)RowFilter.Box;
+view.DrawFrame();
+
+// Greyed out rather than merely ineffective: under half block there are no extra rows, and a live-looking control
+// that does nothing is the worse of the two failures.
+view.Sampling = SurfaceMode.HalfBlock;
+shell.Sidebar.Refresh();
+view.DrawFrame();
+Check("and greys out under half block, where it has nothing to do", !rowsDial.Enabled);
+
+view.Sampling = SurfaceMode.HalfBlock;
+view.Renderer.RowFilter = RowFilter.Box;
+
 Console.WriteLine($"\n{(failures == 0 ? "all checks passed" : $"{failures} FAILED")}\n");
 return failures == 0 ? 0 : 1;
+
+
+// `quiet` discards the row. The FIRST Measure in a process reports a wildly inflated paint and emit -- medians of
+// 2-12 ms against 0.4-2 ms for every call after it -- because ConsoleManager's first real Setup/Draw pays for the
+// whole render and emit stack at once, and 15 in-loop warmup frames do not cover it. It is not the configuration
+// on that row being slow, it is being first, and reading it as a result is how you conclude that whichever option
+// you happened to measure first is the expensive one. So burn one throwaway run before measuring anything.
+void Measure(int w, int h, char motion, string label, bool authentic, int quant, bool quad,
+    RowFilter filter = RowFilter.Nearest, bool quiet = false)
+{
+    var s = new Wolf3DScene(GameData);
+    using var sh = Wolf3DShell.Build(s);
+    sh.View.Renderer.AuthenticFov = authentic;
+    sh.View.Renderer.QuantizeLevels = quant;
+    sh.View.Sampling = quad ? SurfaceMode.Quadrant : SurfaceMode.HalfBlock;
+    sh.View.Renderer.RowFilter = filter;
+
+    long frameBytes = 0;
+    ConsoleGUI.ConsoleManager.AnsiEnabled = true;
+    ConsoleGUI.ConsoleManager.AnsiOutput = sb => { frameBytes += sb.ToString()!.Length; return Task.CompletedTask; };
+    ConsoleGUI.ConsoleManager.Console = new NullConsole { Size = new ConsoleGUI.Space.Size(w, h) };
+    ConsoleGUI.ConsoleManager.Setup();
+    ConsoleGUI.ConsoleManager.Content = sh.Root.CControl;
+    UI.PaintFrame();
+    ConsoleGUI.ConsoleManager.Draw();
+    sh.View.Focus();
+
+    const int Warmup = 15, N = 90;
+    List<double> draws = [], paints = [], emits = [];
+    List<long> bytes = [];
+    List<int> runs = [];
+    var sw = new System.Diagnostics.Stopwatch();
+    for (var i = 1; i <= Warmup + N; i++)
+    {
+        if (motion != '\0') Send(sh.Root, motion);
+        // A gentle drift, or the walk runs into the first wall it meets and every measured frame after that is
+        // a stationary one -- which reads as "walking is free" when it is the opposite.
+        if (label == "walk" && i % 3 == 0) Send(sh.Root, 'd');
+        sw.Restart(); sh.View.DrawFrame(1.0 / 30.0); sw.Stop();
+        var d = sw.Elapsed.TotalMicroseconds;
+        sw.Restart(); UI.PaintFrame(); sw.Stop();
+        var p = sw.Elapsed.TotalMicroseconds;
+        frameBytes = 0;
+        sw.Restart(); ConsoleGUI.ConsoleManager.Draw(); sw.Stop();
+        ConsoleGUI.ConsoleManager.OutputIdle.GetAwaiter().GetResult();
+        var e = sw.Elapsed.TotalMicroseconds;
+        if (i <= Warmup) continue;
+        draws.Add(d); paints.Add(p); emits.Add(e); bytes.Add(frameBytes); runs.Add(sh.View.LastCost.Runs);
+    }
+
+    if (quiet) return;
+
+    draws.Sort(); paints.Sort(); emits.Sort(); bytes.Sort(); runs.Sort();
+    var total = draws[N / 2] + paints[N / 2] + emits[N / 2];
+    Console.WriteLine(
+        $"  {w}x{h,-4} {label,7}  {(authentic ? "66deg" : "wide"),-5}  {(quant == 0 ? "none" : quant + "/ch"),6}  " +
+        $"{(quad ? "on" : "off"),-4}  {(quad ? filter.ToString() : "-"),-8}  {draws[N / 2],6:F0}us {paints[N / 2],6:F0}us {emits[N / 2],6:F0}us " +
+        $"{total,7:F0}us  {bytes[N / 2],9:N0} B  {runs[N / 2],6:N0}");
+}
 
 internal sealed class NullConsole : ConsoleGUI.Api.IConsole
 {

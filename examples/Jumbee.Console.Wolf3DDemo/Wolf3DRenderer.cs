@@ -36,6 +36,13 @@ public sealed class Wolf3DRenderer
     /// <summary>Levels per colour channel to snap to; 0 or 1 leaves the palette untouched. 6 roughly halves ANSI bytes.</summary>
     public int QuantizeLevels { get; set; } = DefaultQuantizeLevels;
 
+    /// <summary>How the framebuffer's extra rows are reduced on the way to the surface. Has no effect under
+    /// <see cref="SurfaceMode.HalfBlock"/>, where there are none.</summary>
+    /// <remarks>Defaults to <see cref="RowFilter.Box"/>: measured, it lowers reconstruction error at every
+    /// <see cref="QuantizeLevels"/> setting, for about 3% more ANSI bytes at the default one. See the demo
+    /// README.</remarks>
+    public RowFilter RowFilter { get; set; } = RowFilter.Box;
+
     /// <summary>Draws plane-one scenery as depth-sorted billboards.</summary>
     public bool DrawSprites { get; set; } = true;
 
@@ -123,12 +130,32 @@ public sealed class Wolf3DRenderer
         // Depth is already resolved in the framebuffer, so every sub-pixel goes in at the same reciprocal depth and
         // the z-test always passes. The surface is a compositor here, not a z-buffer.
         //
-        // Row-SAMPLED, not averaged: the framebuffer is `rows` times taller than the surface, and taking one row of
-        // each group keeps every emitted colour an exact palette entry. Averaging would invent colours between
-        // palette entries, and this demo's whole cost model is that bytes track colour RUNS — new colours in the
-        // middle of a wall would fragment them for no visible gain.
+        // How the framebuffer's `rows` extra rows become one, under RowFilter:
+        //
+        // Nearest takes the first row of each group and discards the rest, which keeps every emitted colour an exact
+        // palette entry. That matters because this demo's cost model is that bytes track colour RUNS, and a colour
+        // that is not on the palette cannot merge with its neighbours.
+        //
+        // Box averages the group instead, and it is the default because the objection above turns out not to bite.
+        // It reconstructs what the discarded rows carried at the cost of inventing colours between palette entries
+        // — but the ORDER here is what makes that survivable: the average is taken BEFORE the quantiser below, so an
+        // invented colour is snapped straight back onto the ramp rather than left between its rungs. Filtering and
+        // then re-quantising is a different operation from blending two already-quantised colours, and only the
+        // latter fragments runs.
+        //
+        // Measured (`wolf3dcheck rowfilter`): at the default 10 levels/channel box cuts reconstruction error 23%
+        // and leaves 1% FEWER run breaks in the reduced buffer, for 3% more ANSI bytes end to end (65.2 -> 67.3 KB
+        // a frame). The gap between those last two is the quadrant compositor downstream: box roughly doubles the
+        // distinct colours reaching it, so its two-colour choices vary more per cell even where the sub-pixel runs
+        // did not lengthen. The comment this replaced asserted "would fragment them for no visible gain", which was
+        // wrong on both halves -- it was reasoning about a blend applied AFTER quantisation, which is not what this
+        // is. With the quantiser off box does cost real bytes (+12%), but that is the mode you select precisely to
+        // stop trading fidelity away.
+        //
+        // Under HalfBlock rows is 1 and the two are the same code path.
         var quantize = QuantizeLevels > 1;
         var step = quantize ? 255.0 / (QuantizeLevels - 1) : 0.0;
+        var box = RowFilter == RowFilter.Box && rows > 1;
         distinct.Clear();
         for (var y = 0; y < h; y++)
         {
@@ -136,6 +163,22 @@ public sealed class Wolf3DRenderer
             {
                 var o = (((y * rows) * w) + x) * 4;
                 byte r = pixels[o], g = pixels[o + 1], b = pixels[o + 2];
+                if (box)
+                {
+                    int sr = r, sg = g, sb = b;
+                    for (var k = 1; k < rows; k++)
+                    {
+                        var p = o + (k * w * 4);
+                        sr += pixels[p];
+                        sg += pixels[p + 1];
+                        sb += pixels[p + 2];
+                    }
+
+                    r = (byte)(sr / rows);
+                    g = (byte)(sg / rows);
+                    b = (byte)(sb / rows);
+                }
+
                 if (quantize)
                 {
                     r = (byte)(Math.Round(r / step) * step);

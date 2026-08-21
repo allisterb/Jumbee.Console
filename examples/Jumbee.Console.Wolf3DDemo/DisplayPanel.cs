@@ -28,6 +28,7 @@ public sealed class DisplayPanel : CompositeControl
             if (quantizeOn.IsChecked) view.Renderer.QuantizeLevels = (int)Math.Round(v);
         });
         sampling.SelectionChanged += (_, _) => push(() => view.Sampling = (SurfaceMode)sampling.SelectedIndex);
+        rowFilter.SelectionChanged += (_, _) => push(() => view.Renderer.RowFilter = (RowFilter)rowFilter.SelectedIndex);
         authenticFov.Changed += (_, on) => push(() => view.Renderer.AuthenticFov = on);
         sprites.Changed += (_, on) => push(() => view.Renderer.DrawSprites = on);
         weapon.Changed += (_, on) => push(() => view.Renderer.DrawWeapon = on);
@@ -39,6 +40,9 @@ public sealed class DisplayPanel : CompositeControl
     #region Properties
     /// <summary>Rows the page needs at its current spacing, for the sidebar's layout decision.</summary>
     public int Rows { get; private set; }
+
+    /// <summary>The row-filter dial, so checks can drive it rather than the property behind it.</summary>
+    public Select RowFilterDial => rowFilter;
     #endregion
 
     #region Methods
@@ -53,13 +57,16 @@ public sealed class DisplayPanel : CompositeControl
             new Panel.Section("Colour", spaced
                 ? new VerticalStackPanel(quantizeOn, Panel.Spacer(), quantize, quantizeNote)
                 : new VerticalStackPanel(quantizeOn, quantize, quantizeNote), 3 + gap),
+            // Row filter directly under Surface, and above the three content toggles: those say what is DRAWN,
+            // these two say how it is sampled. The note stays flush against Surface as a readout of it.
             new Panel.Section("Sampling",
                 spaced
                     ? new VerticalStackPanel(Panel.Labelled("Surface", sampling), samplingNote, Panel.Spacer(),
-                        authenticFov, Panel.Spacer(), sprites, Panel.Spacer(), weapon)
-                    : new VerticalStackPanel(Panel.Labelled("Surface", sampling), samplingNote, authenticFov,
-                        sprites, weapon),
-                5 + (3 * gap)),
+                        Panel.Labelled("Row filter", rowFilter), Panel.Spacer(), authenticFov, Panel.Spacer(), sprites,
+                        Panel.Spacer(), weapon)
+                    : new VerticalStackPanel(Panel.Labelled("Surface", sampling), samplingNote,
+                        Panel.Labelled("Row filter", rowFilter), authenticFov, sprites, weapon),
+                6 + (4 * gap)),
         ];
 
         Rows = sections.Sum(s => s.OuterRows);
@@ -85,6 +92,8 @@ public sealed class DisplayPanel : CompositeControl
         samplingNote.Text = view.Sampling == SurfaceMode.Quadrant
             ? " 4 samples · 2 colours/cell"
             : " 2 samples · 2 colours/cell";
+        rowFilter.SelectedIndex = (int)view.Renderer.RowFilter;
+        rowFilter.Enabled = view.Sampling == SurfaceMode.Quadrant;
         authenticFov.IsChecked = view.Renderer.AuthenticFov;
         sprites.IsChecked = view.Renderer.DrawSprites;
         weapon.IsChecked = view.Renderer.DrawWeapon;
@@ -100,6 +109,11 @@ public sealed class DisplayPanel : CompositeControl
         Panel.Knob("Levels", 2, 16, Wolf3DRenderer.DefaultQuantizeLevels, 1, "0");
     private readonly Select sampling = new Select("Half block", "Quadrant") { FitContent = true };
     private readonly TextLabel samplingNote = Panel.Line("", Panel.Muted);
+
+    // Sits with Surface because it only exists because of it: the extra rows it reduces are the ones quadrant
+    // sampling renders to keep a framebuffer pixel square. Greyed out under half block, where there are none --
+    // an inert control that still looks live is worse than one that says why it is not.
+    private readonly Select rowFilter = new Select("Nearest", "Box") { FitContent = true };
     private readonly Switch authenticFov = new("Authentic FOV");
     private readonly Switch sprites = new("Scenery sprites");
     private readonly Switch weapon = new("Weapon");

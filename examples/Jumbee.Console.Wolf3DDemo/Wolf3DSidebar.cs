@@ -45,6 +45,9 @@ public sealed class Wolf3DSidebar : CompositeControl
     /// <summary>The tab strip, so the shell can move between pages by key.</summary>
     public TabPanel Tabs => tabs;
 
+    /// <summary>The Display page, so headless checks can drive its widgets the way a user does.</summary>
+    public DisplayPanel Display => display;
+
     /// <summary>
     /// Viewport rows below which the pages drop to their compact spacing.
     /// </summary>

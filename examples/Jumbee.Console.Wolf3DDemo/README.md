@@ -29,10 +29,11 @@ redistributable and are not in this repository.
 
 A `TabPanel` on the right, one page per group of knobs, all live:
 
-- **Display** — quantisation level, surface mode, authentic field of view, scenery sprites, weapon. Dragging Quantize and
-  watching the footer's run count halve while the picture barely moves is the fastest way to see this demo's
-  central finding. (The cost readouts stay in the footer: they are true of the app rather than of a page, and the
-  footer is the one thing that cannot be hidden.)
+- **Display** — quantisation level, surface mode, row filter, authentic field of view, scenery sprites, weapon.
+  Dragging Quantize and watching the footer's run count halve while the picture barely moves is the fastest way to
+  see this demo's central finding. **Row filter** greys out under Half block, where the framebuffer has no extra rows for
+  it to reduce — see the row-filter section below for what it is worth. (The cost readouts stay in the footer: they
+  are true of the app rather than of a page, and the footer is the one thing that cannot be hidden.)
 - **Input** — a **movement pad** (forward/back, turn, strafe, open, fire), the held-key inference (first press, coast, repeat
   gap, windows) and the movement speeds, plus **the auto-repeat interval measured from your own keystrokes**. That
   last one is a property of your machine rather than of the demo, and it is the number the other knobs should be
@@ -144,6 +145,52 @@ rendered every sprite and the weapon at *half* their proper width, while the wal
 angles) stayed correct and hid the cause. The fix is to render the framebuffer at double height in that mode and
 sample rows back on the way out, restoring square pixels for the vendored code rather than patching its maths.
 That roughly doubles the scene time, to about 1.1 ms of a 33 ms budget.
+
+**How those extra rows come back down is worth a filter.** For a long time the blit simply took the first row of
+each pair and dropped the other, on the reasoning that every emitted colour then stays an exact palette entry and
+so keeps runs long. Averaging the pair instead — a box filter over the reduced axis — invents colours between
+palette entries, which sounds like exactly the run-fragmenting mistake this demo is organised around avoiding.
+
+It is not, and the reason is **ordering**. The quantiser runs immediately after the filter, so an invented colour
+is snapped straight back onto the ramp rather than left between its rungs. Filtering and then re-quantising is a
+different operation from blending two already-quantised colours, and only the second fragments runs. Measured
+against the full-height framebuffer over six levels and four viewpoints:
+
+| levels | error, nearest | error, box | run breaks | ANSI bytes |
+|---|---|---|---|---|
+| off | 10.97 | **7.76** *(−29%)* | +15% | +12% |
+| 6 | 15.32 | **13.40** *(−13%)* | −3% | — |
+| 8 | 14.95 | **12.88** *(−14%)* | −5% | — |
+| **10** *(default)* | 11.80 | **9.14** *(−23%)* | −1% | **+3%** |
+| 12 | 12.77 | **10.10** *(−21%)* | −1% | — |
+| 16 | 11.94 | **9.15** *(−23%)* | +3% | — |
+
+**The two ends of that table are the two interesting configurations**, and it is worth looking at both, because the
+quantiser hides the filter. Judged only at the default the difference is real but easy to under-read; judged with
+the palette left alone it is obvious.
+
+*Highest quality — quadrant glyphs, Quantize off.* Error drops 29%, the largest gain at any setting, and the frame
+goes from 73 to 238 distinct colours: the detail the discarded rows carried comes back as brick texture and a
+smooth weapon barrel instead of the horizontal streaking nearest leaves behind. It costs 12% more ANSI bytes
+(85.9 → 96.2 KB a frame). That is a genuine trade, but it is the mode you select precisely to stop trading
+fidelity away, so it takes the more faithful filter too.
+
+*Default — quadrant glyphs, 10 levels/channel.* Error drops 23% for 3% more bytes (65.2 → 67.3 KB), and 50 to 75
+colours. Nearly free, and the reason box is the default rather than an opt-in. The gain is smaller here only
+because the quantiser was already throwing away some of the detail the filter recovers.
+
+Note the run breaks and the end-to-end bytes disagree slightly at the default, and the disagreement is the quadrant
+compositor sitting downstream — box roughly doubles the distinct colours reaching it, so its two-colour choices per
+cell vary more even where the sub-pixel runs did not shorten.
+
+Timing is not the deciding factor either way: the blit costs 10–30% more under box, ~0.1–0.4 ms, and nothing else
+in the frame moves further than this machine's noise floor. Bytes and error are deterministic and are what the
+table reports. Display ▸ Row filter switches between them live.
+
+This came from reading [doom-cli](https://github.com/ludocode/doom-cli), a terminal Doom port facing the same
+problem — it must resample a fixed 320×200 framebuffer to the terminal. Worth knowing that its box filter is
+documented but not implemented: `-filter box` parses and then aborts, and the resample is a bare nearest pick. The
+idea was the useful part.
 
 But note what it does *not* buy. **Every character cell gets exactly two colours — one foreground, one background
 — whatever glyph is used.** Half blocks are therefore *exact*: two samples, two colours, no quantisation error at
