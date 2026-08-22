@@ -88,15 +88,30 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
 
     #region Properties
     /// <summary>The requested width in cells; setting it resizes the control. 0 (the default) fills the space the parent offers.</summary>
+    /// <remarks>
+    /// Goes through <c>Initialize</c> rather than resizing directly, and that matters for anything with content.
+    /// A bare <c>Resize</c> changes <c>Size</c> but skips everything <c>Initialize</c> does around it: the console
+    /// buffer is never re-sized (so the control reports an area its own buffer cannot serve), and
+    /// <c>OnInitialization</c> never fires — which is what tells a <see cref="CompositeControl"/> to re-lay-out its
+    /// content. A composite whose Height was set at runtime therefore kept its children at the OLD size
+    /// indefinitely, drawing a stale picture into a correctly-sized control until some unrelated event forced a
+    /// real layout pass.
+    /// <para>
+    /// It also fixes a second-order bug in the old form: <c>Resize(new Size(value, Height))</c> paired the new
+    /// width with the <em>requested</em> Height, which is 0 for the common "fill the parent" case — so setting a
+    /// Width could collapse the control's height to nothing. <c>CalculateSize</c> resolves both axes properly.
+    /// </para>
+    /// </remarks>
     public virtual int Width
     {
         get => field;
         set
         {
-            UI.Invoke(() => 
-            {                
-                field = value;            
-                Resize(new Size(value, Height));
+            UI.Invoke(() =>
+            {
+                if (field == value) return;   // also stops Initialize re-entering for a value that did not change
+                field = value;
+                Initialize();
             });
         }
     }
@@ -105,15 +120,17 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     public int ActualWidth => Size.Width;
 
     /// <summary>The requested height in cells; setting it resizes the control. 0 (the default) fills the space the parent offers.</summary>
+    /// <remarks>See <see cref="Width"/> — same reasoning; this is the axis the bug was found on.</remarks>
     public virtual int Height
     {
         get => field;
         set
         {
-            UI.Invoke(() => 
+            UI.Invoke(() =>
             {
+                if (field == value) return;
                 field = value;
-                Resize(new Size(Width, value));
+                Initialize();
             });
         }
     }

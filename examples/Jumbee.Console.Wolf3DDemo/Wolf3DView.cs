@@ -59,6 +59,14 @@ public sealed class Wolf3DView : CompositeControl
     #endregion
 
     #region Properties
+    /// <summary>The status bar under the viewport, sized and refreshed from this control's tick.</summary>
+    /// <remarks>
+    /// Driven from here rather than from its own feed because it is a readout of what this tick produces: a second
+    /// timer would show last frame's ammo for a frame after every shot, which is exactly the sort of lag a HUD is
+    /// judged on. Optional so the viewport still stands alone in a test that does not build one.
+    /// </remarks>
+    public Wolf3DHud? Hud { get; set; }
+
     /// <summary>The level being walked.</summary>
     public Wolf3DScene Scene { get; }
 
@@ -249,6 +257,21 @@ public sealed class Wolf3DView : CompositeControl
 
         Renderer.WeaponFrame = fireFrame;
         Renderer.Draw(surface);
+        // The bar mirrors the viewport's two display settings, pushed here rather than intercepted at each of the
+        // three places they can be changed from (sidebar, number keys, headless checks) -- one sync point cannot
+        // fall out of step, three call sites can, and the demo shipped with a Surface toggle that visibly did
+        // nothing to the bar because of exactly that. Both setters return immediately when the value is unchanged,
+        // so on the ordinary frame this is two integer comparisons.
+        //
+        // Content only. The bar's SIZE is set on the paint hook (see Wolf3DShell), never from here -- a Height
+        // change during a draw re-lays-out the dock in the middle of compositing it.
+        if (Hud is { } bar)
+        {
+            bar.QuadrantSampling = surface.QuadrantSampling;
+            bar.QuantizeLevels = Renderer.QuantizeLevels;
+            bar.Refresh();
+        }
+
         CountFrame(now);
         Changed?.Invoke();
     }

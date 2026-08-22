@@ -37,11 +37,27 @@ tuned it for. Filling and staying proportional are different properties, and onl
 
 ### …I want to recompute a proportional split on resize — what event do I hook?
 
-**There isn't one.** There is no resize or layout-changed event on `Control` or on `UI`. If you need a pane to track
-a proportion, drive `SplitPosition` yourself from the container's measured extent, on your own cadence — that's app
-code you own, not something the layout maintains.
+**There is no resize event — poll `UI.Paint` and guard on an actual size change.** Nothing on `Control` or `UI`
+fires when the terminal is resized, so a proportion is app code you own. `UI.Paint` fires once a frame on the UI
+thread, which makes it the cadence to hang that code on:
 
-Stated plainly because it's a real limitation, not an oversight you should keep hunting for.
+```csharp
+(int W, int H) lastSize = (0, 0);
+UI.Paint += (_, _) =>
+{
+    var w = outerSplit.Size.Width;
+    var h = outerSplit.Size.Height;
+    if (w <= 0 || h <= 0 || (w, h) == lastSize) return;   // the guard is the important half
+    lastSize = (w, h);
+    outerSplit.SplitPosition = h / 2;
+};
+```
+
+The guard does two jobs. It keeps the common case to an integer comparison, and — because setting `SplitPosition`
+or a `Width`/`Height` re-runs layout — it stops the handler from re-triggering itself every frame. Without it a
+proportional split also fights a manual divider drag, snapping it back on the next frame.
+
+`UI.Paint` is a per-frame event, not a resize event; the polling is the point. Nothing watches the terminal for you.
 
 ### …I set `Width = 0`?
 
@@ -61,6 +77,37 @@ column.
 
 Build size-dependent geometry in your `Render()` override instead, which runs after layout. `Control.HasLayout`
 (`ActualWidth > 0 && ActualHeight > 0`) is the guard if you need to check.
+
+### …I set a control's `Width`/`Height` from inside `Render()` or a per-frame tick?
+
+**You corrupt the frame being drawn.** Assigning a size re-runs layout. Doing that from inside the paint means a
+container re-lays-out in the middle of compositing the frame it is already painting, and the damage is not subtle
+or local — in one case a viewport went black, a docked bar drew past the control below it, and an unrelated overlay
+composited garbage over a sidebar. Three separate-looking bugs, one cause.
+
+Read sizes during `Render()`; write them from `UI.Paint`, guarded on an actual size change (see the resize question
+above). Content and size are two different updates and want two different methods:
+
+```csharp
+public void Refresh()   // content: safe from a per-frame tick
+{
+    if (State == drawn) return;
+    Draw();
+    drawn = State;
+}
+
+public void Reflow()    // size: only from UI.Paint, only when the width really moved
+{
+    if (ActualWidth <= 0 || ActualWidth == reflowedWidth) return;
+    reflowedWidth = ActualWidth;
+    Height = RowsFor(ActualWidth);
+}
+```
+
+**Headless snapshot tests do not catch this.** `ConsoleSnapshot` lays out and composites, but never runs the paint
+hook or the real frame loop, so a suite can be entirely green while the running app is unusable. Exercise a real
+`ConsoleManager` with `UI.PaintFrame` over a stretch of frames when you change layout — an idle frame should emit
+almost nothing, and a layout that is still thrashing cannot.
 
 ### …I put a `VerticalStackPanel` inside a `DockPanel`?
 

@@ -54,9 +54,21 @@ if (args.Contains("--verify"))
 {
     // Lay the tree out FIRST, then draw: the viewport sizes its pixel buffer from the control's actual size, so a
     // frame drawn before the first layout renders nothing at all and the check would pass on an empty screen.
+    //
+    // TWICE, since the status bar arrived. It is a Bottom-docked sibling that derives its own height from the width
+    // the dock gives it, so pass one tells it how tall to be and pass two is the first layout where the viewport
+    // has its final height. One pass draws the viewport at the pre-resize height and composites it at the post-
+    // resize one, which lights about a quarter of the screen -- and this check duly caught that as a failure, which
+    // is the check doing its job on the very change that introduced it.
     const int Width = 200, Height = 52;
-    _ = Jumbee.Console.Snapshot.ConsoleSnapshot.Render(shell.Root, Width, Height);
-    shell.View.DrawFrame();
+    for (var settle = 0; settle < 2; settle++)
+    {
+        _ = Jumbee.Console.Snapshot.ConsoleSnapshot.Render(shell.Root, Width, Height);
+        // What UI.Paint does in the running app; the snapshot path has no paint hook to do it for us.
+        shell.Hud.Reflow();
+        shell.View.DrawFrame();
+    }
+
     var buffer = Jumbee.Console.Snapshot.ConsoleSnapshot.Render(shell.Root, Width, Height);
 
     // Assert against the COMPOSITED CELLS rather than the renderer's own counters — those would happily report a
@@ -71,6 +83,8 @@ if (args.Contains("--verify"))
             if (ch.Content == '▀') halfBlocks++;
         }
 
+    // Half blocks come from the VIEWPORT; the status bar under it is quadrant-sampled and contributes none, so
+    // this threshold describes the scene rather than the screen.
     var ok = lit > Width * Height / 2 && halfBlocks > 1000;
     Console.WriteLine(ok
         ? $"PASS  Wolf3D verify — {scene.Edition} data, {scene.Levels.Count} levels, '{scene.Map.Name}' renders " +

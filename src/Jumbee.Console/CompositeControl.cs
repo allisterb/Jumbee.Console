@@ -105,7 +105,20 @@ public abstract class CompositeControl : Control, IDrawingContextListener
             }
 
             // Otherwise the composite's own surface (whatever Render drew into the buffer, e.g. a background).
-            if (position.X >= 0 && position.Y >= 0 && position.X < Size.Width && position.Y < Size.Height)
+            //
+            // Bounds-checked against the BUFFER as well as against Size, and the two are not always the same. A
+            // composite whose own size changes -- one that sets its Height in response to a resize, say -- can be
+            // read after Size has grown but before the buffer that backs it has followed, and reading a row the
+            // buffer does not have threw NullReferenceException straight out of ConsoleBuffer's row array. It
+            // surfaced as a hard crash on terminal resize in the Wolf3D status bar; a fixed-size composite never
+            // reaches the window, which is why nothing caught it until a resize was scripted.
+            //
+            // An out-of-range read yields an empty (transparent) cell instead, which is what a not-yet-painted
+            // cell means everywhere else here, and the next layout fills it in. A blank cell for one pass is a
+            // recoverable glitch; a throw out of a paint is not.
+            var buffered = consoleBuffer.Size;
+            if (position.X >= 0 && position.Y >= 0 && position.X < Size.Width && position.Y < Size.Height
+                && position.X < buffered.Width && position.Y < buffered.Height)
             {
                 var cell = consoleBuffer[position];
                 return WantsMouse ? cell.WithMouseListener(this, position) : cell;

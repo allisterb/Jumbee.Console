@@ -23,6 +23,53 @@ public class CompositeControlTests
     }
     #endregion
 
+    #region Runtime resize
+    // Setting Height at runtime used to call Resize() directly, which changed the composite's Size but skipped
+    // everything Initialize does around it -- so OnInitialization never fired and the content kept its OLD size
+    // forever, drawing a stale picture into a correctly-sized control.
+    //
+    // The Wolf3D status bar hit this on startup: control 237x15, content still 237x50, so the bar rendered the top
+    // 15 rows of a 50-row picture with its numbers cut off, and only a terminal resize (which forces a real layout
+    // pass from the parent) put it right. It never reproduced through ConsoleSnapshot because ToText re-lays-out
+    // the whole tree on every call, which papers the missing propagation over -- hence the explicit second render
+    // here with no other layout trigger in between.
+    [Fact]
+    public void SettingHeightAtRuntime_ResizesTheContentToMatch()
+    {
+        // Docked, not standalone: a control rendered on its own is pinned by the snapshot's min=max limits, so its
+        // requested height is clamped straight back and nothing can move. A Bottom dock is the shape the bug was
+        // found in and the one that actually lets the height change.
+        var editor = new CodeEditor { Text = "one\ntwo\nthree" };
+        var root = new DockPanel(DockedControlPlacement.Bottom, editor, new TextEditor());
+        _ = ConsoleSnapshot.ToText(root, 40, 20);
+
+        editor.Height = 6;
+
+        // The invariant, not the number: the content must describe the same area the control reports. It was
+        // control 237x15 over content 237x50 in the live fault, and the absolute values depend on what the parent
+        // allows -- the mismatch is the bug.
+        Assert.Equal(6, editor.ActualHeight);
+        Assert.Equal(editor.ActualHeight, editor.ContentLayout!.CControl.Size.Height);
+        Assert.Equal(editor.ActualWidth, editor.ContentLayout!.CControl.Size.Width);
+    }
+
+    // The same setter also paired the new width with the REQUESTED height, which is 0 whenever a control fills its
+    // parent -- so setting Width alone could collapse the height to nothing.
+    [Fact]
+    public void SettingWidthAtRuntime_DoesNotCollapseTheHeight()
+    {
+        var editor = new CodeEditor { Text = "one\ntwo\nthree" };
+        var root = new DockPanel(DockedControlPlacement.Right, editor, new TextEditor());
+        _ = ConsoleSnapshot.ToText(root, 40, 20);
+        var before = editor.ActualHeight;
+
+        editor.Width = 25;
+
+        Assert.Equal(25, editor.ActualWidth);
+        Assert.Equal(before, editor.ActualHeight);
+    }
+    #endregion
+
     #region Inter-child wiring
     [Fact]
     public void CodeEditor_GutterTracksEditorLineCount()

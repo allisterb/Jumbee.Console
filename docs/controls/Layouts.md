@@ -175,6 +175,23 @@ the overlay, not in your root layout, so a snapshot of the root shows no dialog 
   to design around rather than a bug to wait out. A caption beside a control is a `Grid`.
 - **Nesting a scroll inside a scroll.** A control that scrolls itself shouldn't sit inside a scrolling
   `ControlFrame` — both will try.
+- **A height that depends on a width is a feedback loop.** Layout converges by *re-entrancy*: a container sets a
+  child's limits, the child re-lays-out, the child's redraw calls the container's `Initialize` again — deeper on
+  the stack, until sizes stop moving. `DockPanel` ↔ `Boundary` is the pair that bounces most, because a
+  `SplitPanel` pane is exactly that. Anything whose height is computed from its own width feeds straight back into
+  it: a word-wrapped document inside a scrolling frame is the everyday case, since wrapping more narrowly makes it
+  taller, which changes the width available, which re-wraps it.
+
+  It does terminate — passes that don't change a size stop re-cascading — so this is a one-time cost per open or
+  resize rather than a per-frame tax. What it is not is free: an intermediate pass can measure content height at a
+  near-zero width, so a document briefly wraps to roughly its own length in rows and the buffer sized for that has
+  to be reclaimed afterwards.
+
+  Practically: derive such a height **once per resize from `UI.Paint`**, guarded on the width actually changing,
+  and never from inside `Render()` or a per-frame tick — see
+  [What Happens When](What%20Happens%20When.md#i-set-a-controls-widthheight-from-inside-render-or-a-per-frame-tick).
+  If you can give the control a fixed height or a `Boundary` instead, prefer that; a size that does not participate
+  in the loop cannot destabilise it.
 
 ## See also
 

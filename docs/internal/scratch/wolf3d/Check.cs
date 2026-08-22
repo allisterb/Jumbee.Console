@@ -28,9 +28,19 @@ using var shell = Wolf3DShell.Build(scene);
 var view = shell.View;
 
 // Lay the tree out and draw a frame, in that order: the surface has no size until the first render.
-_ = ConsoleSnapshot.ToText(shell.Root, W, H);
+//
+// TWICE, since the status bar arrived. It is a Bottom-docked sibling that derives its own height from the width the
+// dock gives it, so pass one is what tells it how tall to be and pass two is the first layout where the viewport
+// has its final height. With one pass the viewport is drawn at the pre-resize height and then composited at the
+// post-resize one, which lights about a quarter of the screen and reads as "the renderer is broken" rather than as
+// "the frame has not settled". The live app settles the same way, on frame two, in 33ms.
 view.Focus();   // as Program.cs does before UI.Start
-view.DrawFrame();
+for (var settle = 0; settle < 2; settle++)
+{
+    _ = ConsoleSnapshot.ToText(shell.Root, W, H);
+    shell.Hud.Reflow();   // what UI.Paint does in the running app
+    view.DrawFrame();
+}
 
 if (mode == "png")
 {
@@ -42,14 +52,173 @@ if (mode == "png")
         view.Renderer.QuantizeLevels = quant;
         view.Sampling = quad ? SurfaceMode.Quadrant : SurfaceMode.HalfBlock;
         shell.Sidebar.Tabs.SelectedIndex = tab;
-        _ = ConsoleSnapshot.ToText(shell.Root, W, H);
-        view.DrawFrame();
+        // Laid out, drawn, laid out, drawn: the status bar derives its own height from the width the dock gives it,
+        // so the first pass is what tells it how wide it is and the second is the first frame drawn at the right
+        // size. One pass captures the bar at its floor height, which reads as a deliberate design rather than as a
+        // frame that has not settled -- exactly the kind of wrong a single-pass snapshot hides.
+        for (var pass = 0; pass < 2; pass++)
+        {
+            _ = ConsoleSnapshot.ToText(shell.Root, W, H);
+            shell.Hud.Reflow();
+            view.DrawFrame();
+        }
+
         var buffer = ConsoleSnapshot.Render(shell.Root, W, H);
+        Console.WriteLine($"    hud {shell.Hud.ActualWidth}x{shell.Hud.ActualHeight} " +
+                          $"(RowsFor={Wolf3DHud.RowsFor(shell.Hud.ActualWidth)}), view {shell.View.ActualWidth}x{shell.View.ActualHeight}");
+        if (label == "shell-full")
+            for (var y = H - 14; y < H - 2; y++)
+            {
+                var ch = buffer[20, y].Character;
+                Console.WriteLine($"      row {y,2}: '{ch.Content}' fg={ch.Foreground?.Red},{ch.Foreground?.Green},{ch.Foreground?.Blue} bg={ch.Background?.Red},{ch.Background?.Green},{ch.Background?.Blue}");
+            }
+        if (label == "shell-full")
+        {
+            var top = H - 2 - shell.Hud.ActualHeight;
+            for (var y = top; y < H - 2; y++)
+            {
+                var ink = 0;
+                for (var x = 0; x < shell.Hud.ActualWidth; x++)
+                {
+                    var c = buffer[x, y].Character.Foreground;
+                    if (c is { } f && !(f.Red < 20 && f.Green is > 40 and < 90 && f.Blue is > 40 and < 90)) ink++;
+                }
+
+                Console.WriteLine($"      hud row {y - top,2}: {ink,4} ink of {shell.Hud.ActualWidth}");
+            }
+        }
+
         var path = Path.Combine(outDir, $"{label}.png");
         ConsoleSnapshot.SavePng(buffer, path, options);
         Console.WriteLine($"  {label,-12} runs {view.LastCost.Runs,6:N0}  colours {view.LastCost.Colors,4}  -> {path}");
     }
 
+    return 0;
+}
+
+// The status bar on its own, at several widths. Judged alone because in the shell it is ten rows at the bottom of
+// a busy screen, which is exactly where a scaling bug hides.
+if (mode == "hud")
+{
+    Directory.CreateDirectory(outDir);
+    var hudOptions = new SnapshotImageOptions { FontFamily = "Cascadia Mono" };
+    foreach (var columns in new[] { 80, 120, 168, 320 })
+        foreach (var quad in new[] { false, true })
+        {
+            var solo = new Wolf3DHud(scene) { QuadrantSampling = quad };
+            var rows = Wolf3DHud.RowsFor(columns);
+            // Twice, for the same reason the shell snapshot draws twice: the bar derives its height from its width.
+            for (var pass = 0; pass < 2; pass++) { _ = ConsoleSnapshot.ToText(solo, columns, rows); solo.Refresh(); }
+            var b = ConsoleSnapshot.Render(solo, columns, rows);
+            var name = $"hud-{columns}x{rows}-{(quad ? "quad" : "half")}.png";
+            ConsoleSnapshot.SavePng(b, Path.Combine(outDir, name), hudOptions);
+            Console.WriteLine($"  {name,-24} colours {solo.LastColors,4}");
+        }
+
+    return 0;
+}
+
+// The user's exact sequence: start maximized, shrink, maximize again. Each step reported so a bar that is right at
+// one size and wrong after a round trip is visible as a table rather than as three screenshots.
+if (mode == "resize")
+{
+    // A FRESH shell per size, never rendered at any other -- the startup path. The walk below reuses one shell and
+    // so only ever tests a size CHANGE; a bar that is wrong until the first resize is invisible to it.
+    Console.WriteLine("\n  Cold start (a new shell, rendered only at this size):\n");
+    Console.WriteLine("  size       hud rows  RowsFor   verdict");
+    foreach (var (cw, ch) in new[] { (200, 52), (120, 32), (90, 26), (70, 22) })
+    {
+        var cold = Wolf3DShell.Build(scene);
+        for (var settleFrame = 0; settleFrame < 6; settleFrame++)
+        {
+            _ = ConsoleSnapshot.ToText(cold.Root, cw, ch);
+            cold.Hud.Reflow();
+            cold.View.DrawFrame();
+        }
+
+        var coldWant = Wolf3DHud.RowsFor(cold.Hud.ActualWidth);
+        Console.WriteLine($"  {cw}x{ch,-6}  {cold.Hud.ActualHeight,8}  {coldWant,7}   " +
+                          $"{(cold.Hud.ActualHeight == coldWant ? "ok" : "WRONG")}");
+        cold.Dispose();
+    }
+
+    // The REAL startup sequence, which neither walk above reproduces. UI.Start lays the app out at the size the
+    // app asked for (Program.cs: 200x52) and only then does the actual window size take over -- so a small
+    // terminal gets one wide layout first. And it gets ONE frame at each, not six: six frames hide any bug that
+    // settles late, which is every bug of this kind.
+    Console.WriteLine("\n  Startup sequence (requested 200x52, then the real window, one frame each):\n");
+    Console.WriteLine("  real size   hud rows  RowsFor  blank   verdict");
+    foreach (var (rw, rh) in new[] { (120, 32), (90, 26), (200, 52) })
+    {
+        var boot = Wolf3DShell.Build(scene);
+        // What UI.Start does: ConsoleManager.Resize to the requested size...
+        _ = ConsoleSnapshot.ToText(boot.Root, 200, 52);
+        boot.Hud.Reflow();
+        boot.View.DrawFrame();
+        // ...then AdjustBufferSize replaces it with the terminal's real size on the next frame.
+        _ = ConsoleSnapshot.ToText(boot.Root, rw, rh);
+        boot.Hud.Reflow();
+        boot.View.DrawFrame();
+
+        var bootWant = Wolf3DHud.RowsFor(boot.Hud.ActualWidth);
+        // Height alone is not the test. It was RIGHT while the bar still drew at the wrong scale, because the
+        // surface inside lags the control by a layout pass -- so count the ink actually on screen as well.
+        var bootBuf = ConsoleSnapshot.Render(boot.Root, rw, rh);
+        var bootTop = rh - 2 - boot.Hud.ActualHeight;
+        var bootBlank = 0;
+        for (var y = bootTop; y < rh - 2; y++)
+        {
+            var ink = 0;
+            for (var x = 0; x < boot.Hud.ActualWidth; x++)
+            {
+                var c = bootBuf[x, y].Character.Foreground;
+                if (c is { } f && !(f.Red < 20 && f.Green is > 40 and < 90 && f.Blue is > 40 and < 90)) ink++;
+            }
+
+            if (ink < boot.Hud.ActualWidth / 2) bootBlank++;
+        }
+
+        var bootOk = boot.Hud.ActualHeight == bootWant && bootBlank <= 1;
+        Console.WriteLine($"  {rw}x{rh,-7}  {boot.Hud.ActualHeight,8}  {bootWant,7}  {bootBlank,6}   " +
+                          $"{(bootOk ? "ok" : "WRONG")}");
+        boot.Dispose();
+    }
+
+    Console.WriteLine("\n  Resize walk (one shell, sizes changed under it):\n");
+    Console.WriteLine("  size       hud rows  RowsFor  surface     blank rows   verdict");
+    foreach (var (w, h) in new[] { (200, 52), (120, 32), (200, 52), (90, 26), (200, 52) })
+    {
+        // Frames, not passes: this is what the live app does -- paint, reflow, tick -- repeated. If the bar needs
+        // more than a couple of frames to settle, that is the bug rather than the measurement.
+        for (var settleFrame = 0; settleFrame < 6; settleFrame++)
+        {
+            _ = ConsoleSnapshot.ToText(shell.Root, w, h);
+            shell.Hud.Reflow();
+            view.DrawFrame();
+        }
+
+        var buf = ConsoleSnapshot.Render(shell.Root, w, h);
+        var rows = shell.Hud.ActualHeight;
+        var top = h - 2 - rows;
+        var blank = 0;
+        for (var y = top; y < h - 2; y++)
+        {
+            var ink = 0;
+            for (var x = 0; x < shell.Hud.ActualWidth; x++)
+            {
+                var c = buf[x, y].Character.Foreground;
+                if (c is { } f && !(f.Red < 20 && f.Green is > 40 and < 90 && f.Blue is > 40 and < 90)) ink++;
+            }
+
+            if (ink < shell.Hud.ActualWidth / 2) blank++;
+        }
+
+        var want = Wolf3DHud.RowsFor(shell.Hud.ActualWidth);
+        var ok = rows == want && blank <= 1;
+        Console.WriteLine($"  {w}x{h,-6}  {rows,8}  {want,7}  {shell.Hud.ActualWidth,3}x{rows,-3}  {blank,10}   {(ok ? "ok" : "WRONG")}");
+    }
+
+    Console.WriteLine();
     return 0;
 }
 
@@ -566,6 +735,119 @@ Check("and the same width in both — sprites are not squeezed by quadrant sampl
     Math.Abs(halfWidth - quadWidth) <= Math.Max(2, halfWidth / 10),
     $"half {halfWidth} vs quadrant {quadWidth} cells");
 
+// --- the status bar ------------------------------------------------------------------------------------------------
+// Read off the SCREEN, not off the properties: the bar's whole risk is that it scales to something unreadable, and
+// every property can be right while the picture is mush.
+shell.Sidebar.Tabs.SelectedIndex = 0;
+for (var pass = 0; pass < 2; pass++) { _ = ConsoleSnapshot.ToText(shell.Root, W, H); shell.Hud.Reflow(); view.DrawFrame(); }
+
+var hudRows = shell.Hud.ActualHeight;
+Check("the status bar sizes itself from its width", hudRows == Wolf3DHud.RowsFor(shell.Hud.ActualWidth) && hudRows > 3,
+    $"{shell.Hud.ActualWidth}x{hudRows}");
+// The floor of 3 is RowsFor's minimum, and the bar sat there for a while because it derived its height from a
+// viewport width that was still 0. It looked deliberate. Assert it is past the floor, not merely non-zero.
+Check("and is past the floor a stale width would pin it at", hudRows >= 8, $"{hudRows} rows");
+
+var hudFrame = ConsoleSnapshot.Render(shell.Root, W, H);
+var hudLit = 0;
+var hudGlyphs = new HashSet<char>();
+for (var y = H - 2 - hudRows; y < H - 2; y++)
+    for (var x = 0; x < shell.Hud.ActualWidth; x++)
+    {
+        var ch = hudFrame[x, y].Character;
+        if (ch.Foreground is not null) hudLit++;
+        if (ch.Content is { } c) hudGlyphs.Add(c);
+    }
+
+Check("the bar draws", hudLit > shell.Hud.ActualWidth * hudRows / 2, $"{hudLit} lit cells");
+// What the bar is drawn WITH, in each mode, read off the screen. Its labels are unreadable without quadrant
+// sampling, so "the setting reached the property" is not the interesting assertion -- "the glyphs changed" is.
+HashSet<char> BarGlyphs()
+{
+    view.DrawFrame();
+    var frame = ConsoleSnapshot.Render(shell.Root, W, H);
+    var glyphs = new HashSet<char>();
+    for (var y = H - 2 - shell.Hud.ActualHeight; y < H - 2; y++)
+        for (var x = 0; x < shell.Hud.ActualWidth; x++)
+            if (frame[x, y].Character.Content is { } c) glyphs.Add(c);
+    return glyphs;
+}
+
+view.Sampling = SurfaceMode.Quadrant;
+Check("the bar draws with quadrant glyphs under quadrant sampling",
+    BarGlyphs().Overlaps("▘▝▖▗▌▐▞▚▛▜▙▟▄█"), "found quadrant glyphs");
+view.Sampling = SurfaceMode.HalfBlock;
+Check("and with half blocks alone under half block",
+    !BarGlyphs().Overlaps("▘▝▖▗▌▐▞▚▛▜▙▟▄"), "no quadrant glyphs");
+view.Sampling = SurfaceMode.HalfBlock;
+
+// The bar must FOLLOW the viewport's display toggles. It shipped ignoring both, so a user pressing 2 or 1 saw a
+// third of the screen not respond -- and asserting the properties would not have caught it, since the bar's own
+// properties were perfectly self-consistent while nothing ever wrote to them.
+view.Sampling = SurfaceMode.HalfBlock;
+view.DrawFrame();
+Check("the bar follows the viewport's Surface setting", !shell.Hud.QuadrantSampling, "half block reached the bar");
+view.Sampling = SurfaceMode.Quadrant;
+view.DrawFrame();
+Check("and back", shell.Hud.QuadrantSampling, "quadrant reached the bar");
+
+var quantBefore = shell.Hud.LastColors;
+view.Renderer.QuantizeLevels = 0;
+view.DrawFrame();
+var quantOff = shell.Hud.LastColors;
+view.Renderer.QuantizeLevels = Wolf3DRenderer.DefaultQuantizeLevels;
+view.DrawFrame();
+Check("and its Quantize setting, which changes the bar's colour count",
+    quantOff != quantBefore && shell.Hud.LastColors == quantBefore,
+    $"{quantBefore} colours quantised, {quantOff} at full palette");
+Check("and its colours reach the readout", shell.Hud.LastColors is > 20 and < 200, $"{shell.Hud.LastColors} colours");
+
+// Per ROW, not just in total, and this is the check that earns its keep. The bar was twice drawn at a size the
+// surface had already left behind -- once leaving its top four rows empty, once scaled too tall and clipped -- and
+// a whole-bar lit-cell count passed both times. "Ink" is anything that is not the bar's dark teal surround, so a
+// row of pure background reads as 0 and only the picture's own one-row top border is allowed to.
+var hudTop = H - 2 - hudRows;
+var blankRows = 0;
+for (var y = hudTop; y < H - 2; y++)
+{
+    var ink = 0;
+    for (var x = 0; x < shell.Hud.ActualWidth; x++)
+    {
+        var c = hudFrame[x, y].Character.Foreground;
+        if (c is { } f && !(f.Red < 20 && f.Green is > 40 and < 90 && f.Blue is > 40 and < 90)) ink++;
+    }
+
+    if (ink < shell.Hud.ActualWidth / 2) blankRows++;
+}
+
+Check("and fills its rows rather than being drawn at a stale size", blankRows <= 1,
+    $"{blankRows} of {hudRows} rows are background");
+
+// The bar's height follows the terminal's width, so a ROUND TRIP is the interesting case: maximize, shrink,
+// maximize. Every size below was correct on the way down and wrong on the way back up, and one of them crashed
+// outright -- none of which a single-size check can see. `resize` prints the same walk as a table.
+foreach (var (rw, rh) in new[] { (200, 52), (120, 32), (200, 52), (90, 26), (200, 52) })
+{
+    for (var settleFrame = 0; settleFrame < 6; settleFrame++)
+    {
+        _ = ConsoleSnapshot.ToText(shell.Root, rw, rh);
+        shell.Hud.Reflow();
+        view.DrawFrame();
+    }
+
+    var want = Wolf3DHud.RowsFor(shell.Hud.ActualWidth);
+    Check($"the bar is right at {rw}x{rh}", shell.Hud.ActualHeight == want,
+        $"{shell.Hud.ActualHeight} rows, wanted {want} for {shell.Hud.ActualWidth} columns");
+}
+
+// Back to the size the rest of the checks assume.
+for (var settleFrame = 0; settleFrame < 2; settleFrame++)
+{
+    _ = ConsoleSnapshot.ToText(shell.Root, W, H);
+    shell.Hud.Reflow();
+    view.DrawFrame();
+}
+
 // --- the row filter ----------------------------------------------------------------------------------------------
 // Compared as PICTURES rather than by asserting the property, because the filter reduces rows that only exist under
 // quadrant sampling: reading RowFilter back would pass just as happily if the blit ignored it.
@@ -577,8 +859,11 @@ string Picture(SurfaceMode sampling, RowFilter filter)
     view.DrawFrame();
     var buffer = ConsoleSnapshot.Render(shell.Root, W, H);
     var sb = new System.Text.StringBuilder();
-    for (var y = 0; y < H; y++)
-        for (var x = 0; x < W; x++)
+    // The VIEWPORT only, not the whole screen. The footer carries a live frames-per-second readout, so hashing
+    // everything makes this compare the clock as well as the filter -- it passed until a second DrawFrame per call
+    // was enough to tick fps over, then failed for a reason that has nothing to do with row filtering.
+    for (var y = 0; y < view.ActualHeight; y++)
+        for (var x = 0; x < view.ActualWidth; x++)
         {
             var ch = buffer[x, y].Character;
             sb.Append(ch.Content).Append(ch.Foreground).Append(ch.Background);

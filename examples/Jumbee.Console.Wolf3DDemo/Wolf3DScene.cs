@@ -26,6 +26,7 @@ public sealed class Wolf3DScene
         Palette = WolfensteinPaletteLoader.Load();
         WallTextures = WolfensteinVSwapLoader.LoadWallTextures(resources);
         Sprites = WolfensteinVSwapLoader.LoadSprites(resources);
+        Hud = WolfensteinGraphicsLoader.LoadHudGraphics(resources);
         Levels = WolfensteinMapLoader.Load(resources).Maps;
         LoadLevel(0);
     }
@@ -53,6 +54,9 @@ public sealed class Wolf3DScene
     public WolfensteinPalette Palette { get; }
     public WolfensteinWallTextures WallTextures { get; }
     public WolfensteinSpriteSet Sprites { get; }
+
+    /// <summary>The status-bar composer: stamps the face, weapon icon, keys and numbers into one 320x40 picture.</summary>
+    public WolfensteinHudGraphics Hud { get; }
 
     /// <summary>Player position in map tiles.</summary>
     public double X { get; private set; }

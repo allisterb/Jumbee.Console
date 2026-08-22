@@ -76,6 +76,22 @@ CHANGED
 
 FIXED
 
+  * Control.Width and Control.Height called Resize() directly, which changed the control's Size but skipped
+    everything Initialize does around it: the console buffer was never re-sized, and OnInitialization never
+    fired - which is what tells a CompositeControl to re-lay-out its content. So setting either at runtime left
+    a composite's children at the OLD size indefinitely, drawing a stale picture into a correctly-sized control
+    until some unrelated event forced a real layout pass. The undersized buffer was worse: the composite
+    reported an area its own buffer could not serve, and reading a cell there threw NullReferenceException out
+    of a paint. Both setters now go through Initialize, guarded so an unchanged value costs one comparison.
+    CompositeControl's indexer also bounds-checks against the buffer as well as against Size, so an
+    out-of-range read yields an empty cell rather than throwing.
+
+    Found in the Wolf3D demo's status bar, which sets its own Height on a terminal resize: control 237x15 over
+    content 237x50, so it drew the top 15 rows of a 50-row picture. It did not reproduce through
+    ConsoleSnapshot, because ToText re-lays-out the whole tree on every call and papers the missing
+    propagation over - the regression test therefore docks a composite and sets Height with no intervening
+    layout trigger.
+
   * Tree reported no content height, so a framed Tree scrolled over the 1000-row clamp rather than its own
     rows - a sliver of a thumb, and a scroll range with nothing in most of it. It had been scrolling by
     accident for as long as it has existed, which is why nothing caught it; the test asserting that navigation

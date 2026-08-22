@@ -21,6 +21,8 @@ public static class Wolf3DShell
         var view = new Wolf3DView(scene, tuning, fps);
         var footer = new Wolf3DFooter(view);
         var sidebar = new Wolf3DSidebar(view);
+        var hud = new Wolf3DHud(scene);
+        view.Hud = hud;
         view.Changed += footer.Report;
 
         // No title: the border is there to show focus, and the footer already names the level.
@@ -31,8 +33,18 @@ public static class Wolf3DShell
         // and the reveal-on-focus that walks Tab down the page.
         sidebar.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
 
+        // The status bar docks INSIDE the sidebar's dock, so it spans the viewport rather than the whole window --
+        // it belongs to the 3D view the way it does in the original, not to the app. Its height follows the width
+        // it ends up with, which is only known after layout, so the resize handler below sizes it.
+        var stage = new DockPanel(DockedControlPlacement.Bottom, hud, view);
         var root = new DockPanel(DockedControlPlacement.Bottom, footer,
-            new DockPanel(DockedControlPlacement.Right, sidebar, view));
+            new DockPanel(DockedControlPlacement.Right, sidebar, stage));
+
+        // The bar's height follows its width, and that has to happen on the PAINT hook rather than in the viewport's
+        // per-frame tick: setting a docked control's Height while the frame it belongs to is being composited makes
+        // the DockPanel re-lay-out mid-draw, which blanked the viewport and corrupted the overlay. Reflow guards
+        // itself on an actual width change, so this is a comparison on all the frames where nothing moved.
+        UI.Paint += (_, _) => hud.Reflow();
 
         // The number keys stay as the fast path for the three display toggles the sidebar also carries -- they cost
         // nothing, and reaching for a slider to flip a switch while walking is worse than pressing a key. Everything
@@ -76,7 +88,7 @@ public static class Wolf3DShell
             sidebar.Refresh();
         }
 
-        return new Shell(root, view, sidebar, footer, tuning);
+        return new Shell(root, view, sidebar, footer, hud, tuning);
     }
 
     /// <summary>Collapses the sidebar to nothing and back, giving the viewport the full width.</summary>
@@ -94,9 +106,11 @@ public static class Wolf3DShell
     /// <param name="View">The viewport, and the control to focus first.</param>
     /// <param name="Sidebar">The right-hand tabbed panel.</param>
     /// <param name="Footer">The status lines.</param>
+    /// <param name="Hud">The 320x40 status bar under the viewport.</param>
     /// <param name="Tuning">The movement and key-handling knobs.</param>
     public readonly record struct Shell(
-        ILayout Root, Wolf3DView View, Wolf3DSidebar Sidebar, Wolf3DFooter Footer, Wolf3DTuning Tuning) : IDisposable
+        ILayout Root, Wolf3DView View, Wolf3DSidebar Sidebar, Wolf3DFooter Footer, Wolf3DHud Hud,
+        Wolf3DTuning Tuning) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose() => View.Dispose();
