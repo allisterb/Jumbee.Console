@@ -48,14 +48,18 @@ public sealed class Wolf3DPad : CompositeControl
         // Five columns, not three: the cross keeps its own narrow arrow columns in the middle, and the pairs that
         // flank it — the strafes above, the verbs below — live in the wider OUTER columns, which is what puts them
         // at the edges with the whole cross between them. One column set serves both, so nothing has to span.
+        //
+        // Empty cells are null and an all-empty row is `[]` -- a sparse grid needs no filler controls. This used to
+        // be 21 calls to a Gap() helper returning a blank TextLabel per cell, which buried the shape it was drawing.
+        // The library change that allows this came out of writing it the other way first.
         SetContent(new Grid([Row, Space, Row, Row, Row, Space, Row], [Wide, Arrow, Arrow, Arrow, WideEnd],
-            [strafeLeft, Gap(), Gap(), Gap(), strafeRight],
-            [Gap(), Gap(), Gap(), Gap(), Gap()],
-            [Gap(), Gap(), forward, Gap(), Gap()],
-            [Gap(), turnLeft, Gap(), turnRight, Gap()],
-            [Gap(), Gap(), back, Gap(), Gap()],
-            [Gap(), Gap(), Gap(), Gap(), Gap()],
-            [open, Gap(), Gap(), Gap(), fire]));
+            [strafeLeft, null, null, null, strafeRight],
+            [],
+            [null, null, forward, null, null],
+            [null, turnLeft, null, turnRight, null],
+            [null, null, back, null, null],
+            [],
+            [fire, null, null, null, open]));
     }
     #endregion
 
@@ -68,9 +72,6 @@ public sealed class Wolf3DPad : CompositeControl
     #endregion
 
     #region Private methods
-    // A fresh blank each call: a control belongs to one cell, so the empty cells cannot share one.
-    private static TextLabel Gap() => Panel.Line("", Panel.Muted);
-
     private static Button Key(string text, int width) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = width - 1 } };
 

@@ -180,11 +180,16 @@ public abstract class Layout<T> : ILayout where T:CControl, IDrawingContextListe
     {
         get
         {
+            // Through CellAt, and skipping the empties: a Grid cell may hold nothing, and walking every coordinate
+            // blind threw straight out of the underlying grid's GetChild. CellAt already exists for exactly this and
+            // documents it; Controls was simply the one walker that did not use it. Anything consuming Controls —
+            // focus routing, input dispatch, the composite's child list — wants the controls that are there, not a
+            // sequence with holes in it.
             for (int r = 0; r < Rows; r++)
             {
                 for (int c = 0; c < Columns; c++)
                 {
-                    yield return this[r, c];
+                    if (((ILayout)this).CellAt(r, c) is { } cell) yield return cell;
                 }
             }
         }

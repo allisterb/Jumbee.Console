@@ -74,6 +74,15 @@ CHANGED
     the timing rows are grouped together; and the panel derives its height from the rows it emits rather than
     a hand-kept constant that silently clipped the last metric when it fell behind.
 
+CHANGED
+
+  * Grid cells accept null, and a whole row can be written as []. A sparse arrangement - a cross, a keypad,
+    controls at the corners - no longer needs a filler control per empty cell. A null cell is simply never given
+    a child, so it costs nothing; the blank TextLabel it replaces was an allocation whose only job was to be
+    invisible. A row is either fully specified or empty: a row that is merely SHORT still throws, since a
+    miscounted row is the mistake the arity check exists to catch. Source-compatible - existing call sites pass
+    non-null arrays and are unaffected.
+
 FIXED
 
   * Control.Width and Control.Height called Resize() directly, which changed the control's Size but skipped

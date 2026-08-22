@@ -39,10 +39,14 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// <seealso cref="Boundary"/>
     /// <param name="rowHeights">The fixed height in cells of each row, top to bottom.</param>
     /// <param name="columnWidths">The fixed width in cells of each column, left to right.</param>
-    /// <param name="controls">Row-major controls: one inner array per row, each with one control per column.</param>
+    /// <param name="controls">
+    /// Row-major controls: one inner array per row, each with one control per column. A cell may be
+    /// <see langword="null"/> to leave it empty, and a whole row may be written as <c>[]</c> to leave every cell in
+    /// it empty — a sparse arrangement needs no filler controls.
+    /// </param>
     /// <exception cref="ArgumentException">The control grid's row/column counts don't match
     /// <paramref name="rowHeights"/>/<paramref name="columnWidths"/>.</exception>
-    public Grid(int[] rowHeights, int[] columnWidths, params IFocusable[][] controls ) : base(new ConsoleGUI.Controls.Grid())
+    public Grid(int[] rowHeights, int[] columnWidths, params IFocusable?[][] controls ) : base(new ConsoleGUI.Controls.Grid())
     {                
         control.Rows = rowHeights.Select(h => new ConsoleGUI.Controls.Grid.RowDefinition(h)).ToArray();
         control.Columns = columnWidths.Select(w => new ConsoleGUI.Controls.Grid.ColumnDefinition(w)).ToArray();
@@ -51,17 +55,22 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
         {
             throw new ArgumentException($"The number of control rows: {controls.Length} must match the number of row heights: {rowHeights.Length}.");
         }
-        if (controls.Any(r => r.Length != columnWidths.Length))
+        // A row is either fully specified or written as `[]` for an entirely empty one. Anything between is almost
+        // always a miscount, and catching it is the only reason this check exists — so an empty row is allowed as an
+        // unambiguous shorthand while a short row still throws.
+        if (controls.Any(r => r.Length is not 0 && r.Length != columnWidths.Length))
         {
-            var c = controls.First(r => r.Length != columnWidths.Length);
+            var c = controls.First(r => r.Length is not 0 && r.Length != columnWidths.Length);
             var index = Array.IndexOf(controls, c);
-            throw new ArgumentException($"The number of control columns in row {index}: {c.Length} must match the number of column widths: {columnWidths.Length}.");
+            throw new ArgumentException($"The number of control columns in row {index}: {c.Length} must match the number of column widths: {columnWidths.Length}, or be 0 for an empty row.");
         }   
         for (int r = 0; r < controls.Length; r++)
         {
             for (int c = 0; c < controls[r].Length; c++)
             {
-                control.AddChild(c, r, controls[r][c].FocusableControl);
+                // A null cell is simply never given a child: the underlying grid returns an empty character for a
+                // cell it has no drawing context for, so a gap costs nothing rather than costing a blank control.
+                if (controls[r][c] is { } cell) control.AddChild(c, r, cell.FocusableControl);
             }
         }       
     }

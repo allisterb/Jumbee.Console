@@ -175,6 +175,24 @@ the overlay, not in your root layout, so a snapshot of the root shows no dialog 
   to design around rather than a bug to wait out. A caption beside a control is a `Grid`.
 - **Nesting a scroll inside a scroll.** A control that scrolls itself shouldn't sit inside a scrolling
   `ControlFrame` — both will try.
+- **A `Grid` cell can be `null`, and a whole row can be `[]`.** A sparse arrangement — a cross, a keypad, controls
+  at the corners — needs no filler. `null` leaves a cell empty and costs nothing; a blank control in that cell is
+  an allocation whose only job is to be invisible, and enough of them to bury the shape you are drawing.
+
+  ```csharp
+  // A directional cross: five columns, seven rows, twenty-one empty cells.
+  new Grid([1, 1, 1, 1, 1, 1, 1], [8, 5, 5, 5, 7],
+      [strafeLeft, null, null,    null,      strafeRight],
+      [],
+      [null,       null, forward, null,      null],
+      [null,       left, null,    right,     null],
+      [null,       null, back,    null,      null],
+      [],
+      [fire,       null, null,    null,      open]);
+  ```
+
+  A row is either fully specified or `[]`. A row that is merely *short* still throws, because a miscounted row is
+  the mistake the arity check exists to catch and an empty one is unambiguous.
 - **A height that depends on a width is a feedback loop.** Layout converges by *re-entrancy*: a container sets a
   child's limits, the child re-lays-out, the child's redraw calls the container's `Initialize` again — deeper on
   the stack, until sizes stop moving. `DockPanel` ↔ `Boundary` is the pair that bounces most, because a
