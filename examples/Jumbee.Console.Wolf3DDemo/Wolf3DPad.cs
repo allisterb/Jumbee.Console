@@ -37,20 +37,31 @@ public sealed class Wolf3DPad : CompositeControl
         open.Activated += (_, _) => view.Send(Wolf3DCommand.Open);
         fire.Activated += (_, _) => view.Send(Wolf3DCommand.Fire);
 
-        // A proper cross with an empty centre, in the shape everyone already knows, so the buttons need not be read
-        // to be used. The two strafes sit on its middle row rather than under it, which would cost a fourth row for
-        // two buttons that are not part of the cross — the same arrangement the sandbox's camera pad uses for its
-        // zoom and reset.
-        SetContent(new Grid([1, 1, 1], [Arrow, Arrow, Arrow, Strafe, StrafeWide],
-            [Gap(), forward, Gap(), open, fire],
-            [turnLeft, Gap(), turnRight, strafeLeft, strafeRight],
-            [Gap(), back, Gap(), Gap(), Gap()]));
+        // Three bands, each a whole grid row, so the cross is centred by construction rather than by padding: the
+        // strafes above it, the cross, then Open and Fire below, with a one-row space either side of the cross.
+        // Because the outer bands mirror each other the cross lands in the middle vertically, and its own three
+        // columns put it in the middle horizontally — nothing here computes an offset.
+        //
+        // The strafes and the action pair sit in the OUTER columns, aligned with the turn buttons, so the panel
+        // reads as three tidy columns rather than six buttons at six positions. Leaving the middle column empty on
+        // those rows is what spaces them, with no spacer control involved.
+        // Five columns, not three: the cross keeps its own narrow arrow columns in the middle, and the pairs that
+        // flank it — the strafes above, the verbs below — live in the wider OUTER columns, which is what puts them
+        // at the edges with the whole cross between them. One column set serves both, so nothing has to span.
+        SetContent(new Grid([Row, Space, Row, Row, Row, Space, Row], [Wide, Arrow, Arrow, Arrow, WideEnd],
+            [strafeLeft, Gap(), Gap(), Gap(), strafeRight],
+            [Gap(), Gap(), Gap(), Gap(), Gap()],
+            [Gap(), Gap(), forward, Gap(), Gap()],
+            [Gap(), turnLeft, Gap(), turnRight, Gap()],
+            [Gap(), Gap(), back, Gap(), Gap()],
+            [Gap(), Gap(), Gap(), Gap(), Gap()],
+            [open, Gap(), Gap(), Gap(), fire]));
     }
     #endregion
 
     #region Properties
     /// <summary>The rows the pad occupies, for the section that frames it.</summary>
-    public const int Rows = 3;
+    public const int Rows = (5 * Row) + (2 * Space);
 
     /// <inheritdoc/>
     protected override bool TabNavigatesChildren => true;
@@ -62,14 +73,30 @@ public sealed class Wolf3DPad : CompositeControl
 
     private static Button Key(string text, int width) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = width - 1 } };
+
+    // The same one-row button in a colour of its own, for the two buttons that act rather than move.
+    private static Button Verb(string text, int width, Color fill, Color hover) =>
+        new Button(text)
+        {
+            Style = ButtonStyle.Secondary with
+            {
+                MinWidth = width - 1,
+                Normal = Style.White | Style.Bg(fill),
+                Hover = Style.White | Style.Bg(hover),
+                Press = Style.White | Style.Bg(hover),
+            },
+        };
     #endregion
 
     #region Fields
-    // Five columns across the panel interior: three for the cross, then the two strafes. 5+5+5+7+8 = 30.
+    // 8 + 5 + 5 + 5 + 7 = 30, the panel interior. The three middle columns carry the cross at its original arrow
+    // width; the outer two are wide enough for "Open" and a doubled strafe glyph.
     private const int Interior = Panel.Columns - 2;
     private const int Arrow = 5;
-    private const int Strafe = 7;
-    private const int StrafeWide = Interior - (3 * Arrow) - Strafe;
+    private const int Wide = 8;
+    private const int WideEnd = Interior - Wide - (3 * Arrow);
+    private const int Row = 1;      // a Flat button's intrinsic height
+    private const int Space = 1;    // the blank row above and below the cross
 
     // U+25C4/U+25BA rather than the ◀/▶ at U+25C0/U+25B6: those carry an emoji presentation that tofus in some
     // terminal fonts, which is why the tree's disclosure glyphs avoid them too.
@@ -77,9 +104,13 @@ public sealed class Wolf3DPad : CompositeControl
     private readonly Button back = Key("▼", Arrow);
     private readonly Button turnLeft = Key("◄", Arrow);
     private readonly Button turnRight = Key("►", Arrow);
-    private readonly Button strafeLeft = Key("◄◄", Strafe);
-    private readonly Button strafeRight = Key("►►", StrafeWide);
-    private readonly Button open = Key("Open", Strafe);
-    private readonly Button fire = Key("Fire", StrafeWide);
+    private readonly Button strafeLeft = Key("◄◄", Wide);
+    private readonly Button strafeRight = Key("►►", WideEnd);
+
+    // The two verbs are the only buttons here that DO something rather than move you, so they are the only ones
+    // carrying a colour: blue to open, orange to fire. Everything else keeps the neutral secondary fill, which is
+    // what makes these two findable without reading them.
+    private readonly Button open = Verb("Open", Wide, new Color(40, 70, 120), new Color(60, 95, 160));
+    private readonly Button fire = Verb("Fire", WideEnd, new Color(150, 70, 20), new Color(195, 100, 35));
     #endregion
 }

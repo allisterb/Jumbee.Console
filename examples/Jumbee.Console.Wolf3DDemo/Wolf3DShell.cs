@@ -40,11 +40,19 @@ public static class Wolf3DShell
         var root = new DockPanel(DockedControlPlacement.Bottom, footer,
             new DockPanel(DockedControlPlacement.Right, sidebar, stage));
 
-        // The bar's height follows its width, and that has to happen on the PAINT hook rather than in the viewport's
-        // per-frame tick: setting a docked control's Height while the frame it belongs to is being composited makes
-        // the DockPanel re-lay-out mid-draw, which blanked the viewport and corrupted the overlay. Reflow guards
-        // itself on an actual width change, so this is a comparison on all the frames where nothing moved.
-        UI.Paint += (_, _) => hud.Reflow();
+        // Both heights are set on the PAINT hook rather than in the viewport's per-frame tick: setting a docked
+        // control's Height while the frame it belongs to is being composited makes the DockPanel re-lay-out
+        // mid-draw, which blanked the viewport and corrupted the overlay. Each guards itself on an actual change,
+        // so on the frames where nothing moved this is two comparisons.
+        //
+        // Order matters by one frame: the pad matches whatever height the bar settled on last frame, so a resize
+        // aligns them on the frame after it. Reading hud.ActualHeight before Reflow would align them a frame later
+        // still, and doing the pad first would size it against the OLD bar.
+        UI.Paint += (_, _) =>
+        {
+            hud.Reflow();
+            sidebar.FitPad(sidebar.ActualHeight);
+        };
 
         // The number keys stay as the fast path for the three display toggles the sidebar also carries -- they cost
         // nothing, and reaching for a slider to flip a switch while walking is worse than pressing a key. Everything

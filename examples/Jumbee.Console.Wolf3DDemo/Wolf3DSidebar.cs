@@ -29,11 +29,18 @@ public sealed class Wolf3DSidebar : CompositeControl
         display = new DisplayPanel(view, Push);
         input = new InputPanel(view, Push);
         tabs = new TabPanel(TabBarDock.Top, ("Display", display), ("Input", input));
+        Pad = new Wolf3DPadDock(view);
+        Pad.Fit();
 
         view.Changed += Refresh;
         view.Tuning.Changed += Refresh;
 
-        SetContent(tabs);
+        // The pad docks INSIDE the sidebar rather than beside it in the shell. A sibling column would have been the
+        // obvious shape, but the sidebar's borderless scroll frame reports two columns more than its Width, so a
+        // nested dock resolved the shared column to 34 and quietly took two columns off the viewport. Owning the
+        // dock here keeps the shell's layout exactly as it was, keeps the column at Columns, and means the sidebar
+        // collapse (`u`) still hides both with one Width.
+        SetContent(new DockPanel(DockedControlPlacement.Bottom, Pad, tabs));
         Refresh();
     }
     #endregion
@@ -48,6 +55,11 @@ public sealed class Wolf3DSidebar : CompositeControl
     /// <summary>The Display page, so headless checks can drive its widgets the way a user does.</summary>
     public DisplayPanel Display => display;
 
+    /// <summary>The movement pad docked below the tabs, reachable from either page.</summary>
+    public Wolf3DPadDock Pad { get; }
+
+    /// <summary>Whether the pad is currently in the layout; false on a terminal too short to hold it and a page.</summary>
+    public bool PadVisible { get; private set; } = true;
     /// <summary>
     /// Viewport rows below which the pages drop to their compact spacing.
     /// </summary>
@@ -93,6 +105,30 @@ public sealed class Wolf3DSidebar : CompositeControl
     #endregion
 
     #region Methods
+    /// <summary>
+    /// Shows or hides the pad for a column <paramref name="columnRows"/> tall, swapping the content when the verdict
+    /// changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call from <see cref="UI.Paint"/>, never from a draw. It swaps the whole content layout rather than setting
+    /// the pad's Height to 0, because <b>0 means "fill the parent"</b>, not "collapse" — setting it made the pad
+    /// take the entire sidebar and the tabs vanish, which is the opposite of hiding it. There is no collapse
+    /// primitive on Control, so removing it from the layout is the honest way to remove it.
+    /// </para>
+    /// <para>
+    /// The pad is a big-terminal affordance: it wants 19 rows and a usable page wants 16 more, so below about 35
+    /// rows of sidebar it goes. Every button on it has a keyboard equivalent; the panels do not.
+    /// </para>
+    /// </remarks>
+    public void FitPad(int columnRows)
+    {
+        var show = columnRows >= Wolf3DPadDock.Rows + MinimumTabs;
+        if (show == PadVisible) return;
+        PadVisible = show;
+        SetContent(show ? new DockPanel(DockedControlPlacement.Bottom, Pad, tabs) : tabs);
+    }
+
     /// <summary>Re-reads every value from the state objects. Cheap, and called after any of them changes.</summary>
     public void Refresh()
     {
@@ -125,6 +161,9 @@ public sealed class Wolf3DSidebar : CompositeControl
     private readonly DisplayPanel display;
     private readonly InputPanel input;
     private readonly TabPanel tabs;
+
+    // Rows the tab strip plus a whole Display page needs above the pad, so the pad is what goes when both cannot fit.
+    private const int MinimumTabs = 16;
     private bool spaced = true;
     private bool rebuilding;
     private bool syncing;

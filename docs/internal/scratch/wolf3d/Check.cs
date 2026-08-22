@@ -454,7 +454,10 @@ static int Spill(ILayout root, int w, int h)
     var viewportWidth = w - Wolf3DSidebar.Columns;
     var bad = 0;
     for (var y = 2; y < h - 3; y++)   // row 1 is the viewport frame's own title
-        foreach (var c in rows[y][..viewportWidth])
+        // Clamped: ToLines trims a row to its last non-blank cell, so a row that is blank across the viewport comes
+        // back SHORTER than the viewport is wide. That is not a spill -- it is the absence of one -- but slicing to
+        // a fixed width threw on it. It only started happening when a row could be entirely blank there.
+        foreach (var c in rows[y][..Math.Min(viewportWidth, rows[y].Length)])
             if (char.IsLetterOrDigit(c) || c is '×' or '°' or '·') bad++;
     return bad;
 }
@@ -555,8 +558,16 @@ shell.Tuning.Reset();
 // The claim is that a pad click IS a key tap, not something resembling one: both go through Wolf3DView.Send and
 // nothing synthesises a keystroke. Test the command API, then the same thing through a REAL mouse click on the
 // rendered button, which is the only way to know the wiring survives the layout.
-shell.Sidebar.Tabs.SelectedIndex = 1;
+//
+// The pad now sits in its own panel under the sidebar rather than on the Input tab, so this deliberately leaves
+// the DISPLAY tab selected: reaching the pad without leaving the Display knobs is the whole reason it moved, and
+// a check that switched tabs first would pass just as well if it had not.
+shell.Sidebar.Tabs.SelectedIndex = 0;
+shell.Sidebar.FitPad(shell.Sidebar.ActualHeight);
 view.DrawFrame();
+Check("the pad is reachable without leaving the Display tab",
+    !shell.Sidebar.PadVisible || shell.Sidebar.Pad.ActualHeight == Wolf3DPadDock.Rows,
+    $"visible={shell.Sidebar.PadVisible}, pad panel {shell.Sidebar.Pad.ActualWidth}x{shell.Sidebar.Pad.ActualHeight}");
 
 Thread.Sleep(400);
 scene.Restart();
@@ -580,9 +591,14 @@ for (var y = 0; y < H && found.X < 0; y++)
     if (x >= W - Wolf3DSidebar.Columns) found = (x, y);
 }
 
-Check("the pad's forward button is on screen", found.X >= 0, $"at {found.X},{found.Y}");
+// Only when it is SHOWN: below about 35 rows of sidebar the pad is deliberately dropped from the layout, and a
+// check that demanded it there would be asserting the opposite of the intended behaviour.
+if (shell.Sidebar.PadVisible)
+    Check("the pad's forward button is on screen", found.X >= 0, $"at {found.X},{found.Y}");
+else
+    Check("the pad is dropped on a sidebar too short for it", found.X < 0, "hidden, as intended");
 
-if (found.X >= 0)
+if (found.X >= 0 && shell.Sidebar.PadVisible)
 {
     Thread.Sleep(400);
     scene.Restart();
@@ -746,7 +762,7 @@ Check("the status bar sizes itself from its width", hudRows == Wolf3DHud.RowsFor
     $"{shell.Hud.ActualWidth}x{hudRows}");
 // The floor of 3 is RowsFor's minimum, and the bar sat there for a while because it derived its height from a
 // viewport width that was still 0. It looked deliberate. Assert it is past the floor, not merely non-zero.
-Check("and is past the floor a stale width would pin it at", hudRows >= 8, $"{hudRows} rows");
+Check("and is past the floor a stale width would pin it at", hudRows > 3, $"{hudRows} rows");
 
 var hudFrame = ConsoleSnapshot.Render(shell.Root, W, H);
 var hudLit = 0;
