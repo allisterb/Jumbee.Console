@@ -1,6 +1,6 @@
 # Jumbee.Console 3D sandbox
 
-A real-time **3D rigid-body sandbox** in the terminal, and a **model viewer** for `.obj` and `.stl`, built on `Jumbee.Console`.
+A real-time **3D rigid-body sandbox** in the terminal, and a **model viewer** for `.obj`, `.stl` and `.ply`, built on `Jumbee.Console`.
 Physics comes from [Box3D](https://github.com/erincatto/box3d) (Erin Catto's engine, via the `Box3D.NET` binding);
 everything else — camera, projection, rasteriser — is about 900 lines using `System.Numerics` entirely. See [3D Rendering in a Terminal](../../docs/3D%20Rendering%20in%20a%20Terminal.md) for a deep dive into how it works.
 
@@ -21,7 +21,7 @@ coloured sub-pixels — so the solid renderers draw at `width × 2·height` with
 # The sandbox: a leaning tower, some spheres, and a floor.
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release
 
-# The model viewer: one asset filling the viewport, on a turntable. Reads .obj and .stl.
+# The model viewer: one asset filling the viewport, on a turntable. Reads .obj, .stl and .ply.
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- obj path/to/models
 
 # Make models spawnable in the sandbox instead, so you can throw them at things.
@@ -52,9 +52,10 @@ whichever model you were last looking at — or, coming from the sandbox, on wha
 |---|---|
 | **`.obj`** | Wavefront. Geometry only — `v` and `f`, with n-gons fan-triangulated. `vt`/`vn` are parsed past, and materials are not read at all. |
 | **`.stl`** | Binary and ASCII, auto-detected. The CAD and 3D-printing interchange format, which is the reason it is here. |
+| **`.ply`** | ASCII and binary little-endian. **The only one that carries colour**, per vertex or per face, with no side-car file. |
 
-A directory holding both is loaded as one list in name order, so `[` and `]` walk the directory rather than all the
-OBJs and then all the STLs.
+A directory holding several formats is loaded as one list in name order, so `[` and `]` walk the directory rather
+than all the OBJs and then all the STLs.
 
 **STL is a triangle soup** — every facet repeats its three corners in full, with no vertex sharing, no materials and
 no texture coordinates. The loader welds identical corners as it reads, because the renderer transforms a body's
@@ -76,6 +77,24 @@ Two details are worth knowing, because they are what most STL readers get wrong:
 and like the OBJ exporter banner it is applied somewhere visible — the viewer's **Z-up file** switch and the `a`
 key — so a wrong guess is a setting to flip rather than a broken-looking model.
 
+**PLY is the one format here that states its own colours.** OBJ needs a side-car `.mtl` (and usually a texture with
+it, which nothing here can sample) and STL carries nothing at all, so every other model takes a flat palette tint.
+A PLY file can colour every facet inline, and the loader reads it whether the file stores colour per vertex or per
+face. Per-vertex colours are averaged onto the face, because the renderers shade a whole triangle at once — at a
+shade ramp of seven levels across a face a few sub-pixels wide, the average lands on the same quantised colour a
+corner-to-corner blend would have produced nearly everywhere.
+
+Three things about the reader are deliberate:
+
+- **Every property is coerced, not assumed.** Positions arrive as `float` or `double`, indices as `int` or `uint`,
+  colours as `uchar` 0–255 or `float` 0–1, under `red`/`green`/`blue` or `r`/`g`/`b`. All of those are legal and all
+  of them occur, so a reader that handles only `float`/`int` works until it meets a file from another exporter.
+- **A truncated file is an error.** A PLY header declares its element counts up front, so a file holding two of the
+  two thousand vertices it promised would otherwise yield 1,998 vertices at the origin — a modelling artefact rather
+  than a broken file. The loader turns the parser's short-read warning into a failure that names the counts.
+- **`binary_big_endian` is refused with a message naming the format**, rather than read as byte-swapped garbage. The
+  spec allows it; essentially no current exporter emits it.
+
 ## Colour
 
 The viewer's **Colour** drop-down recolours the model, and it is one setting for all three renderers: every one
@@ -84,6 +103,10 @@ together.
 
 Its rows are a swatch in the colour itself beside the name, which is what `Select`'s renderable options exist for —
 a text option gets one style for the whole row, so it could not colour the block differently from the label.
+
+**A PLY that carries its own colours ignores the drop-down**, since the file is more specific than the palette.
+Selecting the body still overrides both — the selection tint has to win over the whole model or there is no way to
+see which one is selected.
 
 ## Shaded detail
 

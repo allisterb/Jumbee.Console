@@ -60,6 +60,27 @@ public sealed class Mesh
 
     /// <summary>Number of triangles.</summary>
     public int TriangleCount => Indices.Length / 3;
+
+    /// <summary>
+    /// One colour per triangle, or <see langword="null"/> when the mesh carries no colour of its own and takes the
+    /// body's palette tint instead.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Length is <see cref="TriangleCount"/>. Set by <c>PlyLoader</c>, the only format here that carries colour
+    /// without a side-car material file — OBJ needs an <c>.mtl</c> (and usually a texture with it) and STL carries
+    /// nothing at all.
+    /// </para>
+    /// <para>
+    /// <b>Per triangle, not per vertex, even for files that store it per vertex.</b> The renderers shade a whole
+    /// face at once (see <c>MeshRenderer.Triangle</c>), so a corner-varying colour has nowhere to go without moving
+    /// to the per-pixel path and paying a barycentric blend for it. At a shade ramp of a couple of dozen levels
+    /// across a face a few sub-pixels wide, the average of the three corners lands on the same quantised colour the
+    /// blend would have produced nearly everywhere. <c>PlyLoader</c> therefore averages corner colours at load and
+    /// the renderers stay simple.
+    /// </para>
+    /// </remarks>
+    public Color[]? FaceColors { get; init; }
     #endregion
 }
 

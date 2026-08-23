@@ -422,3 +422,4 @@ BenchmarkDotNet.Artifacts/*
 /publish*
 /media/*
 *.stl
+*.ply

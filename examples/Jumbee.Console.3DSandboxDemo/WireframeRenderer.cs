@@ -237,6 +237,10 @@ public sealed class WireframeRenderer : ISceneRenderer
         // depends on how many faces the cull happens to keep, which depends on the angle).
         var triangles = mesh.TriangleCount;
         var indices = mesh.Indices;
+        // Per-face colour when the file carried it (PLY); the body tint otherwise. Thinning means only a sample of
+        // the faces is drawn, so the colours that land are a sample of the model's too -- which still reads as a
+        // coloured object, where one flat tint over a coloured model would throw the information away entirely.
+        var faceColors = mesh.FaceColors;
 
         // Pass 1 -- which faces point at us, and WHERE ON SCREEN each one lands.
         //
@@ -337,7 +341,7 @@ public sealed class WireframeRenderer : ISceneRenderer
                         continue;
                     }
 
-                    DrawTriangle(view, indices, bucketOrdered[bucketStart[b] + round], color);
+                    DrawTriangle(view, indices, bucketOrdered[bucketStart[b] + round], faceColors, color);
                     drawn++;
                 }
             }
@@ -352,14 +356,16 @@ public sealed class WireframeRenderer : ISceneRenderer
                 carry += budget;
                 if (carry < facing) continue;
                 carry -= facing;
-                DrawTriangle(view, indices, facingTriangles[k], color);
+                DrawTriangle(view, indices, facingTriangles[k], faceColors, color);
                 drawn++;
             }
         }
     }
 
-    private void DrawTriangle(in CameraView view, int[] indices, int i, Color color)
+    private void DrawTriangle(in CameraView view, int[] indices, int i, Color[]? faceColors, Color color)
     {
+        // `i` indexes the INDEX array, three per triangle, so the face's colour is at i/3.
+        if (faceColors is not null) color = faceColors[i / 3];
         var a = meshWorld[indices[i]];
         var b = meshWorld[indices[i + 1]];
         var c = meshWorld[indices[i + 2]];

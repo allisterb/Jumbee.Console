@@ -18,6 +18,10 @@
          at the boundary. Box3D.NET.Native ships six RIDs including linux-x64/arm64, and P/Invoke is the supported
          NativeAOT path — same situation as NAudio in AudioScopeDemo. -->
     <PackageReference Include="Box3D.NET" Version="0.3.0" />
+    <!-- PLY reader. Chosen over tinyply.net because it is reflection-free and so survives PublishAot above;
+         tinyply raises 8 IL3050 warnings (Marshal.PtrToStructure(Type), Type.MakeGenericType). The trade is
+         binary_big_endian, which Ply.Net rejects outright — see PlyLoader for why that is an acceptable loss. -->
+    <PackageReference Include="Ply.Net" Version="5.6.3" />
     <PackageReference Include="System.CommandLine" Version="2.0.10" />
   </ItemGroup>
 

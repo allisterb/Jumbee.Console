@@ -221,9 +221,14 @@ public abstract class MeshRenderer : ISceneRenderer
                 world[v] = center + Vector3.Transform(mesh.Vertices[v] * scale, rotation);
         }
 
+        // A mesh that brought its own colours (PLY) shades each face with its own, EXCEPT while selected: the
+        // selection tint has to win over the whole body or there is no way to see which one is selected.
+        var faceColors = Selected == snapshot.Ids[i] ? null : mesh.FaceColors;
+
         var idx = mesh.Indices;
         for (var t = 0; t < idx.Length; t += 3)
-            Triangle(world[idx[t]], world[idx[t + 1]], world[idx[t + 2]], tint, BodyGroup);
+            Triangle(world[idx[t]], world[idx[t + 1]], world[idx[t + 2]],
+                     faceColors is null ? tint : faceColors[t / 3], BodyGroup);
     }
 
     private void Triangle(Vector3 a, Vector3 b, Vector3 c, Color tint, byte group)

@@ -34,7 +34,7 @@ var scannedModelsFolder = false;
 var modelPath = new Argument<string?>("path")
 {
     Arity = ArgumentArity.ZeroOrOne,
-    Description = "An .obj or .stl file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
+    Description = "An .obj, .stl or .ply file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
                   "cycle through it; naming a file just decides which one opens first. With no path, a 'models' " +
                   "folder in the current directory is used if there is one, and otherwise the viewer opens on its " +
                   "generated torus knot. NOTE: models are parsed before the UI appears, so a directory holding " +
@@ -47,7 +47,7 @@ var sandboxModels = new Option<string[]>("--model", "-m")
 {
     Arity = ArgumentArity.ZeroOrMore,
     AllowMultipleArgumentsPerToken = true,
-    Description = "Model files (.obj, .stl) to make spawnable. Cycle them with 'm', then drop with 'n' or fire with 'f'.",
+    Description = "Model files (.obj, .stl, .ply) to make spawnable. Cycle them with 'm', then drop with 'n' or fire with 'f'.",
 };
 
 var objCommand = new Command("obj", "Open the model viewer: one asset filling the viewport, on a turntable.")

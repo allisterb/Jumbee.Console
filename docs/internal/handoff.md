@@ -1,4 +1,4 @@
-# Handoff — the 3D demos (living note, last updated 2026-08-20)
+# Handoff — the 3D demos (living note, last updated 2026-08-22)
 
 Living "where we are / what's next" note, now covering two arcs: the **Wolf3D walkthrough** (newest) and the
 **3D sandbox**. Companion to [`eval-findings.md`](eval-findings.md), which is the full backlog with evidence; this
@@ -7,30 +7,64 @@ dated section is one session, and the standing context for each arc sits under i
 
 ## Next session starts here — Wolf3D
 
-**HEAD is `77eefa9` "Add weapons, sprites, working doors. Fix quad draw surface bug."** and the tree is clean.
-The demo runs, is walkable, and every check passes.
+**HEAD is `1c6711c` "Grid can take a null Control element param."** and the tree is clean. The demo runs, is
+walkable, has the original status bar and a movement pad, and all **72** checks pass.
 
 ```bash
+build.cmd wolf3d --verify                    # build, then the headless smoke check
 examples.cmd wolf3d                          # play it
-dotnet run --project docs/internal/scratch/wolf3d -c Release             # 49 checks
+dotnet run --project docs/internal/scratch/wolf3d -c Release             # 72 checks
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- resize   # cold start + resize walk, per size
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- rowfilter# nearest vs box, blit + end-to-end
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- hud      # the status bar alone, four widths
 dotnet run --project docs/internal/scratch/wolf3d -c Release -- surfaces # the glyph-grid measurements
 dotnet run --project docs/internal/scratch/wolf3d -c Release -- perf     # ANSI bytes per frame
+dotnet run --project docs/internal/scratch/wolf3d -c Release -- braille  # what each marker LOOKS like
 dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
 ```
 
-### The three things most likely to bite
+`build`/`build.cmd` now take a target: no argument builds the three libraries, `examples` builds all six demos,
+`wolf3d` builds one, and `--verify` runs each built demo's smoke check afterwards. `build.cmd --help` lists them.
+
+### The five things most likely to bite
 
 1. **The running demo locks its own exe.** Every session hit `MSB3021`/`MSB3026` at least twice. Close it before
-   building, or use `-t:Compile` to type-check without linking. "I don't see my change" is always this.
-2. **A quadrant sub-pixel is NOT square** — half a cell wide, a whole half-cell tall. Anything assuming squareness
+   building, or use `-t:Compile` to type-check without linking. "I don't see my change" is always this. **Check
+   the timestamps before diagnosing anything** — this session lost time to a "fix that didn't work" that was
+   really a stale `Jumbee.Console.dll` in the demo's `bin`.
+2. **A green `ConsoleSnapshot` suite is NOT evidence the app runs.** `ToText` re-lays-out the whole tree on *every
+   call*, so it papers over any fault that needs two frames to appear — and `UI.Start` wraps the root in a system
+   overlay the snapshot path never builds, so the live tree is not the tree the harness lays out. Three headless
+   reproductions came back clean while the app was visibly broken. Use `perf` (real `ConsoleManager` +
+   `UI.PaintFrame` over 90 frames) after any layout change: **an idle frame emits 8 bytes**, and a layout still
+   thrashing cannot.
+3. **A quadrant sub-pixel is NOT square** — half a cell wide, a whole half-cell tall. Anything assuming squareness
    breaks; the vendored sprite projector does, and every sprite rendered at half width for a while before anyone
    noticed. `Wolf3DRenderer` compensates by rendering the framebuffer at `h × SamplesPerColumn` and row-sampling
    back. If you add any sprite or image drawing, check it in **both** surface modes.
-3. **`engine/` is vendored upstream and must not be edited.** The only addition is `Logger.cs`, a shim so the
+4. **Never set `Width`/`Height` from inside a draw**, and remember `0` means *fill the parent*, not *collapse*.
+   Both cost real time this session — see the 2026-08-22 entry. Size on `UI.Paint`, guarded on an actual change;
+   to remove a control from a layout, swap the content, because there is no collapse primitive.
+5. **`engine/` is vendored upstream and must not be edited.** The only addition is `Logger.cs`, a shim so the
    copied files stay byte-identical. Everything Jumbee-specific lives one directory up.
 
 ### What is unfinished, in order
 
+- **The status bar shows nothing that moves.** `Wolf3DHud` is wired to real properties (ammo, health, score, lives,
+  face) but `Wolf3DScene` is a hand-written pose/collision/doors subset and never sets them, so the bar reads a
+  permanent FLOOR 1 / SCORE 0 / LIVES 3 / HEALTH 100% / AMMO 8. Cheapest real motion: decrement ammo on fire and
+  drive `FacePictureIndex` from the chaingun-grin timer, both of which the demo already knows about. Driving it
+  properly means adopting `GameSession`, which is the next item.
+- **The pad's Open/Fire are the only game verbs.** `GameSession` (1,502 vendored lines) also has pushwalls,
+  elevators, pickups and level progression, none of them driven. Pushwalls are the cheapest next one, and adopting
+  `GameSession` is what would make the status bar live.
+- **Two pre-existing check failures at non-default sizes**, confirmed against the committed baseline and *not*
+  regressions: at 240×62 `the weapon is actually drawn` / `Fire changes the weapon on screen`, and at 90×26 three
+  weapon/fov checks. They arrived with the status bar taking rows off the viewport, so they are check assumptions
+  tuned to 200×52 rather than app faults. Worth fixing before the check suite is trusted at other sizes.
+- **`ConsoleSnapshot` cannot render through `UI.Start`'s system overlay.** That is the harness gap behind bite #2 —
+  the snapshot path lays out `shell.Root` directly while the app lays out an overlay-wrapped root. Closing it would
+  make headless checks able to see a whole class of layout fault they are currently blind to.
 - ~~**`--verify` is not wired into any build script**~~ — **done 2026-08-20.** `audio-scope` and `3dsandbox` now
   implement it (`AudioScopeDemo/Program.cs`, `3DSandboxDemo/Verify.cs`), `build`/`build.cmd` take `--verify` after
   any demo target, and `build-docker.*` verify **both images by default** by running every app they ship, with
@@ -38,8 +72,6 @@ dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
   (`.dockerignore` keeps the game data out, and `docker.md` used it as its example — fixed), and the AudioScope
   check has to scan for signal by **duration** rather than frame count, because the bundled track opens on ~1.8s of
   digital silence and a fixed frame count reports the `--buffer` size rather than the audio.
-- **The pad's Open/Fire are the only game verbs.** `GameSession` (1,502 vendored lines) also has pushwalls,
-  elevators, pickups and level progression, none of them driven. Pushwalls are the cheapest next one.
 - **Sextants are blocked, not rejected.** Worth only ~10% over quadrant, and gated on `Character.Content` being
   `char?` (U+1FB00+ is non-BMP) *and* on a Cascadia new enough to have the glyphs. Revisit if either changes.
 - **The observed-palette quantiser** measured as a real mid-range Pareto win (32 colours: 125% error at 59% bytes
@@ -50,10 +82,16 @@ dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
 
 ### Where things stand — Wolf3D
 
-`examples/Jumbee.Console.Wolf3DDemo`: **2,273 lines of demo over 7,780 vendored** from
+`examples/Jumbee.Console.Wolf3DDemo`: **2,831 lines of demo over 7,780 vendored** from
 [Wolfenshine](https://github.com/deanthecoder/Wolfenshine). Real maps, textures, scenery sprites, doors that open,
-and a firing pistol, on a half-block pixel surface. Game data is not redistributable and is gitignored — and
-excluded from the Docker context separately, because Docker does not read `.gitignore`.
+a firing pistol, the original 320×40 status bar and a movement pad, on a half-block pixel surface. Game data is not
+redistributable and is gitignored — and excluded from the Docker context separately, because Docker does not read
+`.gitignore`.
+
+The shell is a viewport with `Wolf3DHud` docked beneath it, a tabbed sidebar on the right whose own bottom dock
+holds `Wolf3DPadDock`, and a two-line footer. The pad lives in the sidebar rather than beside it because the
+sidebar's borderless scroll frame reports two columns more than its `Width`, so a sibling column resolved to 34 and
+quietly took two columns off the viewport.
 
 The measurements that drove every decision are in the demo's
 [README](../../examples/Jumbee.Console.Wolf3DDemo/README.md); the short version:
@@ -65,6 +103,8 @@ The measurements that drove every decision are in the demo's
 | Quantiser default, measured (non-monotonic — 10 beats 12) | **10 levels**: 113% of full-palette error at 68% of bytes |
 | The two-colour-per-cell ceiling caps the whole glyph ladder | best possible is −33% error; sextant over quadrant is −10% |
 | Compute is never the constraint | raycast ~0.5 ms, emit dominates |
+| Row filter, box vs nearest, at the default quantiser | −23% reconstruction error for +3% bytes |
+| The status bar's labels, quadrant vs half block at 168 columns | legible vs unreadable, for 56 → 63 colours |
 
 Two design notes worth not rediscovering. **A terminal has no key-up event**, so `Wolf3DView.Axis` infers held keys
 from the auto-repeat stream — one window per *axis* so the opposite key reverses, the window sized from the
@@ -75,10 +115,10 @@ from the auto-repeat stream — one window per *axis* so the opposite key revers
 
 ### State of the tree
 
-**`9889ec7` "Begin quadrant AA implementation" is HEAD**, and despite the name it holds the *whole* quadrant-AA
-arc plus the white-model fix — the two were committed together. On top of it there is **uncommitted work in ~10
-files**: the Smooth removal, the AA relabelling, STL support, and the doc/harness updates for all three. Nothing is
-half-finished; it is uncommitted only because this repo never auto-commits.
+**The tree is clean and HEAD is `1c6711c`** (2026-08-22). The quadrant-AA arc, the white-model fix, the Smooth
+removal and STL support are all committed; the work that was uncommitted when this section was written has since
+landed. The sandbox itself was not touched in the 2026-08-22 session beyond relabelling its **Anti-Aliasing**
+switch to **Quadrant glyphs** and moving it above Half-Lambert in both sidebars and both menus.
 
 **The demo exe cannot relink while the app is running.** Every build during these sessions failed with `MSB3021 —
 file is locked by Jumbee.Console.3DSandboxDemo`. Close it before building, or use `-t:Compile` to type-check
@@ -121,6 +161,88 @@ Each has a section below with the measurements and what they cost to learn.
 **Before recording anything:** [`Recording the demos.md`](Recording%20the%20demos.md) — the measured WebP/GIF
 settings, why lossless beats lossy quality 100 by 2.7× on this content, and the two capture decisions that outweigh
 every encoder setting.
+
+## 2026-08-22 — the status bar, a Control bug that had always been there, and two API gaps
+
+Six commits: `ed048fa` build-script targets and `--verify`, `0856d33`/`ebba53d` two renames, `3dc9855` the
+`Control` sizing fix, `04e2024` the docked pad, `1c6711c` sparse `Grid` cells.
+
+### The status bar
+
+`Wolf3DHud` blits the original 320×40 status bar — face, weapon icon, keys, five bitmap numbers — composed by the
+vendored `WolfensteinGraphicsLoader.LoadHudGraphics`, which already existed and nothing used. It docks under the
+viewport and sizes itself from its own width, keeping the original's proportions (the bar is 40 of 200 scanlines,
+so it stays a quarter of the view's height at any terminal size).
+
+**What it taught, which was the point of building it.** At 1:1 (320 columns) it is pixel-perfect. At the 168 columns
+the shell actually gives it, content splits three ways: pictures survive downscaling (the face is still BJ, the
+pistol silhouette is clean), large bitmap numerals survive, and **small bitmap text does not** — "LIVES" reads as
+"LIIES", "AMMO" as "A4M0". Then the useful part: **quadrant sampling rescues the labels outright**, for 56 → 63
+colours. That is a far bigger effect than quadrant has on the 3D scene, because a letterform is horizontal stroke
+placement and almost nothing else, where dense wall texture gains detail nobody was reading.
+
+Sampled **nearest**, never averaged — the opposite of the viewport's row filter, and decided entirely by content:
+line art with single-pixel strokes versus dense texture. Same renderer, opposite answer.
+
+The bar follows the viewport's Surface and Quantize settings. It briefly did not, and forced quadrant on
+regardless, on the reasoning that the labels need it. That was wrong: **a display toggle that visibly does nothing
+to a third of the screen is a worse fault than an ugly bar**, and this demo exists to show the trade rather than
+hide it. Both settings are pushed from one place (the view's tick) rather than intercepted at the three sites that
+can change them — one sync point cannot fall out of step, three demonstrably can.
+
+### The `Control` bug, which was as old as the setter
+
+`Control.Width`/`Height` called `Resize()` directly. That changes `Size` and nothing else: the console buffer is
+never re-sized, and `OnInitialization` never fires — which is the only thing that calls `SetLimits` on a
+`CompositeControl`'s content. So a composite whose size was set at runtime kept its children at the **old** size
+indefinitely, and the undersized buffer threw `NullReferenceException` out of a paint.
+
+It had never been walked, because the status bar is the first control in the repo that sets its own `Height`.
+Both setters now go through `Initialize`; `CompositeControl`'s indexer also bounds-checks the buffer so an
+out-of-range read yields an empty cell rather than throwing.
+
+**The diagnosis is the reusable part.** I misdiagnosed it three times — stale-size hash, mid-draw mutation, a width
+latch — each fix plausible, locally correct, and not the cause. What settled it was an env-var-gated trace in the
+**live** app dumping control/content/surface/pixel-buffer sizes per frame to a file: `hud=237x15` over
+`inner=237x50`, forever, in one run. After two failed guesses, instrument the real path instead of guessing a third
+time. The trace was removed once the regression test existed.
+
+### Two API gaps, both surfaced by building UI rather than by thinking about the API
+
+**`Grid` required every cell filled.** The movement pad is a cross — five columns, seven rows, twenty-one empty
+cells — and written against the old API that was twenty-one calls to a helper returning a blank `TextLabel` per
+cell, each an allocation whose only job was to be invisible. Cells now accept `null` and a whole row can be `[]`.
+A merely *short* row still throws, since a miscount is what that check exists to catch. It also exposed a latent
+NPE: `Layout.Controls` walked every coordinate blind, while `ILayout.CellAt` had existed all along documented as
+"tolerates an empty slot (a sparse Grid cell can throw)" — `Controls` was the one walker not using it.
+
+**`Height = 0` means fill, not collapse.** Hiding the pad on a short terminal made it swallow the entire sidebar.
+There is no collapse primitive on `Control`, so the sidebar swaps its content layout instead.
+
+### The row filter, and doom-cli
+
+`RowFilter` on `Wolf3DRenderer`: under quadrant sampling the framebuffer is rendered twice as tall and reduced on
+the way out, and that reduction is now a **box** filter rather than a nearest pick. Measured, at the default 10
+levels/channel it cuts reconstruction error 23% for 3% more ANSI bytes; at full palette 29% for 12%. The comment
+it replaced argued averaging would fragment runs — wrong, because the quantiser runs immediately *after* the
+filter and snaps invented colours back onto the ramp. Filtering-then-requantising is a different operation from
+blending two already-quantised colours.
+
+Came from reading [doom-cli](https://github.com/ludocode/doom-cli) (scanned, ledger row added). Two findings worth
+keeping: its box filter is **documented but not implemented** (`-filter box` parses and aborts), and its colour
+choice is a luma-threshold split with mean colours, not the 2-means-with-medoids the sandbox does — cheaper, but it
+can only express partitions contiguous in luma rank and it invents colours off the palette.
+
+### Also this session
+
+- **`build`/`build.cmd` take a target**, mirroring `examples.*`: no argument builds the three libraries, `examples`
+  all six demos, `wolf3d` one. `--verify` runs each built demo's check. `build-docker.*` verify both images by
+  default.
+- **Docs**: `Layouts.md` gained the height-from-width feedback gotcha and the sparse-`Grid` one; `What Happens
+  When` gained "…I set a control's `Width`/`Height` from inside `Render()`?" and a correction — it said there was
+  no resize hook, when `UI.Paint` is exactly that and two demos already use it.
+- **The AA switch is now "Quadrant glyphs"** in both 3D-sandbox sidebars and menus, ahead of Half-Lambert. Nothing
+  there is blended, so the old name described an effect rather than the mechanism.
 
 ## 2026-08-20 — Wolf3D, from feasibility question to walkable demo
 

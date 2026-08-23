@@ -1,7 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
 /// <summary>What the viewer's single path argument resolved to.</summary>
-/// <param name="Files">Every <c>.obj</c> in the directory, in name order. Empty when there are none.</param>
+/// <param name="Files">Every readable model in the directory, in name order. Empty when there are none.</param>
 /// <param name="StartIndex">Which of them to open on — the named file, or the first.</param>
 /// <param name="Error">A message to print and exit on, or <see langword="null"/> when the path was usable.</param>
 public readonly record struct ModelSet(string[] Files, int StartIndex, string? Error);
@@ -25,7 +25,7 @@ public static class ModelLibrary
     /// </para>
     /// <para>
     /// With no path, the only place looked at is a <c>models</c> folder beside the working directory. Not the working
-    /// directory itself: scooping up whatever <c>.obj</c> files happen to be next to you is a surprise, and the app
+    /// directory itself: scooping up whatever model files happen to be next to you is a surprise, and the app
     /// always has its generated mesh, so finding nothing is a perfectly good outcome rather than a failure.
     /// </para>
     /// </remarks>
@@ -104,7 +104,7 @@ public static class ModelLibrary
     /// <summary>The folder looked for beside the working directory when no path is given.</summary>
     public const string DefaultDirectoryName = "models";
 
-    /// <summary>The readable extensions, for a message — <c>".obj, .stl"</c>.</summary>
+    /// <summary>The readable extensions, for a message — <c>".obj, .stl, .ply"</c>.</summary>
     public static string Formats => string.Join(", ", ModelLoader.Extensions);
     #endregion
 }
