@@ -91,14 +91,21 @@ public static class PlyLoader
         {
             foreach (var element in dataset.Data)
             {
-                switch (element.Element.Type)
+                if (element.Element.Type == PlyParser.ElementType.Vertex)
                 {
-                    case PlyParser.ElementType.Vertex:
-                        ReadVertices(element, vertices, vertexColors);
-                        break;
-                    case PlyParser.ElementType.Face:
-                        ReadFaces(element, faces, faceColors);
-                        break;
+                    ReadVertices(element, vertices, vertexColors);
+                }
+                else if (element.Element.Type == PlyParser.ElementType.Face)
+                {
+                    ReadFaces(element, faces, faceColors);
+                }
+                else if (vertices.Count > 0 && faces.Count > 0)
+                {
+                    // STOP ONCE THE GEOMETRY IS IN. `dataset.Data` is lazily enumerated, so abandoning it here means
+                    // the elements after the faces are never parsed at all -- and scanner output puts a lot there.
+                    // The reference Artec scan carries `multi_texture_vertex` and `multi_texture_face` elements as
+                    // large as its geometry, holding UV coordinates for textures this renderer cannot sample.
+                    break;
                 }
             }
         }
