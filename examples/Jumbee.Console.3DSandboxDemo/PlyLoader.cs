@@ -28,6 +28,21 @@ using Ply.Net;
 /// <c>float</c>/<c>int</c> appears to work until it meets a file from a different exporter.
 /// </para>
 /// <para>
+/// <b>No up-axis is guessed, and the exporter banner is NOT a usable signal here — this was tried and reverted.</b>
+/// OBJ can lean on one (see <c>ObjLoader.IsZUpExporter</c>) because tools like 3ds Max and SolidWorks have a house
+/// convention. PLY's volume comes from 3D scanners, and a scan is stored in the <em>scanner's</em> frame at capture
+/// time, which is a fact about how the operator held the thing rather than about the tool. Two reference models
+/// prove it: the Christmas bear and the bus carry the identical Artec signature, and the bear is Z-up while the bus
+/// is Y-up. A rule keyed on that banner is right about half the time, which is worse than no rule — an absent guess
+/// is predictable and documented, a coin-flip guess is neither.
+/// </para>
+/// <para>
+/// Geometry is no better. "The up axis is the longest extent" places the bear correctly and stands the reference
+/// cow on its nose, because a cow is longest along its length; the mirror rule fails the other way. On the bus it
+/// cannot even choose — its Y and Z half-extents are 0.216 and 0.213. So the mesh reports no axis, the viewer
+/// defaults to Y, and the <c>a</c> key (the sidebar's <b>Z-up file</b> switch) is the fix — visible and one press.
+/// </para>
+/// <para>
 /// <b>binary_big_endian is rejected, not read.</b> The spec allows it; essentially no current exporter emits it.
 /// The parser refuses it on a little-endian machine and this loader turns that into a message naming the format,
 /// which is a better outcome than the byte-swapped garbage a half-hearted attempt would produce.
@@ -127,6 +142,9 @@ public static class PlyLoader
                     : $"no usable geometry in the PLY (all {faces.Count} faces were degenerate or out of range)");
 
         ObjLoader.Normalise(vertices, radius);
+
+        // NO UP-AXIS GUESS, and the absence is deliberate -- see the class remarks. The mesh reports none, the
+        // viewer defaults to Y, and the `a` key fixes the ones that are wrong.
         return new Mesh([.. vertices], [.. indices]) { FaceColors = colors };
     }
     #endregion

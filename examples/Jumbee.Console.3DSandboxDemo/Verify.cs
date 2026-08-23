@@ -70,7 +70,11 @@ internal static class Verify
         foreach (var renderer in view.Renderers)
         {
             view.SetRenderer(renderer);
-            renderer.Draw(snapshot, view.Camera);
+            // Drawn and published back to back here rather than through the render job: the check wants a frame it
+            // can assert on immediately, and there is no UI loop running to deliver the job's posted apply.
+            var request = new FrameRequest(snapshot, view.Camera.GetView(),
+                                           renderer.Surface.ActualWidth, renderer.Surface.ActualHeight);
+            renderer.Publish(renderer.Draw(request));
             var buffer = ConsoleSnapshot.Render(root, Width, Height);
 
             var lit = 0;

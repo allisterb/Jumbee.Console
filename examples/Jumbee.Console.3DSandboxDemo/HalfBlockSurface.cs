@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using System.Threading;
+
 using ConsoleGUI.Space;
 
 using CCharacter = ConsoleGUI.Data.Character;
@@ -50,7 +52,7 @@ public enum SilhouetteStyle
 /// </para>
 /// <para>
 /// Depth is stored as a <em>reciprocal</em> (larger means nearer), which is what a perspective rasteriser can
-/// interpolate linearly in screen space; <see cref="TestAndSet"/> takes it in that form.
+/// interpolate linearly in screen space; <see cref="HalfBlockSurface.TestAndSet"/> takes it in that form.
 /// </para>
 /// </remarks>
 public sealed class HalfBlockSurface : Control
@@ -75,7 +77,7 @@ public sealed class HalfBlockSurface : Control
     /// <summary>Colour behind everything, used for sub-pixels nothing was drawn into.</summary>
     public CColor Background { get; set; } = new(12, 12, 18);
 
-    /// <summary>How <see cref="DetectEdges"/>'s findings are drawn.</summary>
+    /// <summary>How <see cref="HalfBlockSurface.DetectEdges"/>'s findings are drawn.</summary>
     public SilhouetteStyle EdgeStyle { get; set; } = SilhouetteStyle.None;
 
     /// <summary>
@@ -128,27 +130,51 @@ public sealed class HalfBlockSurface : Control
     #endregion
 
     #region Methods
-    /// <summary>Resizes the sub-pixel buffers to the control's current size and clears them. Call once per frame,
-    /// before drawing; returns <see langword="false"/> if the control has no area yet.</summary>
-    public bool BeginFrame()
+    /// <summary>
+    /// Takes a frame to draw into, sized to <paramref name="cells"/>×<paramref name="rows"/> character cells and
+    /// cleared. Call once before drawing; returns <see langword="false"/> if that size has no area.
+    /// </summary>
+    /// <remarks>
+    /// <b>The size is passed in rather than read from the control</b>, because this may run off the UI thread —
+    /// see the threading note on the class. The caller captures <see cref="Control.ActualWidth"/>/
+    /// <see cref="Control.ActualHeight"/> on the UI thread and hands them over, so a re-layout mid-rasterisation
+    /// cannot change the geometry underneath a frame that is half drawn.
+    /// </remarks>
+    public bool BeginFrame(int cells, int rows)
     {
         var samples = QuadrantSampling ? 2 : 1;
-        var w = ActualWidth * samples;
-        var h = ActualHeight * 2;
+        var w = cells * samples;
+        var h = rows * 2;
         if (w <= 0 || h <= 0) return false;
 
-        if (w != PixelWidth || h != PixelHeight)
+        // Rent exclusively: whatever is in the spare slot is a frame the UI thread has finished painting and handed
+        // back. Taking it with an exchange means two rasterisations can never be handed the same buffer, and an
+        // empty slot simply costs an allocation rather than a race.
+        var frame = Interlocked.Exchange(ref spare, null) ?? new SurfaceFrame();
+        if (frame.Color.Length != w * h)
         {
-            PixelWidth = w;
-            PixelHeight = h;
-            color = new CColor[w * h];
-            depth = new float[w * h];
-            group = new byte[w * h];
+            frame.Color = new CColor[w * h];
+            frame.Depth = new float[w * h];
+            frame.Group = new byte[w * h];
+            frame.Edge = [];
         }
 
+        frame.Width = w;
+        frame.Height = h;
+        frame.Samples = samples;
+        current = frame;
+
+        // The drawing path addresses these directly, so point them at the rented frame and leave the rasteriser and
+        // its post-processes exactly as they were -- they write the frame in flight and never the one being painted.
+        PixelWidth = w;
+        PixelHeight = h;
         // After the resize, not before: the compositor reads this to map cells back to sub-pixels, so it has to
         // describe the buffer that is about to be drawn into rather than the property's current value.
         SamplesPerColumn = samples;
+        color = frame.Color;
+        depth = frame.Depth;
+        group = frame.Group;
+        edge = frame.Edge;
 
         Array.Fill(color, Background);
         Array.Fill(depth, 0f);   // 0 = infinitely far, since depth is a reciprocal
@@ -164,7 +190,7 @@ public sealed class HalfBlockSurface : Control
     /// <param name="inverseDepth">Reciprocal camera-space depth — larger is nearer.</param>
     /// <param name="c">The colour to write.</param>
     /// <param name="group">
-    /// What kind of surface this is: 0 for scenery, non-zero for a body. <see cref="DetectEdges"/> outlines only
+    /// What kind of surface this is: 0 for scenery, non-zero for a body. <see cref="HalfBlockSurface.DetectEdges"/> outlines only
     /// non-zero groups — outlining the ground plane's own outer boundary turns the horizon into speckle and reads
     /// as noise rather than as shape.
     /// </param>
@@ -252,14 +278,14 @@ public sealed class HalfBlockSurface : Control
     /// <remarks>
     /// <para>
     /// The cheap screen-space stand-in for the ambient occlusion a signed distance field gives away, and it leans on
-    /// the same property <see cref="DetectEdges"/> does. The local inverse-depth <b>gradient</b>, estimated from the
+    /// the same property <see cref="HalfBlockSurface.DetectEdges"/> does. The local inverse-depth <b>gradient</b>, estimated from the
     /// immediate neighbours, is <em>exact</em> on a plane, so extrapolating it predicts precisely where the surface
     /// should be at each ring sample. A sample nearer than that prediction is something genuinely sticking out in
     /// front, not just the surface receding — which is what distinguishes a corner from a floor viewed at a grazing
     /// angle, and is the distinction a naive depth comparison cannot make.
     /// </para>
     /// <para>
-    /// Only reads depth and only writes colour, so it can run before <see cref="DetectEdges"/> without feeding back
+    /// Only reads depth and only writes colour, so it can run before <see cref="HalfBlockSurface.DetectEdges"/> without feeding back
     /// into it.
     /// </para>
     /// </remarks>
@@ -310,12 +336,45 @@ public sealed class HalfBlockSurface : Control
         }
     }
 
-    /// <summary>Whether <see cref="DetectEdges"/> marked this sub-pixel.</summary>
+    /// <summary>Whether <see cref="HalfBlockSurface.DetectEdges"/> marked this sub-pixel.</summary>
     public bool EdgeAt(int x, int y) =>
         (uint)x < (uint)PixelWidth && (uint)y < (uint)PixelHeight && edge.Length == color.Length && edge[(y * PixelWidth) + x];
 
     /// <summary>Composites the sub-pixel buffer into character cells and asks for a repaint.</summary>
-    public void EndFrame() => Invalidate();
+    /// <summary>
+    /// Finishes the frame started by <see cref="BeginFrame"/> and returns it, ready to hand to <see cref="Publish"/>
+    /// on the UI thread. Returns <see langword="null"/> if no frame was started.
+    /// </summary>
+    /// <remarks>
+    /// It <b>returns</b> the frame rather than installing it, and that is the whole thread-safety argument: a
+    /// rasteriser running off the UI thread never touches what the paint path reads, and hand-off happens by value
+    /// at a point the UI thread controls. Publishing from here instead would race a paint already in progress.
+    /// </remarks>
+    public SurfaceFrame? EndFrame()
+    {
+        var finished = current;
+        // Post-processes may have grown the edge buffer; keep it with its frame so the compositor sees it.
+        if (finished is not null) finished.Edge = edge;
+        current = null;
+        return finished;
+    }
+
+    /// <summary>
+    /// Installs a finished frame as the one being displayed and asks for a repaint. <b>UI thread only.</b>
+    /// </summary>
+    /// <remarks>
+    /// The previous frame goes back into the spare slot for the next <see cref="BeginFrame"/> to rent, so a steady
+    /// state of one frame on screen and one being drawn allocates nothing.
+    /// </remarks>
+    public void Publish(SurfaceFrame? frame)
+    {
+        if (frame is null) return;
+
+        var previous = front;
+        front = frame;
+        Invalidate();
+        Volatile.Write(ref spare, previous);
+    }
     #endregion
 
     #region Protected methods
@@ -323,6 +382,14 @@ public sealed class HalfBlockSurface : Control
     /// <inheritdoc/>
     protected override void Render()
     {
+        // PAINT THE PUBLISHED FRAME, never the one being drawn. Everything below reads `f` and its own dimensions
+        // rather than the surface's fields, because those describe whatever a background rasteriser is filling in
+        // right now -- reading them here is how a half-drawn frame reaches the screen.
+        var f = front;
+        var color = f.Color;
+        var edge = f.Edge;
+        var pixelWidth = f.Width;
+
         // Two sub-pixel rows per character row: the upper is the glyph's foreground, the lower its background.
         // Emitting one glyph for both halves is what buys the doubled vertical resolution.
         // Clamped on BOTH axes against the control's CURRENT size, not just the pixel buffer's. The buffer is sized
@@ -330,14 +397,14 @@ public sealed class HalfBlockSurface : Control
         // into it -- collapsing the sidebar and restoring it does exactly that, and the write then runs off the end
         // of the console buffer. The row clamp was already here; the column one was not, and that asymmetry was the
         // bug: hiding the sidebar with `u` while a solid renderer was active could take the app down.
-        var samples = SamplesPerColumn;
-        var rows = Math.Min(ActualHeight, PixelHeight / 2);
-        var cols = Math.Min(ActualWidth, PixelWidth / samples);
+        var samples = Math.Max(1, f.Samples);
+        var rows = Math.Min(ActualHeight, f.Height / 2);
+        var cols = Math.Min(ActualWidth, pixelWidth / samples);
         var glyphEdges = EdgeStyle == SilhouetteStyle.Glyph && edge.Length == color.Length;
         for (var row = 0; row < rows; row++)
         {
-            var top = row * 2 * PixelWidth;
-            var bottom = top + PixelWidth;
+            var top = row * 2 * pixelWidth;
+            var bottom = top + pixelWidth;
             for (var x = 0; x < cols; x++)
             {
                 var left = x * samples;
@@ -494,12 +561,50 @@ public sealed class HalfBlockSurface : Control
 
     private const float OcclusionBias = 0.02f;
 
-    // Empty until the first BeginFrame sizes them; the bounds checks in TestAndSet/Render cover that window, so they
-    // need no null handling on the per-sub-pixel hot path.
+    // Aliases into the frame currently being drawn (see BeginFrame). Empty until the first BeginFrame sizes them;
+    // the bounds checks in TestAndSet/Render cover that window, so they need no null handling on the per-sub-pixel
+    // hot path. Only the rasterising thread touches these -- the paint path reads `front` instead.
     private CColor[] color = [];
     private float[] depth = [];
     private byte[] group = [];
     private bool[] edge = [];
 
+    // The frame being drawn, the frame being displayed, and one kept for reuse. See the threading note on the class.
+    private SurfaceFrame? current;
+    private SurfaceFrame front = new();
+    private SurfaceFrame? spare;
     #endregion
+}
+
+/// <summary>
+/// One rasterised frame's sub-pixel buffers, passed from a rasteriser to the compositor by value.
+/// </summary>
+/// <remarks>
+/// Its own type rather than fields on <see cref="HalfBlockSurface"/> so a frame can be drawn on one thread while
+/// another is painted on the UI thread: the two never share an array, and hand-off is a single reference assignment
+/// made on the UI thread in <see cref="HalfBlockSurface.Publish"/>. Top-level rather than nested because
+/// <c>Control.Frame</c> already means a control's border adornment.
+/// </remarks>
+public sealed class SurfaceFrame
+{
+    /// <summary>Sub-pixel colours, row-major, <see cref="Width"/> per row.</summary>
+    public CColor[] Color = [];
+
+    /// <summary>Reciprocal depth per sub-pixel — larger is nearer, 0 is empty.</summary>
+    public float[] Depth = [];
+
+    /// <summary>Surface kind per sub-pixel: 0 scenery, non-zero body. See <see cref="HalfBlockSurface.TestAndSet"/>.</summary>
+    public byte[] Group = [];
+
+    /// <summary>Edge flags from <see cref="HalfBlockSurface.DetectEdges"/>, or empty when it did not run.</summary>
+    public bool[] Edge = [];
+
+    /// <summary>Sub-pixel columns.</summary>
+    public int Width;
+
+    /// <summary>Sub-pixel rows.</summary>
+    public int Height;
+
+    /// <summary>Sub-pixels per character column, 1 or 2.</summary>
+    public int Samples = 1;
 }

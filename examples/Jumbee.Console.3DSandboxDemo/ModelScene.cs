@@ -1,6 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
 using System.Numerics;
+using System.Threading;
 
 /// <summary>Anything <see cref="SceneView"/> can read a snapshot from — a live simulation, or a static scene.</summary>
 public interface ISceneSource
@@ -56,7 +57,7 @@ public sealed class ModelScene : ISceneSource
 
     #region Properties
     /// <inheritdoc/>
-    public SceneSnapshot Snapshot => snapshot;
+    public SceneSnapshot Snapshot => Volatile.Read(ref snapshot);
 
     /// <summary>Which registered mesh is on show.</summary>
     public int MeshId { get; private set; }
@@ -267,9 +268,16 @@ public sealed class ModelScene : ISceneSource
     // which the rasteriser uses in place of the scale-then-rotate path -- a quaternion cannot express a shear.
     private void Rebuild()
     {
+        // BUILT FRESH AND PUBLISHED WHOLE, never mutated where it stands -- the same contract PhysicsRunner keeps,
+        // and for the same reason now that it matters here too: the rasteriser reads a snapshot from a background
+        // thread, so editing the one it is holding would tear the pose it is halfway through drawing. One body's
+        // worth of arrays per turntable step is nothing next to the frame it feeds.
+        var next = new SceneSnapshot(1);
+
         if (Meshes.RegisteredCount == 0)
         {
-            snapshot.Count = 0;
+            next.Count = 0;
+            Volatile.Write(ref snapshot, next);
             return;
         }
 
@@ -295,17 +303,19 @@ public sealed class ModelScene : ISceneSource
         var low = Meshes.Get(MeshId).Min;
         Elevation = -(upAxis == ModelUpAxis.Z ? low.Z : low.Y) * Scale.Y * ViewScale;
 
-        snapshot.Count = 1;
-        snapshot.Ids[0] = 1;
-        snapshot.Shapes[0] = BodyShape.Mesh;
-        snapshot.MeshIds[0] = MeshId;
-        snapshot.Positions[0] = new Vector3(0, Elevation, 0);
-        snapshot.Rotations[0] = Quaternion.Identity;
-        snapshot.HalfExtents[0] = new Vector3(ViewRadius);
-        snapshot.ColorKeys[0] = colorKey;
-        snapshot.Awake[0] = true;
-        snapshot.AwakeCount = 1;
-        (snapshot.LocalTransforms ??= new Matrix4x4[1])[0] = transform * Matrix4x4.CreateScale(ViewScale);
+        next.Count = 1;
+        next.Ids[0] = 1;
+        next.Shapes[0] = BodyShape.Mesh;
+        next.MeshIds[0] = MeshId;
+        next.Positions[0] = new Vector3(0, Elevation, 0);
+        next.Rotations[0] = Quaternion.Identity;
+        next.HalfExtents[0] = new Vector3(ViewRadius);
+        next.ColorKeys[0] = colorKey;
+        next.Awake[0] = true;
+        next.AwakeCount = 1;
+        (next.LocalTransforms ??= new Matrix4x4[1])[0] = transform * Matrix4x4.CreateScale(ViewScale);
+
+        Volatile.Write(ref snapshot, next);
     }
     #endregion
 
@@ -328,7 +338,9 @@ public sealed class ModelScene : ISceneSource
     /// <summary>How far <see cref="Shear"/> may go in either direction on either axis.</summary>
     public const float MaxShear = 1.5f;
 
-    private readonly SceneSnapshot snapshot;
+    // Replaced wholesale by Rebuild rather than edited in place -- see the note there. Read via Volatile so the
+    // rasterising thread sees a fully-built snapshot or the previous one, never a half-assigned reference.
+    private SceneSnapshot snapshot;
     private float spin;
     private ModelUpAxis upAxis = ModelUpAxis.Y;
     private int colorKey = 1;   // Mint, the colour the viewer has always opened in

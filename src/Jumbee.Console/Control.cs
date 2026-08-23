@@ -642,6 +642,85 @@ public abstract class Control : CControl, IFocusable, IDisposable, IMouseListene
     protected FeedHandle Feed<T>(Func<T> produce, Action<T> apply, int intervalMs, Action<Exception>? onError = null) =>
         Feed(produce, apply, TimeSpan.FromMilliseconds(intervalMs), onError);
 
+    /// <summary>
+    /// Starts an <b>on-demand</b> background job: each <see cref="JobHandle.Request"/> runs <paramref name="produce"/>
+    /// on a background thread and posts its result to <paramref name="apply"/> on the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The on-demand counterpart to <see cref="Feed{T}(Func{T}, Action{T}, TimeSpan, Action{Exception})"/>. A feed
+    /// asks "what is the value now?" every N milliseconds; a job asks "the state changed — produce the new content
+    /// when you can". Use it when a control's content is <b>expensive to compute and cheap to display</b>: a chart
+    /// over a large series, a rasterised 3D scene, a laid-out document. The UI thread requests and paints; the work
+    /// happens elsewhere.
+    /// </para>
+    /// <para>
+    /// <b>Runs never overlap and requests coalesce.</b> At most one <paramref name="produce"/> is in flight and at
+    /// most one more is queued, however many times <see cref="JobHandle.Request"/> is called — so a producer slower
+    /// than its callers falls behind by a bounded amount instead of accumulating a backlog of stale work. This is
+    /// what makes it a render queue rather than a work queue: the goal is the newest state on screen soon, not every
+    /// intermediate state eventually. <see cref="JobHandle.Coalesced"/> counts how often that happened.
+    /// </para>
+    /// <para>
+    /// <b>The producer must not touch UI state.</b> It runs off the UI thread while the UI thread is free to paint,
+    /// lay out and handle input, so anything it reads has to be either immutable or private to it — capture what it
+    /// needs at <see cref="JobHandle.Request"/> time and hand it over, or have the producer write into a buffer the
+    /// paint path does not read until <paramref name="apply"/> publishes it. Reading a live control property from
+    /// <paramref name="produce"/> is a race, and the usual symptom is a torn frame rather than an exception.
+    /// </para>
+    /// <para>
+    /// Cancellation and disposal behave as in <see cref="Feed(Action, TimeSpan, Action{Exception})"/>: the control
+    /// cancels every live job when disposed, and a throwing producer ends the job, surfacing to
+    /// <paramref name="onError"/> on the UI thread when one is supplied. Like a feed, <paramref name="apply"/> is
+    /// delivered by <see cref="UI.Post"/>, so it only arrives while a <see cref="UI.Start"/> loop is draining the
+    /// queue — a headless test must run a real UI loop to observe it.
+    /// </para>
+    /// </remarks>
+    protected JobHandle Job<T>(Func<T> produce, Action<T> apply, Action<Exception>? onError = null)
+    {
+        var cts = new CancellationTokenSource();
+        lock (_feeds) _feeds.Add(cts);
+        var ct = cts.Token;
+        var signal = new SemaphoreSlim(0, 1);
+        var handle = new JobHandle(cts, signal);
+
+        handle.Completion = Task.Run(async () =>
+        {
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    try { await signal.WaitAsync(ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                    if (ct.IsCancellationRequested) break;
+
+                    // Free the pending slot before producing, so a request arriving mid-run queues another pass
+                    // rather than being swallowed by the one already under way.
+                    handle.ClaimPending();
+
+                    try
+                    {
+                        var result = produce();
+                        handle.CountCompleted();
+                        UI.Post(() => apply(result));
+                    }
+                    catch (Exception ex)
+                    {
+                        if (onError is not null) UI.Post(() => onError(ex));
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                lock (_feeds) _feeds.Remove(cts);
+                signal.Dispose();
+            }
+        });
+
+        return handle;
+    }
+
     // Shared feed loop: every interval, run `pump` on the background task (for a plain feed it posts the tick; for a
     // producer feed it produces off-thread then posts the apply). Registers/unregisters the CTS so Dispose can cancel.
     private FeedHandle StartFeed(TimeSpan interval, Action pump, Action<Exception>? onError)

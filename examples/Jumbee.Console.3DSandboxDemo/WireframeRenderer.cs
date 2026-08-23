@@ -101,19 +101,21 @@ public sealed class WireframeRenderer : ISceneRenderer
 
     #region Methods
     /// <inheritdoc/>
-    public void Draw(SceneSnapshot snapshot, OrbitCamera camera)
+    /// <remarks>Draws straight into its <see cref="Canvas"/>, which is a shared control rather than a handed-over
+    /// buffer, so this stays on the UI thread (<see cref="DrawsOffThread"/> is left false). It is the cheapest of
+    /// the three by an order of magnitude -- the triangle budget sees to that -- so it has least to gain.</remarks>
+    public object? Draw(in FrameRequest request)
     {
-        // ActualWidth/Height are read HERE, in the draw, never cached from a constructor or a setter -- they are
-        // only real once the control has been laid out, and they change on every terminal resize.
-        var viewport = new Viewport(canvas.ActualWidth, canvas.ActualHeight);
+        var snapshot = request.Snapshot;
+        var viewport = new Viewport(request.Cells, request.Rows);
         Viewport = viewport;
-        if (!viewport.IsValid) return;
+        if (!viewport.IsValid) return null;
 
         canvas.XBounds = (-1, 1);
         canvas.YBounds = (-viewport.CellAspect, viewport.CellAspect);
         canvas.Clear();
 
-        var view = camera.GetView();
+        var view = request.View;
         DrawGrid(view);
 
         // Painter's algorithm: sort indices by camera-space depth, far first, so near bodies overwrite them. Sorting
@@ -153,8 +155,13 @@ public sealed class WireframeRenderer : ISceneRenderer
             // busy scene, and at this resolution a small box is only a handful of lit sub-cells.
             if (selected) DrawMarker(view, snapshot.Positions[b]);
         }
+
+        return null;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Nothing to install: <see cref="Draw"/> already wrote into the canvas on the UI thread.</remarks>
+    public void Publish(object? frame) { }
     #endregion
 
     #region Private methods

@@ -1,8 +1,6 @@
 # Getting Started with Jumbee.Console
 Jumbee.Console is a .NET library for building high-performance TUIs that take advantage of modern terminal capabilities. It uses a retained-mode user interface model where controls are regularly sent messages to repaint and redraw themselves by the library and the library takes care of rendering the resulting changes to the terminal. If you've built a desktop UI with WinForms or WPF, then the user interface model should feel familiar: a tree of controls, a single UI thread, and property changes that trigger a repaint.
 
-> Status: pre-release (v0.1.x). APIs may still change.
-
 ## Contents
 - [Requirements](#requirements)
 - [Running examples](#running-examples)

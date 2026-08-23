@@ -98,14 +98,17 @@ public abstract class MeshRenderer : ISceneRenderer
     #endregion
     #region Methods
     /// <inheritdoc/>
-    public void Draw(SceneSnapshot snapshot, OrbitCamera camera)
-    {
-        // Read the size HERE, in the draw: it is only real once the control has been laid out, and it changes on
-        // every terminal resize.
-        Viewport = new Viewport(surface.ActualWidth, surface.ActualHeight);
-        if (!Viewport.IsValid || !surface.BeginFrame()) return;
+    public bool DrawsOffThread => true;
 
-        View = camera.GetView();
+    /// <inheritdoc/>
+    public object? Draw(in FrameRequest request)
+    {
+        // Everything geometric arrives in the request, captured on the UI thread -- see FrameRequest for why this
+        // reads nothing off the control. Viewport is assigned rather than measured for the same reason.
+        Viewport = new Viewport(request.Cells, request.Rows);
+        if (!Viewport.IsValid || !surface.BeginFrame(request.Cells, request.Rows)) return null;
+
+        View = request.View;
         // Sub-pixel grid: W wide, 2H tall, isotropic (see HalfBlockSurface). NDC x spans [-1,1] over the width and
         // y spans the cell aspect over the height, exactly as the wireframe canvas does -- so every renderer agrees
         // and picking works identically under any of them.
@@ -113,14 +116,18 @@ public abstract class MeshRenderer : ISceneRenderer
         halfH = surface.PixelHeight / 2f;
         scaleY = (float)(surface.PixelHeight / (2.0 * Viewport.CellAspect));
 
+        var snapshot = request.Snapshot;
         DrawGround();
         for (var i = 0; i < snapshot.Count; i++) DrawBody(snapshot, i);
 
         // Any depth post-process runs here, once the buffer is complete: silhouettes and ambient occlusion can only
         // be found after every surface has been resolved against every other one.
         PostProcess();
-        surface.EndFrame();
+        return surface.EndFrame();
     }
+
+    /// <inheritdoc/>
+    public void Publish(object? frame) => surface.Publish(frame as SurfaceFrame);
     #endregion
 
     #region Protected members

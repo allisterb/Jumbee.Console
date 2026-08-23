@@ -67,6 +67,22 @@ shift
 goto collect_loop
 :collected
 
+rem A project path that climbs out of the checkout is a build that only works on the machine that added it. The
+rem solution sits one level down, in src\, so every legitimate entry begins with a single `..\`; a second one -- or
+rem a drive-absolute path -- points outside. THIS CHECK MATTERS MOST HERE, on Windows, because this is where such an
+rem entry gets introduced and where it does not fail: Windows resolves the surplus `..` against the drive root,
+rem where the target can happen to exist and build. Linux resolves it against $HOME, where it does not, so the
+rem breakage lands on someone else. One entry like that (an agent's scratch project, picked up by an IDE) sat in the
+rem solution for four days and broke every non-Windows build.
+set "STRAY="
+findstr /c:"..\\.." src\Jumbee.Console.sln >nul 2>&1
+if not errorlevel 1 set "STRAY=1"
+findstr /c:"../.." src\Jumbee.Console.sln >nul 2>&1
+if not errorlevel 1 set "STRAY=1"
+findstr /c:":\\" src\Jumbee.Console.sln >nul 2>&1
+if not errorlevel 1 set "STRAY=1"
+if defined STRAY goto stray_paths
+
 echo Restoring Jumbee.Console...
 dotnet restore src\Jumbee.Console.sln
 if errorlevel 1 exit /b 1
@@ -98,6 +114,18 @@ for %%d in (%DEMOS%) do (
 :done
 echo Jumbee.Console build complete.
 exit /b 0
+
+:stray_paths
+echo ERROR  src\Jumbee.Console.sln references projects from outside the repository: 1>&2
+rem One findstr per pattern, never combined: /r applies to EVERY /c: in a single call, which would reinterpret the
+rem literal patterns as regexes -- where `.` matches any character -- and print most of the file.
+findstr /c:"..\\.." src\Jumbee.Console.sln 1>&2
+findstr /c:"../.." src\Jumbee.Console.sln 1>&2
+findstr /c:":\\" src\Jumbee.Console.sln 1>&2
+echo. 1>&2
+echo        These build here and nowhere else. Remove each with: 1>&2
+echo          dotnet sln src\Jumbee.Console.sln remove ^<path^> 1>&2
+exit /b 1
 
 rem Turns the DEMOS name list into the PROJECTS path list, via the P_<name> variables.
 :expand

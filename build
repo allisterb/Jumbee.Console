@@ -97,6 +97,27 @@ case "$target" in
     fi ;;
 esac
 
+# A project path that climbs out of the checkout is a build that only works on the machine that added it. The
+# solution sits one level down, in src/, so every legitimate entry begins with a single `..\`; a second one -- or an
+# absolute path -- points outside. Windows resolves the surplus `..` against the drive root, where such a path can
+# happen to exist and build; Linux resolves it against $HOME, where it does not, and `dotnet restore` fails with
+# MSB3202 naming a directory nobody recognises. One entry like that (an agent's scratch project, picked up by an
+# IDE) sat in the solution for four days and broke every non-Windows build without ever failing here.
+#
+# Checked before the restore rather than left to MSBuild, because the point is the diagnosis: the error below names
+# the offender and how to remove it, where MSB3202 names a path that does not exist and leaves you to work out why.
+sln="src/Jumbee.Console.sln"
+stray=$(sed -nE 's/^Project\("\{[^}]*\}"\) *= *"[^"]*", *"([^"]*)".*/\1/p' "$sln" \
+        | grep -E '(\.\.[\\/]){2}|^[A-Za-z]:|^[\\/]' || true)
+if [[ -n "$stray" ]]; then
+  echo "ERROR  $sln references projects from outside the repository:" >&2
+  while IFS= read -r p; do [[ -n "$p" ]] && echo "         $p" >&2; done <<< "$stray"
+  echo >&2
+  echo "       These build on the machine that added them and nowhere else. Remove each with:" >&2
+  echo "         dotnet sln $sln remove <path>" >&2
+  exit 1
+fi
+
 echo "Restoring Jumbee.Console..."
 dotnet restore src/Jumbee.Console.sln
 

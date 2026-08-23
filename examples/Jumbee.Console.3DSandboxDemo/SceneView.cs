@@ -33,8 +33,32 @@ public sealed class SceneView : CompositeControl
         SetContent(new Boundary(renderer.Surface));
 
         // The scene changes continuously, so drive redraws on a clock rather than waiting for a state change to
-        // invalidate. Feed runs on the UI thread, so Draw and the camera reads it makes need no synchronization.
+        // invalidate. Feed runs on the UI thread, so the state Tick reads and the camera it captures need no
+        // synchronization -- it hands a fully-described FrameRequest to the render job and returns.
         feed = Feed(Tick, Math.Max(1, 1000 / Math.Max(1, fps)));
+
+        // THE RASTERISER RUNS HERE, not on the UI thread. A dense model costs tens of milliseconds a frame, and
+        // spending that on the UI thread freezes menus, the sidebar and camera drag for exactly as long -- the app
+        // stops responding rather than merely animating slowly. The job produces off-thread and publishes on the UI
+        // thread; requests coalesce, so falling behind costs frame RATE and never responsiveness. See
+        // Control.Job and ISceneRenderer.DrawsOffThread.
+        renderJob = Job(
+            produce: () =>
+            {
+                var request = Volatile.Read(ref pending);
+                if (request is null) return (Rendered?)null;
+                var active = renderer;
+                return new Rendered(active, active.Draw(request), request.Snapshot);
+            },
+            apply: result =>
+            {
+                if (disposed || result is not { } r) return;
+                // Drop a frame produced by a renderer that has since been swapped out: publishing it would put the
+                // old renderer's pixels into the surface the new one is now showing.
+                if (!ReferenceEquals(r.Renderer, renderer)) return;
+                r.Renderer.Publish(r.Frame);
+                Published(r.Snapshot);
+            });
     }
     #endregion
 
@@ -479,7 +503,11 @@ public sealed class SceneView : CompositeControl
     public override void Dispose()
     {
         disposed = true;
+        // Both are joined, and the render job matters more than the feed: a rasterisation in flight is holding a
+        // snapshot and a mesh, and switching scenes disposes this view while the next one is being built. Letting
+        // it finish is cheaper than making every renderer safe to tear down mid-frame.
         feed.StopAsync().Wait(FeedJoinMs);
+        renderJob.StopAsync().Wait(FeedJoinMs);
         base.Dispose();
     }
 
@@ -632,7 +660,29 @@ public sealed class SceneView : CompositeControl
 
         if (snapshot.Count > 0) highestSeenId = Math.Max(highestSeenId, snapshot.Ids[^1]);
 
-        renderer.Draw(snapshot, Camera);
+        // Capture everything the rasteriser needs WHILE ON THE UI THREAD: the snapshot (already immutable once
+        // published), the camera resolved to a value, and the laid-out viewport size. After this line the frame is
+        // fully described and nothing it reads can move.
+        var active = renderer;
+        var request = new FrameRequest(snapshot, Camera.GetView(), active.Surface.ActualWidth, active.Surface.ActualHeight);
+
+        if (!active.DrawsOffThread)
+        {
+            active.Publish(active.Draw(request));
+            Published(snapshot);
+            return;
+        }
+
+        // Off-thread: hand the request over and ask the queue for a pass. Requests coalesce, so a rasteriser slower
+        // than the tick rate simply produces fewer frames -- it never accumulates a backlog of stale ones, and the
+        // UI thread returns here immediately whatever the model costs.
+        Volatile.Write(ref pending, request);
+        renderJob.Request();
+    }
+
+    // Runs on the UI thread, either inline above or from the render job's apply.
+    private void Published(SceneSnapshot snapshot)
+    {
         Drawn = snapshot;
         Drew?.Invoke(snapshot);
     }
@@ -666,6 +716,11 @@ public sealed class SceneView : CompositeControl
     private readonly ISceneSource source;
     private readonly FeedHandle feed;
 
+    // The off-thread rasteriser and the frame it should draw next. `pending` is written by the UI thread and read by
+    // the job, so it is a reference (atomic to assign) rather than a struct that could be read half-updated.
+    private readonly JobHandle renderJob;
+    private FrameRequest? pending;
+
     // The simulation, when the source IS one. Null for a static scene (the model viewer), where spawning, grabbing
     // and deleting have nothing to act on and quietly do nothing.
     private readonly PhysicsRunner? runner;
@@ -686,5 +741,13 @@ public sealed class SceneView : CompositeControl
     private Vector3 grabPlaneNormal;
     private Vector3 grabOffset;
     private Position lastDrag;
+    #endregion
+
+    #region Child types
+    /// <param name="Renderer">Which renderer produced this — checked before publishing, in case <c>v</c> swapped
+    /// renderers while the frame was in flight.</param>
+    /// <param name="Frame">The renderer's opaque frame, or <see langword="null"/> if it drew inline.</param>
+    /// <param name="Snapshot">The scene the frame shows, for the <see cref="Drew"/> listeners.</param>
+    private readonly record struct Rendered(ISceneRenderer Renderer, object? Frame, SceneSnapshot Snapshot);
     #endregion
 }

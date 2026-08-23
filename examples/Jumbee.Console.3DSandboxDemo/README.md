@@ -95,6 +95,22 @@ Three things about the reader are deliberate:
 - **`binary_big_endian` is refused with a message naming the format**, rather than read as byte-swapped garbage. The
   spec allows it; essentially no current exporter emits it.
 
+**PLY models get no up-axis guess at all**, unlike OBJ and STL — and the absence is a finding rather than a gap.
+
+The obvious move is to copy the OBJ approach and recognise the exporter's signature. It was tried and reverted,
+because PLY's volume comes from **3D scanners**, and a scan is stored in the *scanner's* frame at capture time —
+a fact about how the operator held the thing, not about the tool. The two reference Artec models settle it: the
+Christmas bear and the bus carry the identical `File exported by Artec Group` comment, and the bear is Z-up while
+the bus is Y-up. A rule keyed on that banner is right about half the time, which is worse than no rule — an absent
+guess is predictable and documented, a coin-flip guess is neither.
+
+Geometry does no better. "The up axis is the longest extent" places the bear correctly and stands the reference cow
+on its nose, because a cow is longest along its length; the mirror rule fails the other way. On the bus it cannot
+even choose — its Y and Z half-extents are 0.216 and 0.213.
+
+So a PLY opens Y-up and the **`a` key** (the sidebar's **Z-up file** switch) fixes the ones that are wrong. That is
+the same "visible and undoable" position the OBJ banner and the STL default take, arrived at from the other side.
+
 ## Colour
 
 The viewer's **Colour** drop-down recolours the model, and it is one setting for all three renderers: every one
@@ -238,6 +254,32 @@ the time goes on a dense mesh.
 | `x` `y` `z` / `X` `Y` `Z` | shrink / stretch that axis |
 | `,` `.` and `;` `'` | shear |
 | `0` / `p` | reset the transform / stop the turntable |
+
+## Where the rasteriser runs
+
+**The solid renderers rasterise off the UI thread.** Each tick captures a `FrameRequest` — the published snapshot,
+the camera resolved to a value, and the laid-out viewport size — and hands it to a `Control.Job`, which produces the
+frame on a background thread and publishes it on the UI thread. `HalfBlockSurface` hands frames over by value for
+exactly this reason: the rasteriser fills a buffer the paint path is not reading, and the swap happens on the UI
+thread in `Publish`.
+
+It buys **responsiveness, not frame rate**. A dense model costs what it costs; what changes is that the cost lands
+somewhere the app is not trying to answer a keypress. Measured on the 800k-triangle reference scan, timing a
+round-trip through the UI thread while the viewer runs:
+
+| | UI round-trip (median / worst) |
+|---|---:|
+| rasterising on the UI thread | **> 5,000 ms** (timed out) |
+| rasterising off it | **0.0 ms / 3.8 ms** |
+
+The old number is not merely "one frame of 90 ms". The redraw feed ticks every 16 ms and each tick posted a 90 ms
+draw, so work arrived about six times faster than it could be served and the queue grew without bound — the app
+stopped answering at all rather than animating slowly. Coalescing is what fixes that: however many requests pile up
+during a run, exactly one more run follows, so falling behind costs frames and never responsiveness.
+
+The **wireframe renderer stays on the UI thread** (`ISceneRenderer.DrawsOffThread` is false for it). It draws
+straight into a shared `Canvas` rather than handing over a buffer, and at ~6 ms for the same model — the triangle
+budget sees to that — it has the least to gain.
 
 ## Notes on the physics
 
