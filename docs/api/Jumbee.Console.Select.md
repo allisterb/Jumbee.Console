@@ -30,6 +30,7 @@ Control ←
 [RenderableControl.InvalidateInteractive\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_InvalidateInteractive), 
 [RenderableControl.Initialize\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Initialize), 
 [RenderableControl.Render\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Render), 
+[RenderableControl.ApplyEnabledToFocus\(bool\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_ApplyEnabledToFocus\_System\_Boolean\_), 
 [Control.this\[Position\]](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Item\_ConsoleGUI\_Space\_Position\_), 
 [Control.Width](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Width), 
 [Control.ActualWidth](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ActualWidth), 
@@ -83,6 +84,7 @@ Control ←
 [Control.Feed\(Action, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_System\_Action\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, TimeSpan, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_TimeSpan\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
+[Control.Job<T\>\(Func<T\>, Action<T\>, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Job\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Action\_System\_Exception\_\_), 
 [Control.Feeds](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feeds), 
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
@@ -141,9 +143,17 @@ commits it; Escape or a click outside cancels.
 
 ## Constructors
 
+### <a id="Jumbee_Console_Select__ctor"></a> Select\(\)
+
+Initializes an empty <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public Select()
+```
+
 ### <a id="Jumbee_Console_Select__ctor_System_String___"></a> Select\(params string\[\]\)
 
-Initializes a new <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref> with the given <code class="paramref">options</code>.
+Initializes a new <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref> with the given text <code class="paramref">options</code>.
 
 ```csharp
 public Select(params string[] options)
@@ -152,6 +162,32 @@ public Select(params string[] options)
 #### Parameters
 
 `options` string\[\]
+
+### <a id="Jumbee_Console_Select__ctor_Spectre_Console_Rendering_IRenderable___"></a> Select\(params IRenderable\[\]\)
+
+Initializes a new <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref> whose options are drawn by <code class="paramref">options</code> — for
+    rows that carry more than a string, such as a colour swatch beside a name.
+
+```csharp
+public Select(params IRenderable[] options)
+```
+
+#### Parameters
+
+`options` IRenderable\[\]
+
+### <a id="Jumbee_Console_Select__ctor_Jumbee_Console_SelectOption___"></a> Select\(params SelectOption\[\]\)
+
+Initializes a new <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref> from options built directly, which is how an option carries
+    a <xref href="Jumbee.Console.SelectOption.Tag" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public Select(params SelectOption[] options)
+```
+
+#### Parameters
+
+`options` [SelectOption](Jumbee.Console.SelectOption.md)\[\]
 
 ## Properties
 
@@ -166,6 +202,37 @@ public Color Background { get; set; }
 #### Property Value
 
  [Color](Jumbee.Console.Color.md)
+
+### <a id="Jumbee_Console_Select_DisabledStyle"></a> DisabledStyle
+
+Text style of the collapsed control while disabled; its <xref href="Jumbee.Console.Select.Background" data-throw-if-not-resolved="false"></xref> is kept, so it
+    still reads as a control rather than as stray text. Defaults to <xref href="Jumbee.Console.IStyleTheme.TextDisabled" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public Style DisabledStyle { get; set; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+### <a id="Jumbee_Console_Select_Enabled"></a> Enabled
+
+Whether the control responds to the user. A disabled <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref> draws its current value in
+<xref href="Jumbee.Console.Select.DisabledStyle" data-throw-if-not-resolved="false"></xref>, does not open on a click or key, and is skipped by Tab.
+
+```csharp
+public bool Enabled { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+It keeps showing the selected option rather than blanking, so a panel can report a setting that is real but
+not currently changeable. Setting <xref href="Jumbee.Console.Select.SelectedIndex" data-throw-if-not-resolved="false"></xref> in code still works while disabled.
 
 ### <a id="Jumbee_Console_Select_FitContent"></a> FitContent
 
@@ -211,9 +278,22 @@ public override bool HandlesInput { get; }
 
  bool
 
+### <a id="Jumbee_Console_Select_Items"></a> Items
+
+The selectable options, whether text or renderable.
+
+```csharp
+public IReadOnlyList<SelectOption> Items { get; }
+```
+
+#### Property Value
+
+ IReadOnlyList<[SelectOption](Jumbee.Console.SelectOption.md)\>
+
 ### <a id="Jumbee_Console_Select_Options"></a> Options
 
-The selectable options.
+The selectable options as text. Renderable options have none and come back as empty strings — use
+    <xref href="Jumbee.Console.Select.Items" data-throw-if-not-resolved="false"></xref> when the list may hold them.
 
 ```csharp
 public IReadOnlyList<string> Options { get; }
@@ -278,9 +358,23 @@ public int SelectedIndex { get; set; }
 
  int
 
+### <a id="Jumbee_Console_Select_SelectedItem"></a> SelectedItem
+
+The selected option, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when nothing is selected.
+
+```csharp
+public SelectOption? SelectedItem { get; }
+```
+
+#### Property Value
+
+ [SelectOption](Jumbee.Console.SelectOption.md)?
+
 ### <a id="Jumbee_Console_Select_SelectedValue"></a> SelectedValue
 
-The selected option text, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when nothing is selected.
+The selected option's text, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when nothing is selected <em>or</em> the
+    selection is a renderable option, which has no text. Read <xref href="Jumbee.Console.Select.SelectedIndex" data-throw-if-not-resolved="false"></xref> or
+    <xref href="Jumbee.Console.Select.SelectedItem" data-throw-if-not-resolved="false"></xref> in that case.
 
 ```csharp
 public string? SelectedValue { get; }
@@ -291,6 +385,20 @@ public string? SelectedValue { get; }
  string?
 
 ## Methods
+
+### <a id="Jumbee_Console_Select_ApplyTheme"></a> ApplyTheme\(\)
+
+Re-captures this control's themed colours/glyphs from the current <xref href="Jumbee.Console.UI.StyleTheme" data-throw-if-not-resolved="false"></xref>/
+<xref href="Jumbee.Console.UI.GlyphTheme" data-throw-if-not-resolved="false"></xref>. The default is a no-op for controls that don't use the theme.
+
+```csharp
+protected override void ApplyTheme()
+```
+
+#### Remarks
+
+Called by themed controls from their constructor and again on a runtime theme switch (<xref href="Jumbee.Console.UI.SetTheme(Jumbee.Console.IStyleTheme%2cJumbee.Console.IGlyphTheme)" data-throw-if-not-resolved="false"></xref>).
+Must read the themes <em>only here</em> (and in the constructor), never on the render path.
 
 ### <a id="Jumbee_Console_Select_OnClick_ConsoleGUI_Space_Position_"></a> OnClick\(Position\)
 
@@ -373,6 +481,36 @@ public void SetOptions(params IEnumerable<string> options)
 For a drop-down over a list that changes at runtime — files that have been loaded, devices that
     have appeared. Raises <xref href="Jumbee.Console.Select.SelectionChanged" data-throw-if-not-resolved="false"></xref> only if the selected <em>value</em> actually changes,
     so a rebuild that keeps the current choice is silent.
+
+### <a id="Jumbee_Console_Select_SetOptions_System_Collections_Generic_IEnumerable_Spectre_Console_Rendering_IRenderable__"></a> SetOptions\(params IEnumerable<IRenderable\>\)
+
+Replaces the options with renderable ones. See <xref href="Jumbee.Console.Select.SetOptions(System.Collections.Generic.IEnumerable%7bSystem.String%7d)" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public void SetOptions(params IEnumerable<IRenderable> options)
+```
+
+#### Parameters
+
+`options` IEnumerable<IRenderable\>
+
+### <a id="Jumbee_Console_Select_SetOptions_System_Collections_Generic_IEnumerable_Jumbee_Console_SelectOption__"></a> SetOptions\(params IEnumerable<SelectOption\>\)
+
+Replaces the options outright. See <xref href="Jumbee.Console.Select.SetOptions(System.Collections.Generic.IEnumerable%7bSystem.String%7d)" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public void SetOptions(params IEnumerable<SelectOption> options)
+```
+
+#### Parameters
+
+`options` IEnumerable<[SelectOption](Jumbee.Console.SelectOption.md)\>
+
+#### Remarks
+
+The "keep the current choice" rule can only work by text, so a list of renderable options falls back to
+keeping the current <em>index</em> — there is nothing to compare two arbitrary renderables by, and an
+identity comparison would fail the moment a caller rebuilt equivalent rows.
 
 ### <a id="Jumbee_Console_Select_SelectionChanged"></a> SelectionChanged
 

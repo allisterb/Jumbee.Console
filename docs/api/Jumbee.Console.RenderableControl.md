@@ -99,6 +99,7 @@ Control ←
 [Control.Feed\(Action, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_System\_Action\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, TimeSpan, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_TimeSpan\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
+[Control.Job<T\>\(Func<T\>, Action<T\>, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Job\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Action\_System\_Exception\_\_), 
 [Control.Feeds](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feeds), 
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
@@ -181,6 +182,26 @@ buffer — the retained-mode fast path. Defaults to <a href="https://learn.micro
 highlight on hover/focus keep working without opting in.
 
 ## Methods
+
+### <a id="Jumbee_Console_RenderableControl_ApplyEnabledToFocus_System_Boolean_"></a> ApplyEnabledToFocus\(bool\)
+
+Applies the focus consequences of an interactive control's <code>Enabled</code> state: a disabled control leaves
+the Tab order, and gives up focus if it currently holds it.
+
+```csharp
+protected void ApplyEnabledToFocus(bool enabled)
+```
+
+#### Parameters
+
+`enabled` bool
+
+#### Remarks
+
+Shared because it is the half of "disabled" that cannot be expressed by an override: focus navigation
+collects candidates by <xref href="Jumbee.Console.Control.Focusable" data-throw-if-not-resolved="false"></xref>, which is not virtual, so leaving the Tab order means
+actually clearing it. The caller's own setting is remembered and restored, so a control deliberately made
+unfocusable does not silently become focusable by being disabled and enabled again.
 
 ### <a id="Jumbee_Console_RenderableControl_Initialize"></a> Initialize\(\)
 

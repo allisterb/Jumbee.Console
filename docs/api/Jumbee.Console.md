@@ -233,6 +233,11 @@ the other, wired so the preview re-renders as the source is edited. A draggable 
 sits between them (drag it, or focus it and press the arrows). Subclasses supply the editor's language, the preview
 control, and how to push text into it (<xref href="Jumbee.Console.InteractiveSourceEditor.ApplyPreviewText(System.String)" data-throw-if-not-resolved="false"></xref>).
 
+ [JobHandle](Jumbee.Console.JobHandle.md)
+
+A handle to a background job started by <code>Control.Job</code>. Call <xref href="Jumbee.Console.JobHandle.Request" data-throw-if-not-resolved="false"></xref> to ask for a run; cancel
+it to stop the job.
+
  [KeyHelp](Jumbee.Console.KeyHelp.md)
 
 One keystroke (or chord) and what it does, listed in a control's <xref href="Jumbee.Console.HelpInfo" data-throw-if-not-resolved="false"></xref>.
@@ -378,6 +383,11 @@ delta from the previous value, and the running max/min shown in the chart's lege
  [Select](Jumbee.Console.Select.md)
 
 A drop-down selector.
+
+ [SelectOption](Jumbee.Console.SelectOption.md)
+
+One option in a <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref>: either plain text, or an <xref href="Spectre.Console.Rendering.IRenderable" data-throw-if-not-resolved="false"></xref> for a row that carries
+more than a string — a colour swatch beside a name, an icon, a two-column layout.
 
  [SelectionList](Jumbee.Console.SelectionList.md)
 

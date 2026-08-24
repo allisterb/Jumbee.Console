@@ -37,6 +37,7 @@ Control ←
 [RenderableControl.InvalidateInteractive\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_InvalidateInteractive), 
 [RenderableControl.Initialize\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Initialize), 
 [RenderableControl.Render\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Render), 
+[RenderableControl.ApplyEnabledToFocus\(bool\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_ApplyEnabledToFocus\_System\_Boolean\_), 
 [Control.this\[Position\]](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Item\_ConsoleGUI\_Space\_Position\_), 
 [Control.Width](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Width), 
 [Control.ActualWidth](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ActualWidth), 
@@ -90,6 +91,7 @@ Control ←
 [Control.Feed\(Action, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_System\_Action\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, TimeSpan, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_TimeSpan\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
+[Control.Job<T\>\(Func<T\>, Action<T\>, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Job\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Action\_System\_Exception\_\_), 
 [Control.Feeds](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feeds), 
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
@@ -181,6 +183,38 @@ public Style AccentStyle { get; set; }
 #### Property Value
 
  [Style](Jumbee.Console.Style.md)
+
+### <a id="Jumbee_Console_ToggleButton_DisabledStyle"></a> DisabledStyle
+
+Style for the indicator and label while disabled. Defaults to <xref href="Jumbee.Console.IStyleTheme.TextDisabled" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public Style DisabledStyle { get; set; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+### <a id="Jumbee_Console_ToggleButton_Enabled"></a> Enabled
+
+Whether the control responds to the user. A disabled toggle draws in <xref href="Jumbee.Console.ToggleButton.DisabledStyle" data-throw-if-not-resolved="false"></xref>, ignores
+clicks and keys, and is skipped by Tab.
+
+```csharp
+public bool Enabled { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+It still reports its state truthfully: <xref href="Jumbee.Console.ToggleButton.IsChecked" data-throw-if-not-resolved="false"></xref> and <xref href="Jumbee.Console.ToggleButton.Toggle" data-throw-if-not-resolved="false"></xref> keep working, so a
+panel can show what a setting <em>is</em> while the user is not in a position to change it. That is the
+whole point of having this rather than hiding the control — a switch drawn in the off position because it
+does not currently apply is indistinguishable from one that is genuinely off.
 
 ### <a id="Jumbee_Console_ToggleButton_HandlesInput"></a> HandlesInput
 

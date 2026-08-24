@@ -295,6 +295,10 @@ public virtual int Height { get; set; }
 
  int
 
+#### Remarks
+
+See <xref href="Jumbee.Console.Control.Width" data-throw-if-not-resolved="false"></xref> — same reasoning; this is the axis the bug was found on.
+
 ### <a id="Jumbee_Console_Control_IsFocused"></a> IsFocused
 
 Whether this control currently holds keyboard focus; setting it raises the focus events and repaints so the terminal cursor moves.
@@ -410,6 +414,22 @@ public virtual int Width { get; set; }
 #### Property Value
 
  int
+
+#### Remarks
+
+Goes through <code>Initialize</code> rather than resizing directly, and that matters for anything with content.
+A bare <code>Resize</code> changes <code>Size</code> but skips everything <code>Initialize</code> does around it: the console
+buffer is never re-sized (so the control reports an area its own buffer cannot serve), and
+<code>OnInitialization</code> never fires — which is what tells a <xref href="Jumbee.Console.CompositeControl" data-throw-if-not-resolved="false"></xref> to re-lay-out its
+content. A composite whose Height was set at runtime therefore kept its children at the OLD size
+indefinitely, drawing a stale picture into a correctly-sized control until some unrelated event forced a
+real layout pass.
+
+<p>
+It also fixes a second-order bug in the old form: <code>Resize(new Size(value, Height))</code> paired the new
+width with the <em>requested</em> Height, which is 0 for the common "fill the parent" case — so setting a
+Width could collapse the control's height to nothing. <code>CalculateSize</code> resolves both axes properly.
+</p>
 
 ### <a id="Jumbee_Console_Control_Item_ConsoleGUI_Space_Position_"></a> this\[Position\]
 
@@ -808,6 +828,62 @@ protected bool IsThemeOverridden(string property)
 
 A control's <xref href="Jumbee.Console.Control.ApplyTheme" data-throw-if-not-resolved="false"></xref> guards each themed field with this so a runtime theme switch re-themes
 only the properties the caller left at default.
+
+### <a id="Jumbee_Console_Control_Job__1_System_Func___0__System_Action___0__System_Action_System_Exception__"></a> Job<T\>\(Func<T\>, Action<T\>, Action<Exception\>?\)
+
+Starts an <b>on-demand</b> background job: each <xref href="Jumbee.Console.JobHandle.Request" data-throw-if-not-resolved="false"></xref> runs <code class="paramref">produce</code>
+on a background thread and posts its result to <code class="paramref">apply</code> on the UI thread.
+
+```csharp
+protected JobHandle Job<T>(Func<T> produce, Action<T> apply, Action<Exception>? onError = null)
+```
+
+#### Parameters
+
+`produce` Func<T\>
+
+`apply` Action<T\>
+
+`onError` Action<Exception\>?
+
+#### Returns
+
+ [JobHandle](Jumbee.Console.JobHandle.md)
+
+#### Type Parameters
+
+`T` 
+
+#### Remarks
+
+<p>
+The on-demand counterpart to <xref href="Jumbee.Console.Control.Feed%60%601(System.Func%7b%60%600%7d%2cSystem.Action%7b%60%600%7d%2cSystem.TimeSpan%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref>. A feed
+asks "what is the value now?" every N milliseconds; a job asks "the state changed — produce the new content
+when you can". Use it when a control's content is <b>expensive to compute and cheap to display</b>: a chart
+over a large series, a rasterised 3D scene, a laid-out document. The UI thread requests and paints; the work
+happens elsewhere.
+</p>
+<p>
+<b>Runs never overlap and requests coalesce.</b> At most one <code class="paramref">produce</code> is in flight and at
+most one more is queued, however many times <xref href="Jumbee.Console.JobHandle.Request" data-throw-if-not-resolved="false"></xref> is called — so a producer slower
+than its callers falls behind by a bounded amount instead of accumulating a backlog of stale work. This is
+what makes it a render queue rather than a work queue: the goal is the newest state on screen soon, not every
+intermediate state eventually. <xref href="Jumbee.Console.JobHandle.Coalesced" data-throw-if-not-resolved="false"></xref> counts how often that happened.
+</p>
+<p>
+<b>The producer must not touch UI state.</b> It runs off the UI thread while the UI thread is free to paint,
+lay out and handle input, so anything it reads has to be either immutable or private to it — capture what it
+needs at <xref href="Jumbee.Console.JobHandle.Request" data-throw-if-not-resolved="false"></xref> time and hand it over, or have the producer write into a buffer the
+paint path does not read until <code class="paramref">apply</code> publishes it. Reading a live control property from
+<code class="paramref">produce</code> is a race, and the usual symptom is a torn frame rather than an exception.
+</p>
+<p>
+Cancellation and disposal behave as in <xref href="Jumbee.Console.Control.Feed(System.Action%2cSystem.TimeSpan%2cSystem.Action%7bSystem.Exception%7d)" data-throw-if-not-resolved="false"></xref>: the control
+cancels every live job when disposed, and a throwing producer ends the job, surfacing to
+<code class="paramref">onError</code> on the UI thread when one is supplied. Like a feed, <code class="paramref">apply</code> is
+delivered by <xref href="Jumbee.Console.UI.Post(System.Action)" data-throw-if-not-resolved="false"></xref>, so it only arrives while a <xref href="Jumbee.Console.UI.Start(Jumbee.Console.ILayout%2cSystem.Int32%2cSystem.Int32%2cSystem.Int32%2cSystem.Boolean%2cConsoleGUI.Api.IConsole%2cJumbee.Console.IInputSource%2cSystem.Boolean)" data-throw-if-not-resolved="false"></xref> loop is draining the
+queue — a headless test must run a real UI loop to observe it.
+</p>
 
 ### <a id="Jumbee_Console_Control_OnClick_ConsoleGUI_Space_Position_"></a> OnClick\(Position\)
 

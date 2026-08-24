@@ -35,6 +35,41 @@ Both paths share everything *above* the renderer — the layout pass, the pull-b
 (see *ConsoleGUI Control Rendering*), and the `ConsoleBuffer` diff. They diverge only in how a
 changed cell is turned into bytes, and how the cursor is drawn.
 
+### 1.1 `isAnsiTerminal: true` is a request, not a fact
+
+`isAnsiTerminal` defaults to `true`, so for a long time the library simply **assumed** ANSI unless an app passed
+`--legacy`. On Windows that assumption can be flatly wrong, and when it is, the result is not a degraded picture —
+it is no picture. A console only interprets escapes once an application enables
+`ENABLE_VIRTUAL_TERMINAL_PROCESSING`, so every sequence is printed as literal text: screens of
+`[38;2;148;148;148m` and `[59;1H` from the first frame.
+
+`TerminalCapabilities.TryEnableAnsiOutput()` runs at the top of `Start`, before any other write (all the others are
+escape sequences). Enabling and detecting are the same call:
+
+| Situation | `SetConsoleMode(handle, mode \| VT)` | Result |
+|---|---|---|
+| Not Windows | — | ANSI |
+| Redirected stdout (pipe, file, Docker log) | `GetConsoleMode` fails | **inconclusive → caller's choice kept** |
+| Console, VT already on | — | ANSI |
+| Console, VT accepted | succeeds | ANSI, and VT is now on |
+| Console with **Use legacy console** ticked | fails, `ERROR_INVALID_PARAMETER` (87) | **legacy** |
+
+Two constraints on that table are easy to get wrong:
+
+- **A redirected stdout is not a legacy terminal.** `GetConsoleMode` fails on a pipe, which says nothing about what
+  eventually reads the bytes — a recording, a container log, a snapshot harness. Those want the escapes, so an
+  inconclusive probe must leave the caller's choice alone. Only a console that is *present and refuses* downgrades.
+- **The probe only ever downgrades, and never touches a caller-supplied `IConsole`.** A stub console belongs to a
+  test or a headless render; probing the real terminal on its behalf would silently push every snapshot onto the
+  legacy path on a legacy-console machine. `AnsiCapabilityDetectionTests` pins both halves of that gate.
+
+`TerminalCapabilities.Restore()` puts the console mode back, and it must be the **last** thing done to the terminal
+on the way out — after it, escape sequences are printed rather than obeyed, so an SGR reset or an alternate-screen
+leave emitted afterwards would land on screen as text.
+
+"Use legacy console" is a **per-machine** setting, not per-window, so it changes the behaviour of every console app
+at once — including anything the build or a test harness shells out to.
+
 ## 2. The branch point: `Update`
 
 The renderer is dirty-rectangle: each frame `ConsoleManager.FlushDirty()` composites only the region(s)
@@ -77,6 +112,33 @@ The ANSI path builds one batch of escape sequences per frame with an `AnsiContro
 
 How the *blink* is produced depends on `EmulateBlinkingCursor` (see §4.1). In the default (native)
 mode the real DECSCUSR style is emitted and the terminal blinks the cursor itself — no blink timer.
+
+### 3.1 Autowrap is off, and the emitter must keep it that way
+
+`UI.Start` emits `CSI ?7l` (DECAWM off) for the session and restores it on `Stop`, the signal path, and via the
+self-heal sequence for a run that was hard-killed.
+
+The reason is the **bottom-right cell**. A full-screen renderer writes it, and with autowrap on that write leaves
+the terminal holding a *pending wrap*. Terminals that defer that state — conhost, Windows Terminal, xterm — do
+nothing until the next printable character, and the emitter's next act is an SGR reset or a CUP, so nothing
+happens. A terminal that resolves it eagerly instead **scrolls the screen up one row**.
+
+That is not a one-frame glitch. The emitter diffs against `_buffer`, its own model of what the display holds, so
+after an unnoticed scroll every cell it believes unchanged is displayed one row out of place and is never
+rewritten. The picture degrades into stale content smeared across the whole screen, with the status line repeating
+down the bottom — one copy per frame, since only the cells that change get redrawn into the wrong place.
+**ConEmu reproduces this and this change fixes it**, confirmed by the status line rendering correctly afterwards.
+conhost and Windows Terminal defer the wrap correctly and never trip on it, which is why it went unnoticed.
+
+Turning DECAWM off costs nothing here because **nothing in the emitter relies on wrapping**: `MoveCursorTo` is
+issued whenever the next changed cell isn't contiguous, and a row boundary is never contiguous (`y != lastY`), so
+every row already begins with an explicit CUP. With wrap off, writing the last column simply parks the cursor
+there and the next row starts with its CUP as usual.
+
+`AnsiWrapIndependenceTests` pins this against the raw escape stream rather than the parsed screen — a parser
+rebuilds the same picture whether the emitter wrapped or jumped, so the distinction is invisible to
+`AnsiConsoleSnapshot`. One test asserts no glyph is ever emitted past the last column; the other asserts the last
+column *is* written, so the first cannot pass by never approaching the edge.
 
 ## 4. The legacy path: `UpdateLegacy`
 

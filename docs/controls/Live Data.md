@@ -111,6 +111,74 @@ enumeration advances at the enumeration's pace, and short spikes are averaged aw
 > find a cheaper source (a platform performance counter, a single `/proc` read) — but decide it with a measurement,
 > not by which column of this table it looks like it belongs in.
 
+## Producing expensive content off the UI thread
+
+Everything above is about *sampling*: a cheap value, read on a timer, assigned to a control. The other shape is a
+control whose **content is expensive to compute and cheap to display** — a chart over a large series, a rasterised
+3D scene, a laid-out document. There the work is not a number you fetch, it is the picture itself, and it is
+triggered by state changing rather than by a clock.
+
+`Control` has a helper for each:
+
+| Helper | Runs | Use it for |
+|---|---|---|
+| `Feed(produce, apply, interval)` | on a timer | Sampling. "What is the value now?", every N ms. |
+| `Job(produce, apply)` → `JobHandle` | when you call `handle.Request()` | Producing content. "The state changed — build the new view when you can." |
+
+Both run `produce` on a background thread and post `apply` to the UI thread. `Job` adds the two properties that
+make it a render queue:
+
+```csharp
+// In a control: the expensive part runs off the UI thread, the cheap part on it.
+private JobHandle render;
+private double[] data = [];
+private double[] shown = [];
+
+// The expensive step. Reads only what it is given — never a live control property.
+private static double[] Rasterise(double[] series) => series;
+
+private void StartRendering() => render = Job(
+    produce: () => Rasterise(data),                    // background thread
+    apply: frame => { shown = frame; Invalidate(); }); // UI thread
+
+public void DataChanged(double[] next)
+{
+    data = next;        // hand over a finished object; don't mutate one in place
+    render.Request();   // extra calls during a run coalesce into a single follow-up
+}
+```
+
+**Runs never overlap, and requests coalesce.** Calling `Request()` fifty times while a run is going produces
+exactly one more run, not fifty — `JobHandle.Coalesced` counts the ones absorbed. That bound is the whole point,
+and it is worth more than it sounds. Measured on the 3D sandbox rasterising an 800,000-triangle model, timing a
+round-trip through the UI thread:
+
+| | UI round-trip |
+|---|---:|
+| producing on the UI thread | **> 5,000 ms** (timed out) |
+| producing through a `Job` | **0.0 ms median / 3.8 ms worst** |
+
+The bad number is not "one slow frame". A 16 ms redraw tick posting a 90 ms draw delivers work about six times
+faster than it can be served, so the dispatcher queue grows without bound and the app stops answering *at all*
+rather than animating slowly. An unbounded work queue reproduces that exactly; coalescing converts the overload
+into dropped frames instead. **You lose frame rate and never responsiveness** — which is the right trade, because
+nobody wants the intermediate states, only the newest one on screen soon.
+
+> **`produce` must not touch UI state.** It runs while the UI thread is free to paint, lay out and handle input, so
+> everything it reads has to be immutable or private to it — capture what it needs at `Request()` time and hand it
+> over. Publish by giving `apply` a **finished object**, never by writing into a buffer the paint path reads. Get
+> this wrong and the symptom is a torn frame, not an exception.
+
+That last rule shapes the control, not just the callback. The sandbox's drawing surface hands whole frames across
+by value for exactly this reason: the rasteriser fills a buffer nobody is reading, and the swap happens on the UI
+thread in the `apply`. Publishing from the producer instead would race a paint already in progress. See
+[Where the rasteriser runs](../../examples/Jumbee.Console.3DSandboxDemo/README.md) for the worked example.
+
+`Job` also inherits `Feed`'s lifecycle: the control cancels every live job when disposed, a throwing producer ends
+the job and surfaces to `onError` on the UI thread, and `JobHandle.Completion` joins the in-flight run — which
+matters here, because a producer holding a large snapshot should be allowed to finish before you tear down what it
+is reading.
+
 ## Lifecycle: cancel it, and observe its faults
 
 ```csharp
@@ -230,6 +298,8 @@ Three caveats worth internalising:
 - [ ] The UI is touched in exactly one place per sample, through `UI.Invoke`.
 - [ ] The thing handed across is an immutable snapshot, not shared mutable state.
 - [ ] Cheap and expensive sampling run on separate cadences.
+- [ ] Content that is expensive to *build* goes through `Control.Job`, not the frame path — and its producer reads
+      only what was handed to it.
 - [ ] The loop is cancellable, its task is retained, and its faults are observed.
 - [ ] Per-item failures are counted, not blanket-swallowed.
 - [ ] `exc/s` reads 0, and `locks` reads 0 while the app is idle.
@@ -240,4 +310,5 @@ Three caveats worth internalising:
 - [Composite Controls](Composite%20Controls.md) — packaging a live widget as a reusable control.
 - [Getting started §1 — The single UI thread](../../GETTING-STARTED.md#1-the-single-ui-thread).
 - API: [`UI`](../api/Jumbee.Console.UI.md) · [`PerfHud`](../api/Jumbee.Console.PerfHud.md) ·
-  [`Canvas`](../api/Jumbee.Console.Canvas.md)
+  [`Canvas`](../api/Jumbee.Console.Canvas.md) · [`JobHandle`](../api/Jumbee.Console.JobHandle.md) ·
+  [`FeedHandle`](../api/Jumbee.Console.FeedHandle.md)

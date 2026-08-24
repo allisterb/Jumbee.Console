@@ -160,6 +160,8 @@
       href: Jumbee.Console.InteractiveMarkdownEditor.md
     - name: InteractiveSourceEditor
       href: Jumbee.Console.InteractiveSourceEditor.md
+    - name: JobHandle
+      href: Jumbee.Console.JobHandle.md
     - name: KeyHelp
       href: Jumbee.Console.KeyHelp.md
     - name: KeyInputEvent
@@ -218,6 +220,8 @@
       href: Jumbee.Console.RunSeries.md
     - name: Select
       href: Jumbee.Console.Select.md
+    - name: SelectOption
+      href: Jumbee.Console.SelectOption.md
     - name: SelectionList
       href: Jumbee.Console.SelectionList.md
     - name: SelectionStylesExtensions

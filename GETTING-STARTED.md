@@ -338,7 +338,7 @@ result is a `Control`, so it drops into any layout cell and can be framed. See [
 
 
 For changes that aren't a single property assignment (updating a list, mutating a wrapped Spectre widget), wrap
-them in `UI.Invoke(() => { … })`. If you're authoring a control that needs a periodic tick, the protected `Control.Feed(tick, interval)` helper runs a repeating timer that posts to the UI thread and cancels on dispose.
+them in `UI.Invoke(() => { … })`. If you're authoring a control that needs a periodic tick, the protected `Control.Feed(tick, interval)` helper runs a repeating timer that posts to the UI thread and cancels on dispose. Its on-demand counterpart, `Control.Job`, runs expensive work off the UI thread and publishes the result on it — for content that is costly to build rather than a value to sample. See [Live Data](docs/controls/Live%20Data.md) for both.
 
 ## Testing without a terminal
 

@@ -625,6 +625,22 @@ receive those letters, <xref href="Jumbee.Console.UI.UnregisterHotKey(System.Con
 the same keys onto the one table, so input then routes to the newest registrant. In tests, register/exercise
 one instance at a time (or unregister between them).</li></ul>
 
+### <a id="Jumbee_Console_UI_RestoreBuiltInHotKeys"></a> RestoreBuiltInHotKeys\(\)
+
+Drops every hotkey registered via <xref href="Jumbee.Console.UI.RegisterHotKey(System.ConsoleKeyInfo%2cSystem.Action)" data-throw-if-not-resolved="false"></xref>, leaving only the library's own
+    (Ctrl+Q, the Ctrl focus tier, F1).
+
+```csharp
+public static void RestoreBuiltInHotKeys()
+```
+
+#### Remarks
+
+Called by <xref href="Jumbee.Console.UI.Stop" data-throw-if-not-resolved="false"></xref>, so an app's hotkeys are scoped to the session that registered them. That matters
+when one process starts the UI more than once — swapping between two screens, say: without it the second
+session inherits the first's bindings, still pointing at the first session's objects, which by then are
+disposed. Register hotkeys per session, alongside the tree they act on.
+
 ### <a id="Jumbee_Console_UI_SendInput_Jumbee_Console_IFocusable_System_ConsoleKeyInfo_System_Boolean_"></a> SendInput\(IFocusable, ConsoleKeyInfo, bool\)
 
 Sends a key to <code class="paramref">target</code>. When <code class="paramref">routeGlobal</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>,

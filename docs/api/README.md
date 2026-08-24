@@ -52,6 +52,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [HorizontalStackPanel](Jumbee.Console.HorizontalStackPanel.md) — A layout that arranges its child controls in a single horizontal row.
 - [InteractiveMarkdownEditor](Jumbee.Console.InteractiveMarkdownEditor.md) — A live, split-pane Markdown editor for the terminal — the TUI equivalent of a web Markdown editor. The left pane is a `CodeEditor` with Markdown syntax highlighting; the right pane is a `MarkdownViewer` that re-renders the document — headings, tables and syntax-highlighted code — as you type (see `InteractiveSourceEditor` for the sync model).
 - [InteractiveSourceEditor](Jumbee.Console.InteractiveSourceEditor.md) — Base for live, split-pane source editors: a `CodeEditor` in one pane and a read-only preview control in the other, wired so the preview re-renders as the source is edited. A draggable `SplitPanel` divider sits between them (drag it, or focus it and press the arrows). Subclasses supply the editor's language, the preview control, and how to push text into it (`ApplyPreviewText`).
+- [JobHandle](Jumbee.Console.JobHandle.md) — A handle to a background job started by `Control.Job`. Call `Request` to ask for a run; cancel it to stop the job.
 - [KeyHelp](Jumbee.Console.KeyHelp.md) — One keystroke (or chord) and what it does, listed in a control's `HelpInfo`.
 - [KeyInputEvent](Jumbee.Console.KeyInputEvent.md) — A key press.
 - [Layout-1](Jumbee.Console.Layout-1.md) — Base class for Jumbee.Console layouts wrapping a ConsoleGUI layout control T` and exposing it through `ILayout`.
@@ -83,6 +84,7 @@ Auto-generated from the core libraries' XML-doc comments with [docfx](https://do
 - [Select](Jumbee.Console.Select.md) — A drop-down selector.
 - [SelectionList](Jumbee.Console.SelectionList.md) — A vertical list of independently-checkable options (multi-select).
 - [SelectionStylesExtensions](Jumbee.Console.SelectionStylesExtensions.md) — Turns a `SelectionStyle` into the prefix + text style a control applies to its selected item.
+- [SelectOption](Jumbee.Console.SelectOption.md) — One option in a `Select`: either plain text, or an `IRenderable` for a row that carries more than a string — a colour swatch beside a name, an icon, a two-column layout.
 - [Slider](Jumbee.Console.Slider.md) — A single-row draggable value control: an optional `Label`, a track filled to `Value` between `Minimum` and `Maximum`, and an optional numeric readout — e.g. `Gravity ████▌ 9.80`.
 - [Sparkline](Jumbee.Console.Sparkline.md) — A compact, single-row chart that draws a series of numeric values as block bars (one cell per value), scaling each value's height against the series maximum.
 - [SpectreControl-1](Jumbee.Console.SpectreControl-1.md) — Wraps an existing Spectre.Console `IRenderable` control for use with ConsoleGUI control and layout types.

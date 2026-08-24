@@ -5,13 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 
 /// <summary>
-/// A handle to a background job started by <see cref="Control.Job{T}(Func{T}, Action{T}, Action{Exception})"/>.
-/// Call <see cref="Request"/> to ask for a run; cancel it to stop the job.
+/// A handle to a background job started by <c>Control.Job</c>. Call <see cref="Request"/> to ask for a run; cancel
+/// it to stop the job.
 /// </summary>
 /// <remarks>
-/// The counterpart to <see cref="FeedHandle"/>: a feed runs on a timer, a job runs when something asks it to. Await
-/// <see cref="Completion"/> (or <see cref="StopAsync"/>) after cancelling to know the in-flight run has finished,
-/// before disposing anything the producer reads.
+/// The counterpart to <see cref="FeedHandle"/>: a feed runs on a timer, a job runs when something asks it to — see
+/// <see cref="Control.Job{T}(Func{T}, Action{T}, Action{Exception})"/>. Await <see cref="Completion"/> (or
+/// <see cref="StopAsync"/>) after cancelling to know the in-flight run has finished, before disposing anything the
+/// producer reads.
 /// </remarks>
 public sealed class JobHandle : IDisposable
 {

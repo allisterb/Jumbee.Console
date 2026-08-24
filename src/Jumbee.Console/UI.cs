@@ -41,6 +41,24 @@ public static class UI
         // Complete each frame's record when its terminal write lands — off the UI thread, and after the loop has
         // moved on, which is why the ordinal travels with the write rather than being inferred from position.
         ConsoleManager.FrameWritten = (ordinal, waitMs, writeMs) => ProcessMetrics.RecordWrite(ordinal, waitMs, writeMs);
+
+        // ASK THE CONSOLE BEFORE ASSUMING IT SPEAKS ANSI — and this must come first, ahead of every other write
+        // below, because all of them are escape sequences.
+        //
+        // A Windows console does not interpret escapes until an application enables VT processing, and a console
+        // with the machine-wide "Use legacy console" option ticked refuses to enable it at all. `isAnsiTerminal`
+        // defaults to true, so before this the library simply assumed — and on a legacy console every sequence was
+        // printed as literal text from the first frame: no UI, just `[38;2;148;148;148m` and `[59;1H` scrolling
+        // past. Enabling and detecting are the same call, so this both turns VT on where it can be and reports
+        // where it cannot.
+        //
+        // Only a downgrade, never an upgrade: a caller who passed `isAnsiTerminal: false` keeps the legacy path,
+        // and a caller-supplied console is a stub or a headless render whose real console must not be touched.
+        if (isAnsiTerminal && console is null && !TerminalCapabilities.TryEnableAnsiOutput())
+        {
+            isAnsiTerminal = false;
+        }
+
         // Self-heal a terminal left in a bad state by a PREVIOUS run that was hard-killed (SIGKILL, Task-Manager "End
         // task", a debugger Stop): no in-process code runs on a hard kill, so that run never disabled mouse/paste/focus
         // reporting and the shell has been echoing stray reports ever since. We can't fix the dying process, but the
@@ -66,6 +84,29 @@ public static class UI
         altScreen = (isAnsiTerminal && useAlternateScreen && console is null
             && IsInteractiveTerminal() && !NonInteractiveEnvironment())
             ? AlternateScreen.Enter() : null;
+
+        // TURN AUTOWRAP OFF (DECAWM) for the session, and it is the bottom-right cell that makes this necessary.
+        // A full-screen renderer writes every cell, including the last one on the last row. With autowrap on, that
+        // write leaves the terminal in "pending wrap" -- and a terminal that resolves that eagerly rather than
+        // deferring it SCROLLS THE SCREEN BY ONE ROW. Once that happens the damage is not one bad frame: the
+        // renderer diffs against its own model of the screen, so after an unnoticed scroll every cell it thinks is
+        // unchanged is now displayed one row off and never gets rewritten. The symptom is stale content smeared
+        // across the whole screen and a status line repeating down the bottom, one copy per frame.
+        //
+        // Deferred wrap is what the spec calls for and what conhost, Windows Terminal and xterm implement, which is
+        // why this went unnoticed -- but relying on it is relying on the one corner of VT that terminals most often
+        // get wrong. Nothing here needs wrapping: the emitter positions every discontiguous cell with an explicit
+        // CUP and never lets a run cross a row boundary, so with DECAWM off the cursor simply parks in the last
+        // column and the next row starts with a CUP as usual.
+        //
+        // Gated exactly like the alternate screen -- a caller-supplied console is a test stub or a headless render
+        // and must never have escape codes written to real stdout on its behalf.
+        wrapDisabled = isAnsiTerminal && console is null
+            && IsInteractiveTerminal() && !NonInteractiveEnvironment();
+        if (wrapDisabled)
+        {
+            try { Console.Out.Write(WrapOffSeq); Console.Out.Flush(); } catch { /* best effort */ }
+        }
         // Drives the renderer: ANSI escape sequences when true, IConsole.Write (16-colour System.Console) when false.
         ConsoleManager.AnsiEnabled = isAnsiTerminal;
         if (console != null)
@@ -187,6 +228,19 @@ public static class UI
         try { ConsoleManager.OutputIdle.Wait(150); } catch { /* best effort */ }
         try { (inputSource as IDisposable)?.Dispose(); } catch { /* best effort */ }
         try { altScreen?.Dispose(); altScreen = null; } catch { /* best effort */ }
+        RestoreWrap();
+        TerminalCapabilities.Restore();
+    }
+
+    // Autowrap back on, paired with the DECAWM reset in Start. Idempotent and self-clearing, so the signal path and
+    // a normal Stop can both call it. Emitted after leaving the alternate screen: DECAWM is per-buffer on some
+    // terminals, so the mode has to be restored while the PRIMARY screen is the current one or the user is left
+    // with a shell that truncates long lines instead of wrapping them.
+    private static void RestoreWrap()
+    {
+        if (!wrapDisabled) return;
+        wrapDisabled = false;
+        try { Console.Out.Write(WrapOnSeq); Console.Out.Flush(); } catch { /* best effort */ }
     }
 
     /// <summary>
@@ -288,8 +342,10 @@ public static class UI
         dispatcher.Stop();
         try { ConsoleManager.OutputIdle.Wait(500); } catch { /* best effort */ }
         (inputSource as IDisposable)?.Dispose();   // mouse/focus/paste off + console-mode restore; unblocks the reader
-        altScreen?.Dispose();                      // reset SGR, show cursor, leave the alternate screen (last write)
+        altScreen?.Dispose();                      // reset SGR, show cursor, leave the alternate screen
         altScreen = null;
+        RestoreWrap();                             // autowrap back on, AFTER the primary screen is current
+        TerminalCapabilities.Restore();            // VT processing off LAST — after it, escapes would print as text
 
         // Wait for the input reader thread to actually exit before returning. It reads the static `inputSource`, so a
         // reader left running from a previous Start would otherwise keep consuming — and reorder — a later run's input
@@ -906,8 +962,15 @@ public static class UI
     private static AlternateScreen? altScreen;   // alternate-screen session (ANSI interactive only), restored on Stop
     // Mouse (all encodings) + bracketed-paste + focus reporting OFF, reset SGR, show cursor. Emitted once at Start to
     // clear terminal state a hard-killed previous run couldn't restore. See the self-heal note in Start.
+    // Autowrap is healed back ON here too: a hard-killed previous run never ran RestoreWrap, and a shell left with
+    // DECAWM off truncates long lines instead of wrapping them. Start turns it off again a few lines later.
     private const string TerminalSelfHealSeq =
-        "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1016l\x1b[?2004l\x1b[?1004l\x1b[0m\x1b[?25h";
+        "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1016l\x1b[?2004l\x1b[?1004l\x1b[?7h\x1b[0m\x1b[?25h";
+
+    // DECAWM. Off for the session so writing the bottom-right cell cannot scroll the screen; see the note in Start.
+    private const string WrapOffSeq = "\x1b[?7l";
+    private const string WrapOnSeq = "\x1b[?7h";
+    private static bool wrapDisabled;
     private static List<PosixSignalRegistration>? signalRegistrations;
     private static TaskCompletionSource runCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     private static CancellationTokenSource cts = new CancellationTokenSource();

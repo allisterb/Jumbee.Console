@@ -32,6 +32,7 @@ Control ←
 [RenderableControl.InvalidateInteractive\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_InvalidateInteractive), 
 [RenderableControl.Initialize\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Initialize), 
 [RenderableControl.Render\(\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_Render), 
+[RenderableControl.ApplyEnabledToFocus\(bool\)](Jumbee.Console.RenderableControl.md\#Jumbee\_Console\_RenderableControl\_ApplyEnabledToFocus\_System\_Boolean\_), 
 [Control.this\[Position\]](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Item\_ConsoleGUI\_Space\_Position\_), 
 [Control.Width](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Width), 
 [Control.ActualWidth](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_ActualWidth), 
@@ -85,6 +86,7 @@ Control ←
 [Control.Feed\(Action, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_System\_Action\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, TimeSpan, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_TimeSpan\_System\_Action\_System\_Exception\_\_), 
 [Control.Feed<T\>\(Func<T\>, Action<T\>, int, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feed\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Int32\_System\_Action\_System\_Exception\_\_), 
+[Control.Job<T\>\(Func<T\>, Action<T\>, Action<Exception\>?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Job\_\_1\_System\_Func\_\_\_0\_\_System\_Action\_\_\_0\_\_System\_Action\_System\_Exception\_\_), 
 [Control.Feeds](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Feeds), 
 [Control.SetAtomicProperty<T\>\(ref T, T, bool, Func<T, T\>?, Action<T, T\>?, bool, string?\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_SetAtomicProperty\_\_1\_\_\_0\_\_\_\_0\_System\_Boolean\_System\_Func\_\_\_0\_\_\_0\_\_System\_Action\_\_\_0\_\_\_0\_\_System\_Boolean\_System\_String\_), 
 [Control.Validate\(\)](Jumbee.Console.Control.md\#Jumbee\_Console\_Control\_Validate), 
@@ -170,6 +172,38 @@ public Slider(double minimum = 0, double maximum = 1, double value = 0, string? 
 `label` string?
 
 ## Properties
+
+### <a id="Jumbee_Console_Slider_DisabledStyle"></a> DisabledStyle
+
+Style for the label and readout while disabled, and the colour the track is flattened toward.
+    Defaults to <xref href="Jumbee.Console.IStyleTheme.TextDisabled" data-throw-if-not-resolved="false"></xref>.
+
+```csharp
+public Style DisabledStyle { get; set; }
+```
+
+#### Property Value
+
+ [Style](Jumbee.Console.Style.md)
+
+### <a id="Jumbee_Console_Slider_Enabled"></a> Enabled
+
+Whether the control responds to the user. A disabled slider draws its label, readout and track muted,
+ignores keys, drags and the wheel, and is skipped by Tab.
+
+```csharp
+public bool Enabled { get; set; }
+```
+
+#### Property Value
+
+ bool
+
+#### Remarks
+
+The handle stays where the value puts it rather than the track going blank — a slider that reports nothing
+is not the same thing as one that reports a value you may not currently change. Setting
+<xref href="Jumbee.Console.Slider.Value" data-throw-if-not-resolved="false"></xref> in code still works while disabled.
 
 ### <a id="Jumbee_Console_Slider_FocusedStyle"></a> FocusedStyle
 

@@ -46,12 +46,12 @@ object ←
 
 ## Constructors
 
-### <a id="Jumbee_Console_Grid__ctor_System_Int32___System_Int32___Jumbee_Console_IFocusable_____"></a> Grid\(int\[\], int\[\], params IFocusable\[\]\[\]\)
+### <a id="Jumbee_Console_Grid__ctor_System_Int32___System_Int32___Jumbee_Console_IFocusable_____"></a> Grid\(int\[\], int\[\], params IFocusable?\[\]\[\]\)
 
 Creates a grid layout with fixed row heights, fixed column widths, and a control for each cell.
 
 ```csharp
-public Grid(int[] rowHeights, int[] columnWidths, params IFocusable[][] controls)
+public Grid(int[] rowHeights, int[] columnWidths, params IFocusable?[][] controls)
 ```
 
 #### Parameters
@@ -64,9 +64,11 @@ The fixed height in cells of each row, top to bottom.
 
 The fixed width in cells of each column, left to right.
 
-`controls` [IFocusable](Jumbee.Console.IFocusable.md)\[\]\[\]
+`controls` [IFocusable](Jumbee.Console.IFocusable.md)?\[\]\[\]
 
-Row-major controls: one inner array per row, each with one control per column.
+Row-major controls: one inner array per row, each with one control per column. A cell may be
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> to leave it empty, and a whole row may be written as <code>[]</code> to leave every cell in
+it empty — a sparse arrangement needs no filler controls.
 
 #### Remarks
 
