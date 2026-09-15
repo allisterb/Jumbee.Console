@@ -33,7 +33,9 @@ public sealed class AudioPump : Control
         feed = Feed<object?>(
             produce: () =>
             {
-                bus.Publish(audio.NextFrame());
+                // null means the source has no new audio since the last tick (a capture device between callbacks),
+                // so there is nothing to publish and nothing was allocated to get here.
+                if (audio.NextFrame() is { } frame) bus.Publish(frame);
                 return null;
             },
             apply: _ => { },

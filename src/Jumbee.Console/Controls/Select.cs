@@ -27,7 +27,7 @@ public enum SelectPopupPosition
 /// more than a string — a colour swatch beside a name, an icon, a two-column layout.
 /// </summary>
 /// <remarks>
-/// The same either/or a <see cref="ListBoxItem"/> makes, and for the same reason: a text option is rendered as text
+/// The same either/or a <see cref="ListBox.ListBoxItem"/> makes, and for the same reason: a text option is rendered as text
 /// (so nothing about existing <see cref="Select"/>s changes), and a renderable option is rendered by itself.
 /// </remarks>
 public sealed class SelectOption

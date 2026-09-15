@@ -1,3 +1,100 @@
+0.2.1
+-----
+ADDED
+
+  * protected Control.Job<T>(produce, apply, onError), returning a JobHandle - the on-demand counterpart to
+    Control.Feed, for control authors. A feed runs on a timer; a job runs when something asks it to. The
+    producer runs off the UI thread and hands back a finished object, which the apply callback installs on
+    the UI thread, so the expensive half never blocks a frame. Requests coalesce: asking again while a run
+    is in flight does not queue a second run, it rides the pending one, so a control cannot accumulate an
+    unbounded backlog of stale work. JobHandle exposes Request, Cancel, StopAsync and Completion, plus Completed and Coalesced as
+    diagnostics - a steadily climbing Coalesced means the callers are outrunning the producer, which is the
+    job doing its job. Moving the 3D model rasteriser onto one took its worst-case round trip from over five
+    seconds of blocked UI to under four milliseconds.
+
+  * Grid accepts empty cells. The controls parameter is IFocusable?[][], so a cell can be null and a whole
+    row can be [], instead of needing a filler control to hold a gap open. (This surfaced a latent null
+    dereference in Layout.Controls, fixed with it.)
+
+CHANGED
+
+  * UI.Start asks the console whether it speaks ANSI instead of assuming it does. A Windows console does not
+    interpret escape sequences until an application enables VT processing, and a console with the machine-wide
+    "Use legacy console" option ticked refuses to enable it at all - so there was no picture rather than a
+    degraded one: every sequence landed on screen as literal text from the first frame. Enabling and detecting
+    are the same call, so Start now makes it before anything is drawn and falls back to the Win32 render path
+    when the console refuses. It is a downgrade only: passing isAnsiTerminal: false still forces the legacy
+    path, and a caller-supplied IConsole (a test stub or a headless render) is never probed. A redirected
+    stdout is deliberately NOT treated as legacy - GetConsoleMode fails on a pipe, which says nothing about
+    what will eventually read the bytes.
+
+  * Autowrap (DECAWM) is turned off for the duration of an ANSI session, and restored on exit. A full-screen
+    renderer writes every cell including the bottom-right one, which leaves the terminal in "pending wrap" -
+    and a terminal that resolves that eagerly rather than deferring it scrolls the screen by one row. That is
+    not one bad frame: the renderer diffs against its own model of the screen, so after an unnoticed scroll
+    every cell it believes unchanged is displayed one row off and never rewritten, smearing stale content
+    across the whole screen. Nothing here needs wrapping - every discontiguous cell is positioned with an
+    explicit CUP and no run crosses a row boundary.
+
+FIXED
+
+  * Input is dead on a legacy Windows console. Such a console refuses VT mode on both handles; rendering
+    correctly fell back to the Win32 path, but the input source did not follow, because UI.Start only chooses
+    one when the caller supplied none - and VtInputSource then ignored its own SetConsoleMode failure and kept
+    reading stdin. Without VT input mode the console never encodes arrows, function keys, mouse or paste as
+    bytes at all, while plain characters and Ctrl+letter still arrive as the real control characters they are.
+    So the app came up looking healthy and navigated for nothing: every arrow and every Ctrl+arrow silently
+    did nothing while Ctrl+letter hotkeys worked. Start now detects a VT source the terminal refused and
+    swaps in the keyboard-only ConsoleInputSource. Mouse and hover are unavailable there, which is inherent -
+    such a console cannot report them.
+
+    Disposing the refused source is not enough on its own, and the reason generalises: the reader keeps one
+    outstanding read on the console handle and a console read cannot be cancelled, so Dispose ends the thread
+    but leaves the read pending for the life of the process. A replacement source then shares one input queue
+    with that orphan and keys alternate between the two readers - roughly every other press disappears, which
+    shows up as a hotkey that only works on the second try. VtInputSource therefore no longer starts its
+    reader at all in that state, and no longer emits the mouse/paste/focus enable sequences to a console that
+    would print rather than obey them.
+
+  * Setting Control.Width or Control.Height at runtime left a composite drawing a stale picture. The setters
+    resized directly, which changes Size but skips what Initialize does around it: the backing console buffer
+    was never re-sized, so the control reported an area its own buffer could not serve, and OnInitialization
+    never fired - which is what tells a CompositeControl to re-lay-out its children. They therefore kept the
+    old size indefinitely until some unrelated event forced a real layout pass. Setting Width had a second
+    bug of its own: it paired the new width with the REQUESTED height, which is 0 in the common "fill the
+    parent" case, so setting a width could collapse the height to nothing.
+
+  * A composite could throw NullReferenceException out of a paint on terminal resize. Its cell reads were
+    bounds-checked against Size but not against the buffer behind it, and the two diverge for a composite
+    that changes its own size in response to a resize - it can be read after Size has grown but before the
+    buffer has followed. An out-of-range read now yields a transparent cell, which is what a not-yet-painted
+    cell means everywhere else, and the next layout fills it in. A blank cell for one pass is a recoverable
+    glitch; a throw out of a paint is not.
+
+EXAMPLES
+
+  * New Wolf3D demo - the Wolfenstein 3D engine ported to the terminal, with a software raycaster, sprites,
+    working doors, weapons, and the original status bar. It needs the game data, which it locates or installs
+    itself; the shareware episode is enough.
+
+  * The 3D sandbox reads .STL and .PLY alongside .OBJ, with per-facet colour where the format carries it.
+    Anti-aliasing is now a single quadrant-glyph path (the switch is labelled "Quadrant glyphs"), there is a
+    Shade level slider, and the camera pad is docked bottom-right. Its rasteriser runs on a Control.Job, so
+    loading a large model no longer blocks the UI.
+
+  * build.cmd and examples.cmd take a target (browser, agent-harness, ide, audio-scope, 3dsandbox, wolf3d,
+    core, examples, all), and --verify runs each demo's headless smoke check - 47 example screens plus five
+    demo checks, all rendering, in one command.
+
+DOCS
+
+  * docs/internal/Input.md gained a section on what the legacy input source can and cannot deliver, and on
+    the silent-failure mode above: how a VT input source that was refused still looks alive, why swapping it
+    out is not enough on its own, and the field signature of the orphaned read (a hotkey that works on the
+    second press). JUMBEE_INPUT_LOG is documented as the way into that layer, and now announces itself on
+    stderr at startup and shutdown - it appends on every read, so a forgotten environment variable is a cost
+    you should be told about rather than discover.
+
 0.2.0
 -----
 ADDED

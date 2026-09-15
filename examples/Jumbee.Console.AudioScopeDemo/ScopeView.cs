@@ -590,16 +590,79 @@ public sealed class ScopeView : CompositeControl
     /// <see cref="Control.Dispose"/>); the panes never touch the disposable reader, so only the pump gates its dispose.
     /// </remarks>
     public FeedHandle StartComputeFeed(ChannelBus bus, IDisplayMode mode, GraphConfig cfg, Func<int> framerate,
-        TimeSpan interval, Action<Exception>? onError = null)
+        TimeSpan interval, Action<Exception>? onError = null) =>
+        Feed(BuildProducer(bus, mode, cfg, framerate), ApplyComputed, interval, onError);
+
+    /// <summary>
+    /// The job-driven alternative to <see cref="StartComputeFeed"/>: the same producer, run when something asks
+    /// rather than on a clock. Returns a handle that cancels the job and drops its subscriptions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Same off-thread compute, same producer-local state - <c>Control.Job</c> guarantees runs never overlap exactly
+    /// as a feed does, so the spectroscope's cross-frame FFT accumulator stays a thread-confined local either way.
+    /// What changes is what decides that a frame is due. A feed asks "has anything moved?" on its own clock and
+    /// returns null when the answer is no; a job is TOLD, by the bus when audio lands and by the config when a knob
+    /// turns, and simply does not run otherwise.
+    /// </para>
+    /// <para>
+    /// Two practical differences fall out. Requests coalesce, so a pane whose compute is slower than the audio rate
+    /// drops frames by a bounded amount instead of running permanently late, and <see cref="JobHandle.Coalesced"/>
+    /// says how often that happened - the "are the panes keeping up?" number a feed cannot report. And a job has no
+    /// interval, so retuning the overlap does not have to stop and rebuild it the way a feed must.
+    /// </para>
+    /// <para>
+    /// The cost is that every trigger has to be wired: audio, config, and the mode's own hotkey knobs (the caller
+    /// requests after <c>IDisplayMode.HandleKey</c>, since only it knows which pane has focus). A missed trigger is a
+    /// pane that stops updating, where a feed would merely have been a tick late - the idle-skip inside the producer
+    /// stays as a cheap guard, but it cannot save a frame nobody asked for.
+    /// </para>
+    /// </remarks>
+    public PaneJob StartComputeJob(ChannelBus bus, IDisplayMode mode, GraphConfig cfg, Func<int> framerate,
+        Action<Exception>? onError = null)
     {
-        // Producer-local state, touched ONLY on this feed's background thread (which never overlaps its own produce).
+        var job = Job(BuildProducer(bus, mode, cfg, framerate), ApplyComputed, onError);
+        void Kick() => job.Request();
+        bus.Published += Kick;      // new audio (pump thread)
+        cfg.Changed += Kick;        // a knob moved (UI thread) -- the trigger a paused pane depends on
+        job.Request();              // paint once from whatever is already on the bus
+        return new PaneJob(job, () => { bus.Published -= Kick; cfg.Changed -= Kick; });
+    }
+
+    /// <summary>A running job-driven pane: request a render, read how far it is behind, dispose to stop it.</summary>
+    public sealed class PaneJob(JobHandle job, Action unsubscribe) : IDisposable
+    {
+        /// <summary>Asks for a render. For triggers the bus and config don't cover - the mode's own hotkey knobs.</summary>
+        public void Request() => job.Request();
+
+        /// <summary>How many requests were absorbed into an already-pending run: how far this pane is behind its
+        /// triggers. A climbing count means the compute is slower than the audio rate, which a feed cannot report.</summary>
+        public long Coalesced => job.Coalesced;
+
+        /// <summary>Renders actually computed.</summary>
+        public long Completed => job.Completed;
+
+        /// <summary>Cancels the job AND drops the subscriptions, so a torn-down pane cannot be woken by a bus that
+        /// outlives it.</summary>
+        public void Dispose()
+        {
+            unsubscribe();
+            job.Cancel();
+        }
+    }
+
+    private void ApplyComputed(ScopeFrame? computed) { if (computed is { } f) Apply(f); }
+
+    // The shared producer. Its four locals are the per-pane state, captured here and touched ONLY on the background
+    // thread that runs it -- which neither a feed nor a job ever overlaps with itself.
+    private Func<ScopeFrame?> BuildProducer(ChannelBus bus, IDisplayMode mode, GraphConfig cfg, Func<int> framerate)
+    {
         long lastChannelVersion = -1, lastConfigVersion = -1;
         object? lastModeSnapshot = null;
         object? accumulator = null;       // e.g. the spectroscope's FFT history -- threaded produce->produce, never crosses threads
         double[][]? frozenChannels = null; // the last live frame this pane computed with -- reused while paused
 
-        return Feed<ScopeFrame?>(
-            produce: () =>
+        return () =>
             {
                 var config = cfg.Current;
                 var modeSnapshot = mode.Snapshot();
@@ -626,10 +689,17 @@ public sealed class ScopeView : CompositeControl
                 var computed = ComputeFrame(config.Snapshot, mode, modeSnapshot, accumulator, channels, framerate());
                 accumulator = computed.NextModeState;
                 return computed;
-            },
-            apply: computed => { if (computed is { } f) Apply(f); },
-            interval, onError);
+            };
     }
+
+    /// <summary>
+    /// This pane's name in the F1 help. <b>Must differ per pane</b>: the help dialog deduplicates entries by
+    /// <see cref="HelpInfo.Name"/> and keeps the FIRST, so three panes sharing one name meant only one pane's
+    /// <see cref="Control.OnHelp"/> keys ever reached the dialog and the other two were silently dropped - which is
+    /// why the oscilloscope's PageUp/PageDown never appeared. Distinct names also make F1 open on the focused pane's
+    /// own tab, since ShowHelp matches the focused control's help by name.
+    /// </summary>
+    public string HelpName { get; set; } = "Scope";
 
     /// <summary>
     /// Global-help entry for the mode-agnostic keys every scope-tui mode shares. Mode-specific keys (oscilloscope's
@@ -638,7 +708,7 @@ public sealed class ScopeView : CompositeControl
     /// mode is currently active.
     /// </summary>
     protected override HelpInfo? GetHelpInfo() =>
-        new HelpInfo("Scope", "AudioScope", "A real-time 3-pane (oscilloscope, vectorscope, or spectroscope) audio scope. Click a pane or Tab to focus it; these keys act on the focused pane.")
+        new HelpInfo(HelpName, HelpName, "One pane of a real-time 3-pane (oscilloscope, spectroscope, vectorscope) audio scope. Click a pane or Tab to focus it; these keys act on the focused pane.")
             .WithKey("Up/Down", "Zoom the vertical scale (amplitude) in/out")
             .WithKey("Left/Right", "More/fewer samples per frame (time window)")
             .WithKey("Shift/Ctrl/Alt + arrow", "Same as above, larger/smaller step size")

@@ -52,6 +52,11 @@ public sealed class RecordingAudioSource : IAudioSource
     readonly object gate = new();
     readonly int captureChannels;                 // what the DEVICE delivers, which --mono may fold down from
     float[] foldScratch = [];                     // grows to the largest callback seen; only touched under `gate`
+    // How many capture callbacks have rolled samples in, and which of those NextFrame has already handed out. Both
+    // touched only under `gate`. Starting lastSeenWrite BELOW writes is what makes the first call always yield a
+    // frame, so the panes have something to draw before the device has delivered anything.
+    long writes;
+    long lastSeenWrite = -1;
 
     /// <param name="bufferSamplesPerChannel">Size of the rolling latest-window, per channel.</param>
     /// <param name="device">Endpoint to open, already resolved by <see cref="ResolveDevice"/>; <see langword="null"/>
@@ -281,8 +286,13 @@ public sealed class RecordingAudioSource : IAudioSource
     // returns, so we copy out of it here.
     void OnData(object? sender, WaveInEventArgs e)
     {
+        if (e.BytesRecorded <= 0) return;   // nothing rolled in, so nothing for NextFrame to report as new
         var samples = MemoryMarshal.Cast<byte, float>(e.Buffer.AsSpan(0, e.BytesRecorded));
-        lock (gate) Roll(Channels == captureChannels ? samples : FoldToMono(samples));
+        lock (gate)
+        {
+            Roll(Channels == captureChannels ? samples : FoldToMono(samples));
+            writes++;   // under `gate`, so NextFrame's compare-and-take is atomic against this
+        }
     }
 
     // --mono against a device that only offers multi-channel (i.e. Windows, where shared-mode WASAPI picks the
@@ -316,10 +326,20 @@ public sealed class RecordingAudioSource : IAudioSource
         }
     }
 
-    public double[][] NextFrame()
+    public double[][]? NextFrame()
     {
         float[] snapshot;
-        lock (gate) snapshot = (float[])rolling.Clone();
+        lock (gate)
+        {
+            // Nothing has been pushed into `rolling` since the last call, so the frame we would build is the one the
+            // bus already holds. Say so instead of cloning the window and de-interleaving it into a fresh matrix
+            // that would be compared, found equal, and dropped. The pump ticks several times per device callback, so
+            // this is the common case on any capture device, not an edge case.
+            if (writes == lastSeenWrite) return null;
+            lastSeenWrite = writes;
+            snapshot = (float[])rolling.Clone();
+        }
+
         return FileAudioSource.Deinterleave(snapshot, Channels);
     }
 

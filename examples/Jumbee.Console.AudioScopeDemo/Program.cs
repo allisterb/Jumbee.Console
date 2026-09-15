@@ -309,6 +309,13 @@ root.SetAction(async (parse, ct) =>
     var vectorPane = new ScopeView(source: sourceText, channels: audio.Channels);
 
     // Panes and their modes/configs in Tab-focus order (osc -> spectro -> vector), index-aligned.
+    // Distinct help names, one tab per pane. They shared the name "Scope", and CompileHelp deduplicates by name and
+    // keeps the first -- so only ONE pane's OnHelp keys ever reached the F1 dialog and the other two were dropped
+    // with no error. See ScopeView.HelpName.
+    oscPane.HelpName = "Oscilloscope";
+    spectroPane.HelpName = "Spectroscope";
+    vectorPane.HelpName = "Vectorscope";
+
     ScopeView[] panes = [oscPane, spectroPane, vectorPane];
     IDisplayMode[] paneModes = [osc, spectro, vec];
 
@@ -367,7 +374,10 @@ root.SetAction(async (parse, ct) =>
 
     // Prime the bus with one frame so the panes have data to draw on their very first tick (decoded here on the main
     // thread, before the UI loop starts -- fine, it's the same single-threaded reader the pump will continue from).
-    bus.Publish(audio.NextFrame());
+    // The first call never returns null (see IAudioSource.NextFrame), so this always primes -- even on a device that
+    // has captured nothing yet, which hands over its zero-filled window so the panes draw a flat line rather than
+    // nothing at all.
+    if (audio.NextFrame() is { } primingFrame) bus.Publish(primingFrame);
 
     // Verify AFTER the bus is primed and the whole tree is assembled, but BEFORE any feed or pump starts: the check
     // then covers the real layout and a real decoded frame while starting no background threads at all, so it cannot
@@ -387,7 +397,10 @@ root.SetAction(async (parse, ct) =>
         var scanned = 1;
         while (peak == 0.0 && scanned < maxFrames)
         {
-            peak = Peak(audio.NextFrame());
+            // Verify runs against a file or the synthetic tone, both of which always yield a frame; a null here
+            // would mean a device source, which this scan is not built to wait on -- stop rather than spin.
+            if (audio.NextFrame() is not { } next) break;
+            peak = Peak(next);
             scanned++;
         }
 
@@ -426,10 +439,18 @@ root.SetAction(async (parse, ct) =>
     // Factored into a function because [ / ] retune the feed at runtime, and a FeedHandle's interval is fixed when it
     // is created -- there is no way to re-time a running feed, so changing the rate means stopping and re-starting all
     // four of them. The pump is started LAST so no decode is in flight while the source is being reconfigured.
+    // PROTOTYPE (0.2.1): pane 0, the oscilloscope, is driven by a Control.Job instead of a Control.Feed, so the two
+    // can be compared side by side in one running app. Same producer and the same off-thread compute either way --
+    // what differs is what decides a frame is due: the job is woken by the bus and the config (and by ModeKey below,
+    // for the trigger/depth/peaks knobs), where the feeds poll on the shared clock. It is started ONCE here rather
+    // than inside StartFeeds because a job has no interval, so retuning the overlap does not disturb it.
+    var oscCompute = oscPane.StartComputeJob(bus, paneModes[0], configs[0], () => framerate,
+        ex => oscPane.SetError($"render failed: {ex.Message}"));
+
     var paneFeeds = new FeedHandle[panes.Length];
     void StartFeeds(TimeSpan interval)
     {
-        for (var i = 0; i < panes.Length; i++)
+        for (var i = 1; i < panes.Length; i++)   // 0 is the job-driven oscilloscope; see oscCompute above
         {
             var pane = panes[i];   // captured per iteration, so each error handler targets its own pane
             paneFeeds[i] = pane.StartComputeFeed(bus, paneModes[i], configs[i], () => framerate, interval,
@@ -470,7 +491,8 @@ root.SetAction(async (parse, ct) =>
         quitting = true;
         await pump.StopAsync();                     // stop decoding and join the in-flight read...
         pump.DisposeAudio();                         // ...only THEN is it safe to dispose the reader
-        foreach (var f in paneFeeds) f.Cancel();     // panes read only immutable bus frames, so no join is needed
+        oscCompute.Dispose();                        // cancels the job AND unsubscribes it from the bus/config
+        foreach (var f in paneFeeds) f?.Cancel();    // panes read only immutable bus frames, so no join is needed
         UI.Stop();
     }
     // Quit on q, Ctrl+C, Ctrl+Q, Ctrl+W (scope-tui's four escape hatches).
@@ -505,7 +527,10 @@ root.SetAction(async (parse, ct) =>
         {
             overlap = next;
             await pump.StopAsync();                      // join the in-flight decode BEFORE touching the source...
-            foreach (var f in paneFeeds) f.Cancel();     // ...panes read only immutable bus frames, so no join needed
+            foreach (var f in paneFeeds) f?.Cancel();    // ...panes read only immutable bus frames, so no join needed
+            // The oscilloscope's job is deliberately NOT torn down here: it has no interval to retune, and it stays
+            // subscribed to the same bus and config across the source change. That is the retune cost a feed pays
+            // and a job does not.
             audio.SetOverlap(overlap);                   // ...and only then is it safe to reconfigure
             if (quitting) return;                        // quit may have landed while we were awaiting
             StartFeeds(FeedIntervalFor(overlap));
@@ -539,8 +564,17 @@ root.SetAction(async (parse, ct) =>
     UI.RegisterHotKey(UI.HotKeys.Shift(ConsoleKey.Tab), () => UI.SetFocus(panes[(FocusedIndex() - 1 + panes.Length) % panes.Length]));
 
     // --- Mode-specific hotkeys route to the FOCUSED pane's mode. A mode that doesn't recognize the key returns false
-    // and nothing happens; the pane's own compute feed notices its mode snapshot changed and recomputes next tick. ---
-    void ModeKey(ConsoleKeyInfo key, double magnitude = 1.0) => paneModes[FocusedIndex()].HandleKey(key, magnitude);
+    // and nothing happens; a feed-driven pane notices its mode snapshot changed and recomputes next tick. ---
+    void ModeKey(ConsoleKeyInfo key, double magnitude = 1.0)
+    {
+        var i = FocusedIndex();
+        paneModes[i].HandleKey(key, magnitude);
+        // The job-driven pane has no tick to notice on. These knobs (trigger, edge, threshold, depth, peaks) are
+        // plain scalars on the mode rather than GraphConfig fields, so they raise no Changed event and this is the
+        // only place that knows they moved. This is the wiring a job costs you: miss it and the oscilloscope simply
+        // stops responding to its own hotkeys while every other pane keeps working.
+        if (i == 0) oscCompute.Request();
+    }
 
     foreach (var (build, m) in tiers)
     {
@@ -559,12 +593,14 @@ root.SetAction(async (parse, ct) =>
 
     // --- Help (F1): each pane contributes its own mode-specific keys on top of ScopeView's shared keys; F1 shows the
     // focused pane's help (SetActive focuses it). ---
+    // The four trigger keys do nothing visible until 't' is on -- the threshold is only read, and its "T" marker only
+    // drawn, while triggering; with it off the header just reads "live". So each says so, rather than looking broken.
     oscPane.OnHelp += info =>
         info.WithKey("t", "Toggle trigger sync (freeze the waveform to a rising/falling edge crossing)")
-            .WithKey("e", "Flip trigger edge polarity (rising <-> falling)")
+            .WithKey("e", "Flip trigger edge polarity (rising <-> falling) - needs 't'")
             .WithKey("p", "Toggle peak markers on the waveform")
-            .WithKey("PageUp/PageDown", "Raise/lower the trigger threshold")
-            .WithKey("+ / - / = / _", "Raise/lower how many samples ahead the trigger searches for a crossing");
+            .WithKey("PageUp/PageDown", "Raise/lower the trigger threshold - needs 't'; shows as the 'T' marker")
+            .WithKey("+ / - / = / _", "How many samples ahead the trigger searches for a crossing - needs 't'");
     spectroPane.OnHelp += info =>
         info.WithKey("w", "Toggle Hann window before the FFT")
             .WithKey("l", "Toggle log-Y (level vs raw amplitude)")
@@ -583,7 +619,8 @@ root.SetAction(async (parse, ct) =>
         quitting = true;
         await pump.StopAsync();
         pump.DisposeAudio();
-        foreach (var f in paneFeeds) f.Cancel();
+        oscCompute.Dispose();
+        foreach (var f in paneFeeds) f?.Cancel();
     }
 
     return 0;

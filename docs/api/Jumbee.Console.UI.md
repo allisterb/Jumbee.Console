@@ -384,6 +384,11 @@ Moves focus one cell left/right/up/down in the root layout's 2-D grid (wraps; sk
 public static void FocusLeft()
 ```
 
+#### Remarks
+
+Steps one focusable <em>leaf</em>, which is not always one pane: an interactive adornment such as a
+    <code>SplitPanel</code> divider is a leaf too, so crossing a split takes two presses.
+
 ### <a id="Jumbee_Console_UI_FocusNext"></a> FocusNext\(\)
 
 Moves focus to the next focusable control within the current root-layout region, wrapping. Bound to

@@ -17,7 +17,7 @@ object ←
 
 ## Remarks
 
-The same either/or a ListBoxItem makes, and for the same reason: a text option is rendered as text
+The same either/or a <xref href="Jumbee.Console.ListBox.ListBoxItem" data-throw-if-not-resolved="false"></xref> makes, and for the same reason: a text option is rendered as text
 (so nothing about existing <xref href="Jumbee.Console.Select" data-throw-if-not-resolved="false"></xref>s changes), and a renderable option is rendered by itself.
 
 ## Constructors

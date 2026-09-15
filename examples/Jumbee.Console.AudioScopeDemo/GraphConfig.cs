@@ -59,9 +59,17 @@ public class GraphConfig
     /// <summary>The current immutable, versioned config snapshot -- safe to read from any thread.</summary>
     public ConfigState Current => current;
 
+    /// <summary>Raised after a new config is published, on the UI thread. The second trigger a job-driven pane needs:
+    /// a paused pane gets no audio, but still has to re-render when a knob moves.</summary>
+    public event Action? Changed;
+
     /// <summary>Captures the current mutable fields into a new immutable <see cref="ConfigState"/> (version bumped)
     /// and publishes it for the panes to read. Call on the UI thread after mutating any field.</summary>
-    public void Publish() => current = new ConfigState(current.Version + 1, Snapshot());
+    public void Publish()
+    {
+        current = new ConfigState(current.Version + 1, Snapshot());
+        Changed?.Invoke();   // after the swap, so a handler that reads Current sees this version
+    }
 
     /// <summary>Clamped increment/decrement helper, mirroring update_value_f in display/mod.rs.</summary>
     public static void UpdateF(ref double val, double baseAmount, double magnitude, double min, double max)

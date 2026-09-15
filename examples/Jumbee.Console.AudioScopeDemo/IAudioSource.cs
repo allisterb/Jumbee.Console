@@ -14,8 +14,22 @@ public interface IAudioSource : IDisposable
     /// <summary>The PCM sample rate in Hz (used by the spectroscope's frequency-bin math).</summary>
     int SampleRate { get; }
 
-    /// <summary>Returns the next block of samples de-interleaved into a <c>[channels][samplesPerChannel]</c> matrix.</summary>
-    double[][] NextFrame();
+    /// <summary>
+    /// Returns the next block of samples de-interleaved into a <c>[channels][samplesPerChannel]</c> matrix, or
+    /// <see langword="null"/> when no new audio has arrived since the last call.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only a PUSH source ever returns null</b>, and the distinction is the point. A file is pulled: every call
+    /// advances the stream, so there is always a new frame and <see cref="FileAudioSource"/> never returns null. A
+    /// capture device is pushed on its own callback clock, and the pump samples faster than that clock delivers, so
+    /// most calls find the same rolling window they saw last time. Answering null costs nothing; building the frame
+    /// means cloning the window and de-interleaving it into a fresh matrix that the bus would then discard.
+    /// <para>
+    /// The first call always returns a frame, even from a device that has captured nothing yet, so the display has
+    /// something to draw before any audio arrives.
+    /// </para>
+    /// </remarks>
+    double[][]? NextFrame();
 
     /// <summary>
     /// Sets what fraction of each frame the next one re-uses, 0 (none) to just under 1. The caller must also tick
