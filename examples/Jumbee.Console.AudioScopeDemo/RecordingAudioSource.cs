@@ -287,13 +287,16 @@ public sealed class RecordingAudioSource : IAudioSource
             ? enumerator.GetDevice(id)
             : enumerator.GetDefaultAudioEndpoint(loopback ? DataFlow.Render : DataFlow.Capture, Role.Console);
 
-        // Size the capture buffer to the DISPLAY WINDOW, so one device callback carries one frame's worth of audio.
-        // That is what scope-tui does on all three of its backends, and it is what the legacy WasapiLoopbackCapture
-        // could not express: with the default buffer the scope sampled its rolling window several times per
-        // callback, so the waveform stepped at the callback rate instead of sliding. The engine has a floor of its
-        // own and may grant more -- LatencyMilliseconds reports what it actually gave us.
-        var rate = device.AudioClient.MixFormat.SampleRate;
-        var bufferMs = Math.Max(1, (int)Math.Round(1000.0 * bufferSamplesPerChannel / rate));
+        // Size the capture buffer to the DEVICE PERIOD, not to the display window. scope-tui sizes its buffer to the
+        // window because one callback there IS one frame; here the rolling window is reassembled from many callbacks,
+        // so the buffer only has to bridge one callback to the next. Two periods gives headroom against a late one
+        // without paying for depth we never use.
+        //
+        // The difference is all latency, and it is measurable: the engine grants exactly what is asked for, while the
+        // callback cadence stays at the device period regardless -- 43 ms and 10 ms requests both deliver every
+        // 10 ms, so a window-sized buffer was ~33 ms of delay between the audio and the picture, bought for nothing.
+        var periodMs = device.AudioClient.DefaultDevicePeriod / 10_000.0;   // 100-ns units
+        var bufferMs = Math.Max(2, (int)Math.Ceiling(periodMs * 2));
 
         // Loopback taps a render endpoint's mix. Note WASAPI delivers NOTHING while that endpoint is silent, so an
         // idle machine leaves the scope showing its last window rather than a flat line.
