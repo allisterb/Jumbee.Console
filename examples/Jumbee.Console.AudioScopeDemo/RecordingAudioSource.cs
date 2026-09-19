@@ -47,6 +47,18 @@ public sealed class RecordingAudioSource : IAudioSource
     /// the two match.</summary>
     public string DeviceName { get; }
 
+    /// <summary>
+    /// The capture buffer the driver actually granted, in milliseconds, or <see langword="null"/> where the backend
+    /// does not report one.
+    /// </summary>
+    /// <remarks>
+    /// Worth showing rather than assuming: a request below the engine's own period is rounded up silently, so this
+    /// is how you find out whether asking for a window-sized buffer achieved anything. It bounds how often the
+    /// rolling window can change, and so how smoothly the scope can move -- a 43 ms grant cannot look smoother than
+    /// ~23 updates a second however fast the panes are sampled.
+    /// </remarks>
+    public int? CaptureLatencyMs => (capture as WasapiRecorderWaveIn)?.LatencyMilliseconds;
+
     readonly IWaveIn capture;
     readonly float[] rolling; // interleaved; always holds the most-recent bufferSamplesPerChannel * Channels samples
     readonly object gate = new();
@@ -67,7 +79,7 @@ public sealed class RecordingAudioSource : IAudioSource
     /// shared-mode WASAPI dictates the format, so the device's channels are averaged after capture instead.</param>
     public RecordingAudioSource(int bufferSamplesPerChannel, string? device = null, bool loopback = false, bool mono = false)
     {
-        (capture, DeviceId, DeviceName) = CreateCapture(device, loopback, mono);
+        (capture, DeviceId, DeviceName) = CreateCapture(device, loopback, mono, bufferSamplesPerChannel);
         // On Windows this is the endpoint's real shared-mode mix format, so the check below is meaningful. On Linux
         // it is not: we ASK for float32 when constructing AlsaIn and it echoes the request straight back, so ALSA /
         // PulseAudio silently convert on our behalf. That conversion is also why a mono source (e.g. WSLg's
@@ -180,12 +192,13 @@ public sealed class RecordingAudioSource : IAudioSource
     #endregion
 
     #region Capture backends
-    static (IWaveIn Capture, string Id, string Name) CreateCapture(string? device, bool loopback, bool mono)
+    static (IWaveIn Capture, string Id, string Name) CreateCapture(string? device, bool loopback, bool mono,
+        int bufferSamplesPerChannel)
     {
         // Only ALSA lets us state the format we want; WASAPI shared mode dictates it, so --mono is folded in the
         // capture callback there instead (see FoldToMono).
         if (OperatingSystem.IsLinux()) return CreateAlsaCapture(device, loopback, mono);
-        if (OperatingSystem.IsWindows()) return CreateWasapiCapture(device, loopback);
+        if (OperatingSystem.IsWindows()) return CreateWasapiCapture(device, loopback, bufferSamplesPerChannel);
         throw new PlatformNotSupportedException("Live audio input needs Windows (WASAPI) or Linux (ALSA).");
     }
 
@@ -267,15 +280,24 @@ public sealed class RecordingAudioSource : IAudioSource
 
 #pragma warning disable CS0618 // WasapiCapture/WasapiLoopbackCapture are obsolete in NAudio 3 (superseded by
     [SupportedOSPlatform("windows")]
-    static (IWaveIn, string, string) CreateWasapiCapture(string? deviceId, bool loopback)
+    static (IWaveIn, string, string) CreateWasapiCapture(string? deviceId, bool loopback, int bufferSamplesPerChannel)
     {                                             // WasapiRecorder), but they share the IWaveIn contract with AlsaIn
         var enumerator = new MMDeviceEnumerator(); // -- one cross-platform path
         var device = deviceId is { Length: > 0 } id
             ? enumerator.GetDevice(id)
             : enumerator.GetDefaultAudioEndpoint(loopback ? DataFlow.Render : DataFlow.Capture, Role.Console);
+
+        // Size the capture buffer to the DISPLAY WINDOW, so one device callback carries one frame's worth of audio.
+        // That is what scope-tui does on all three of its backends, and it is what the legacy WasapiLoopbackCapture
+        // could not express: with the default buffer the scope sampled its rolling window several times per
+        // callback, so the waveform stepped at the callback rate instead of sliding. The engine has a floor of its
+        // own and may grant more -- LatencyMilliseconds reports what it actually gave us.
+        var rate = device.AudioClient.MixFormat.SampleRate;
+        var bufferMs = Math.Max(1, (int)Math.Round(1000.0 * bufferSamplesPerChannel / rate));
+
         // Loopback taps a render endpoint's mix. Note WASAPI delivers NOTHING while that endpoint is silent, so an
         // idle machine leaves the scope showing its last window rather than a flat line.
-        IWaveIn capture = loopback ? new WasapiLoopbackCapture(device) : new WasapiCapture(device);
+        IWaveIn capture = new WasapiRecorderWaveIn(device, loopback, bufferMs);
         return (capture, device.ID, device.FriendlyName);
     }
 #pragma warning restore CS0618

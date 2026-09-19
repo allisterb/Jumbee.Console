@@ -292,8 +292,11 @@ root.SetAction(async (parse, ct) =>
     // Generous limits now that this sits on its own full-width row rather than in a ninth of a pane header:
     // "Microphone Array (Realtek(R) Audio)" is 35 and "Speakers (Steam Streaming Speakers)" 35, so 44 shows the
     // real endpoint names whole and only trims the pathological ones.
+    // The granted capture buffer rides along for a device, because it is the ceiling on how often the picture can
+    // change: the panes cannot show new audio more often than the driver hands it over, however fast they sample.
     var sourceText = audio is RecordingAudioSource rec
         ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 44)}"
+          + (rec.CaptureLatencyMs is { } ms ? $" buf:{ms}ms" : "")
         : $"file:{Trim(Path.GetFileName(filePath), 44)}";
 
     // Each pane gets the tick scheme its x axis actually calls for, which is why --tick governs only the first:
