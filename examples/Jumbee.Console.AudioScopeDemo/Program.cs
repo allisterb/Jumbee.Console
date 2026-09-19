@@ -359,7 +359,14 @@ root.SetAction(async (parse, ct) =>
     {
         paintCount++;
         var now = DateTime.UtcNow;
-        if ((now - lastPoll).TotalSeconds >= 1) { framerate = paintCount; paintCount = 0; lastPoll = now; statusBar.Framerate = framerate; }
+        if ((now - lastPoll).TotalSeconds >= 1)
+        {
+            framerate = paintCount; paintCount = 0; lastPoll = now;
+            statusBar.Framerate = framerate;
+            // Report the overlap the file source ACHIEVED, not the one that was asked for. The two differ whenever
+            // the requested feed interval is shorter than the OS timer tick, which at the default it is.
+            if (audio is FileAudioSource paced) statusBar.Overlap = paced.AchievedOverlap;
+        }
 
         // Only reproportion on an ACTUAL terminal resize -- not every frame -- so a manual divider drag survives
         // between resizes (setting SplitPosition every frame would fight the drag and snap it back).
@@ -396,6 +403,9 @@ root.SetAction(async (parse, ct) =>
         // first frame is all zeros -- so a check content with "4096 samples decoded" would pass just as happily on a
         // decoder that returned nothing but zeros, which is the failure most worth catching here.
         var maxFrames = Math.Max(1, (int)Math.Ceiling(MaxSilentSeconds * audio.SampleRate / bufferSamples));
+        // Scanning, not watching: take a whole fresh window per call instead of the audio that has elapsed, or this
+        // loop would spin through its budget on near-identical windows and report a perfectly good track as silent.
+        if (audio is FileAudioSource scanSource) scanSource.LimitRate = false;
         var peak = Peak(frame);
         var scanned = 1;
         while (peak == 0.0 && scanned < maxFrames)

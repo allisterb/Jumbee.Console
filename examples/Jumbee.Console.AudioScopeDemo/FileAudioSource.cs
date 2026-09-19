@@ -1,5 +1,7 @@
 namespace ScopeTui;
 
+using System.Diagnostics;
+
 using NAudio.Wave;
 using NLayer.NAudioSupport;
 
@@ -21,8 +23,15 @@ public sealed class FileAudioSource : IAudioSource
     readonly WaveStream reader;
     readonly ISampleProvider sampler;
     readonly float[] window;      // interleaved; the frame handed out, retained across calls when overlapping
-    int advance;                  // interleaved samples of NEW audio per frame (window.Length when not overlapping)
+    readonly Stopwatch clock = new();
+    TimeSpan lastCall;            // when NextFrame last ran, so the next one can advance by the audio that went by
+    int lastAdvance;              // interleaved samples of NEW audio in the frame just handed out
     bool primed;
+
+    // Ceiling on how much audio one call will decode-and-discard to catch up after a stall. A pause longer than this
+    // (a debugger break, a resize storm) resynchronises to the present instead of decoding the whole backlog in one
+    // tick, which would stall the pump thread for as long as the pause itself.
+    const double MaxCatchUpSeconds = 0.5;
 
     /// <param name="overlap">Fraction of each frame re-used by the next one, 0 (none) to just under 1. Overlapping
     /// makes consecutive frames share audio so the display can refresh faster than one whole buffer at a time —
@@ -40,16 +49,44 @@ public sealed class FileAudioSource : IAudioSource
         Channels = reader.WaveFormat.Channels;
         SampleRate = reader.WaveFormat.SampleRate;
         window = new float[bufferSamplesPerChannel * Channels];
+        lastAdvance = window.Length;
         // Retain-and-shift rather than seeking the reader back: a shift is exact and codec-agnostic, where rewinding
-        // an MP3 snaps to a frame boundary. The pump ticks proportionally faster (see Program.cs), so the file still
-        // advances at realtime -- overlapping changes how much of each frame is NEW, not how fast the track plays.
-        SetOverlap(overlap);
+        // an MP3 snaps to a frame boundary. How much of each frame is new is decided per call by the clock (see
+        // NextAdvance), so `overlap` is now only a hint about how often the caller intends to read -- the pump sizes
+        // its interval from the same number, and the overlap that actually results is AchievedOverlap.
+        _ = overlap;
     }
 
+    /// <summary>
+    /// When <see langword="true"/> (the default) each frame advances by the audio that has actually elapsed since
+    /// the last call, so the track plays at real time. Set <see langword="false"/> to read a whole fresh window per
+    /// call as fast as it is called, for scanning a file rather than watching it.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors scope-tui's <c>limit_rate</c>. The scan in <c>--verify</c> needs it off: it pulls frames in a tight
+    /// loop looking for the first signal, and a paced source would hand it the same near-identical window every time
+    /// and report the track as silent.
+    /// </remarks>
+    public bool LimitRate { get; set; } = true;
+
+    /// <summary>
+    /// The fraction of the frame just handed out that was re-used from the previous one, 0 (all new) to just under 1.
+    /// </summary>
+    /// <remarks>
+    /// Under <see cref="LimitRate"/> the overlap is an OUTCOME, not a setting: it is whatever the gap between calls
+    /// left over. Worth reporting rather than echoing what was requested, because the two differ — a feed cannot ask
+    /// the OS for an interval shorter than its timer tick, so a request below that silently becomes less overlap
+    /// than it looks.
+    /// </remarks>
+    public double AchievedOverlap => 1.0 - ((double)lastAdvance / window.Length);
+
     /// <inheritdoc/>
-    public void SetOverlap(double overlap) =>
-        // At least one frame of audio per call, so a read always makes progress however extreme the overlap.
-        advance = Math.Max(Channels, (int)Math.Round(window.Length * (1.0 - Math.Clamp(overlap, 0.0, 0.95))));
+    /// <remarks>
+    /// A no-op, as it is for a live device. The frame advance now comes from the clock rather than a setting, so
+    /// overlap is governed by how often this source is read — ask for it by ticking faster, not by telling the
+    /// source. See <see cref="AchievedOverlap"/>.
+    /// </remarks>
+    public void SetOverlap(double overlap) { }
 
     /// <summary>
     /// Reads the next buffer's worth of samples (looping back to the start at end-of-file, since this is a
@@ -58,9 +95,12 @@ public sealed class FileAudioSource : IAudioSource
     /// </summary>
     public double[][] NextFrame()
     {
+        var advance = NextAdvance();
+        lastAdvance = Math.Min(advance, window.Length);
+
         if (!primed || advance >= window.Length)
         {
-            // First frame, or no overlap: the whole window is new audio.
+            // First frame, or the caller was away for longer than a whole window: the entire window is new audio.
             primed = true;
             var read = ReadLooping(window);
             return Deinterleave(window, Channels, read);
@@ -71,6 +111,54 @@ public sealed class FileAudioSource : IAudioSource
         Array.Copy(window, advance, window, 0, window.Length - advance);
         ReadLooping(window.AsSpan(window.Length - advance));
         return Deinterleave(window, Channels);
+    }
+
+    /// <summary>
+    /// Interleaved samples of new audio this frame should carry: the audio that has actually gone by since the last
+    /// call.
+    /// </summary>
+    /// <remarks>
+    /// <b>Why the clock and not a fixed step.</b> Advancing by a constant per call only plays at real time if the
+    /// caller is punctual, and a timer-driven caller is not: a feed waits with <c>Task.Delay</c>, which Windows
+    /// rounds up to its ~15.6 ms system tick, so an 11 ms request lands at ~15 ms. A fixed step then carries 11 ms
+    /// of audio per 15 ms of wall clock and the track plays at ~71% speed — measurably slow, and silently so, since
+    /// every frame still looks perfectly well formed. Reading the clock instead makes a late call carry MORE audio,
+    /// which is the right way to be wrong: coarser steps at the true speed, rather than smooth steps at the wrong
+    /// one. A live device gets this for free because its window advances on the device's clock however often it is
+    /// sampled; this is the file source catching up with that.
+    /// </remarks>
+    int NextAdvance()
+    {
+        if (!LimitRate) return window.Length;   // scanning, not watching: a whole fresh window per call
+
+        if (!clock.IsRunning)
+        {
+            clock.Start();
+            lastCall = clock.Elapsed;
+            return window.Length;               // first frame is all new audio
+        }
+
+        var now = clock.Elapsed;
+        var elapsed = now - lastCall;
+        lastCall = now;
+
+        // At least one frame, so a caller that spins faster than a single sample still makes progress rather than
+        // handing out the same window forever.
+        var frames = (long)Math.Round(elapsed.TotalSeconds * SampleRate);
+        var interleaved = Math.Max(Channels, frames * Channels);
+        if (interleaved <= window.Length) return (int)interleaved;
+
+        // Away for longer than a window: decode and discard the audio in between so playback stays anchored to the
+        // clock rather than drifting by every hiccup, then take a whole fresh window. Capped (see MaxCatchUpSeconds).
+        var skip = Math.Min(interleaved - window.Length, (long)(MaxCatchUpSeconds * SampleRate) * Channels);
+        while (skip > 0)
+        {
+            var chunk = (int)Math.Min(skip, window.Length);
+            ReadLooping(window.AsSpan(0, chunk));
+            skip -= chunk;
+        }
+
+        return window.Length;
     }
 
     // NAudio 3's ISampleProvider.Read is Span-based (no offset/count) -- read into the whole span, then top up from
