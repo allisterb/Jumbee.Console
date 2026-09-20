@@ -38,13 +38,7 @@ public sealed class FileAudioSource : IAudioSource
     /// what a spectrum analyser does to keep a large FFT watchable.</param>
     public FileAudioSource(string path, int bufferSamplesPerChannel, double overlap = 0.0)
     {
-        reader = Path.GetExtension(path).ToLowerInvariant() switch
-        {
-            ".mp3" => new Mp3FileReaderBase(path, waveFormat => new Mp3FrameDecompressor(waveFormat)),
-            ".wav" => new WaveFileReader(path),
-            var ext => throw new NotSupportedException(
-                $"Unsupported audio file type '{ext}'. Use .mp3 or .wav, or capture a device with the 'live' input."),
-        };
+        reader = OpenReader(path);
         sampler = reader.ToSampleProvider();
         Channels = reader.WaveFormat.Channels;
         SampleRate = reader.WaveFormat.SampleRate;
@@ -56,6 +50,16 @@ public sealed class FileAudioSource : IAudioSource
         // its interval from the same number, and the overlap that actually results is AchievedOverlap.
         _ = overlap;
     }
+
+    /// <summary>Opens a decoder for a supported audio file. Shared with <see cref="PlayingFileAudioSource"/>, which
+    /// reads the same formats but hands the samples to an output device instead of pulling them itself.</summary>
+    internal static WaveStream OpenReader(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".mp3" => new Mp3FileReaderBase(path, waveFormat => new Mp3FrameDecompressor(waveFormat)),
+        ".wav" => new WaveFileReader(path),
+        var ext => throw new NotSupportedException(
+            $"Unsupported audio file type '{ext}'. Use .mp3 or .wav, or capture a device with the 'live' input."),
+    };
 
     /// <summary>
     /// When <see langword="true"/> (the default) each frame advances by the audio that has actually elapsed since

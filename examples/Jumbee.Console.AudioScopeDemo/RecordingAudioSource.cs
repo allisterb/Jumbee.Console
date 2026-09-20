@@ -60,15 +60,9 @@ public sealed class RecordingAudioSource : IAudioSource
     public int? CaptureLatencyMs => (capture as WasapiRecorderWaveIn)?.LatencyMilliseconds;
 
     readonly IWaveIn capture;
-    readonly float[] rolling; // interleaved; always holds the most-recent bufferSamplesPerChannel * Channels samples
-    readonly object gate = new();
+    readonly RollingWindow window;                // the most-recent window, shared with the playing-file source
     readonly int captureChannels;                 // what the DEVICE delivers, which --mono may fold down from
-    float[] foldScratch = [];                     // grows to the largest callback seen; only touched under `gate`
-    // How many capture callbacks have rolled samples in, and which of those NextFrame has already handed out. Both
-    // touched only under `gate`. Starting lastSeenWrite BELOW writes is what makes the first call always yield a
-    // frame, so the panes have something to draw before the device has delivered anything.
-    long writes;
-    long lastSeenWrite = -1;
+    float[] foldScratch = [];                     // grows to the largest callback seen; capture thread only
 
     /// <param name="bufferSamplesPerChannel">Size of the rolling latest-window, per channel.</param>
     /// <param name="device">Endpoint to open, already resolved by <see cref="ResolveDevice"/>; <see langword="null"/>
@@ -95,7 +89,7 @@ public sealed class RecordingAudioSource : IAudioSource
         // Linux already opened a 1-channel stream if it could, in which case there is nothing left to fold.
         Channels = mono ? 1 : captureChannels;
         SampleRate = capture.WaveFormat.SampleRate;
-        rolling = new float[bufferSamplesPerChannel * Channels];
+        window = new RollingWindow(bufferSamplesPerChannel * Channels);
         capture.DataAvailable += OnData;
         capture.StartRecording();
     }
@@ -295,7 +289,8 @@ public sealed class RecordingAudioSource : IAudioSource
         // The difference is all latency, and it is measurable: the engine grants exactly what is asked for, while the
         // callback cadence stays at the device period regardless -- 43 ms and 10 ms requests both deliver every
         // 10 ms, so a window-sized buffer was ~33 ms of delay between the audio and the picture, bought for nothing.
-        var periodMs = device.AudioClient.DefaultDevicePeriod / 10_000.0;   // 100-ns units
+        using var client = device.CreateAudioClient();   // a property access would create (and leak) one per read
+        var periodMs = client.DefaultDevicePeriod / 10_000.0;   // 100-ns units
         var bufferMs = Math.Max(2, (int)Math.Ceiling(periodMs * 2));
 
         // Loopback taps a render endpoint's mix. Note WASAPI delivers NOTHING while that endpoint is silent, so an
@@ -307,17 +302,13 @@ public sealed class RecordingAudioSource : IAudioSource
     #endregion
 
     // Capture thread. The callback bytes ARE float samples (IEEE float, verified in the ctor), so reinterpret and
-    // roll them into `rolling`, keeping only the newest window. The WaveInEventArgs buffer is reused after this
-    // returns, so we copy out of it here.
+    // roll them into the window, keeping only the newest. The WaveInEventArgs buffer is reused after this returns,
+    // so we copy out of it here.
     void OnData(object? sender, WaveInEventArgs e)
     {
         if (e.BytesRecorded <= 0) return;   // nothing rolled in, so nothing for NextFrame to report as new
         var samples = MemoryMarshal.Cast<byte, float>(e.Buffer.AsSpan(0, e.BytesRecorded));
-        lock (gate)
-        {
-            Roll(Channels == captureChannels ? samples : FoldToMono(samples));
-            writes++;   // under `gate`, so NextFrame's compare-and-take is atomic against this
-        }
+        window.Write(Channels == captureChannels ? samples : FoldToMono(samples));
     }
 
     // --mono against a device that only offers multi-channel (i.e. Windows, where shared-mode WASAPI picks the
@@ -336,37 +327,14 @@ public sealed class RecordingAudioSource : IAudioSource
         return foldScratch.AsSpan(0, frames);
     }
 
-    // Caller holds `gate`.
-    void Roll(ReadOnlySpan<float> samples)
-    {
-        var n = samples.Length;
-        if (n >= rolling.Length)
-        {
-            samples[^rolling.Length..].CopyTo(rolling);            // callback bigger than a window: keep its tail
-        }
-        else
-        {
-            Array.Copy(rolling, n, rolling, 0, rolling.Length - n); // shift older samples left...
-            samples.CopyTo(rolling.AsSpan(rolling.Length - n));     // ...and append the newest at the tail
-        }
-    }
-
-    public double[][]? NextFrame()
-    {
-        float[] snapshot;
-        lock (gate)
-        {
-            // Nothing has been pushed into `rolling` since the last call, so the frame we would build is the one the
-            // bus already holds. Say so instead of cloning the window and de-interleaving it into a fresh matrix
-            // that would be compared, found equal, and dropped. The pump ticks several times per device callback, so
-            // this is the common case on any capture device, not an edge case.
-            if (writes == lastSeenWrite) return null;
-            lastSeenWrite = writes;
-            snapshot = (float[])rolling.Clone();
-        }
-
-        return FileAudioSource.Deinterleave(snapshot, Channels);
-    }
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Null when no callback has arrived since the last call: the frame we would build is the one the bus already
+    /// holds, so saying so costs a comparison where building it costs a clone and a de-interleave. The pump ticks
+    /// several times per device callback, so on any capture device that is the common case, not an edge case.
+    /// </remarks>
+    public double[][]? NextFrame() =>
+        window.TrySnapshot() is { } snapshot ? FileAudioSource.Deinterleave(snapshot, Channels) : null;
 
     /// <inheritdoc/>
     /// <remarks>No-op. This source is a rolling latest-window, so how much consecutive frames share is decided

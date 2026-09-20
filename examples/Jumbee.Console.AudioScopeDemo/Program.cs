@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 
 using Jumbee.Console;
 using ScopeTui;
@@ -77,15 +78,34 @@ var loopbackOpt = new Option<bool>("--loopback")
 {
     Description = "Scope what is PLAYING rather than what is recording (WASAPI loopback / PulseAudio monitor).",
 };
+var playOpt = new Option<bool>("--play")
+{
+    Description = "Play the file through the default output device and scope the samples on their way there, so the "
+                + "picture and the sound are the same audio at the same moment. File input only.",
+};
 var overlapOpt = new Option<double>("--overlap")
 {
-    Description = "Fraction of each frame the next one re-uses (0-0.95). Refreshes faster than one buffer at a time, at no cost in FFT size.",
-    // Defaulted ON. Measured over 10s wall at the default buffer: 17% of a core at 0, 23% at 0.75, and 23% at 0.95 --
-    // the paint loop dominates and the extra feed work barely registers, so the smoother display is nearly free.
-    // 0.75 rather than higher because it is the conventional analyser value, every paint still gets a fresh frame
-    // (86 feeds/sec against a 60fps cap), and it stays clear of the MinFeedMs floor that makes ~0.95 quietly
-    // deliver ~0.91.
-    DefaultValueFactory = _ => 0.75,
+    Description = "Fraction of each frame the next one re-uses. Refreshes faster than one buffer at a time, at no "
+                + "cost in FFT size. Clamped to what the OS timer can actually deliver; the status bar shows what "
+                + "was achieved.",
+    // 0.5 rather than 0.75. Both are honest requests, but they are not the settings they look like, because the
+    // pump's interval is rounded up to the OS timer tick (~15.6ms on stock Windows). Measured at the default
+    // buffer, 2048 samples = a 42.7ms window:
+    //
+    //     requested   asks for   really runs at   achieved overlap   frames/s
+    //       0.75        11ms         18.7ms             62%             54
+    //       0.50        21ms         36.7ms             27%             27
+    //       0.25        32ms         54.6ms              0%             18   <- and 12ms/frame never drawn
+    //
+    // So the knob has three positions here, not a continuum: 0.35-0.60 all land on the middle one, and anything
+    // at or below 0.25 collapses onto the same lossy feed as 0. 0.5 picks the middle: each frame carries more new
+    // audio, so a transient does not linger across several frames the way it does at 62% -- which reads as a
+    // crisper, more responsive picture even though the measured latency is slightly higher (~37ms vs ~19ms).
+    // Raise it to 0.75 for the smoothest scroll, at twice the frame rate and half the persistence.
+    //
+    // (The old note here claimed 86 feeds/sec at 0.75. That was arithmetic from the requested interval, before the
+    // timer floor was measured; it is 54.)
+    DefaultValueFactory = _ => 0.5,
 };
 var tickOpt = new Option<int>("--tick")
 {
@@ -114,7 +134,7 @@ var verifyOpt = new Option<bool>("--verify")
 
 var root = new RootCommand("AudioScope -- view an oscilloscope, spectroscope, and vectorscope from audio input.")
 {
-    inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, monoOpt,
+    inputArg, pathOpt, fpsOpt, bufferOpt, scatterOpt, deviceOpt, loopbackOpt, playOpt, monoOpt,
     overlapOpt, tickOpt, schemeOpt, listDevicesOpt, verifyOpt,
 };
 
@@ -127,6 +147,7 @@ root.SetAction(async (parse, ct) =>
     var startScatter = parse.GetValue(scatterOpt);
     var deviceSpec = parse.GetValue(deviceOpt);
     var loopback = parse.GetValue(loopbackOpt);
+    var play = parse.GetValue(playOpt);
     var mono = parse.GetValue(monoOpt);
     // In SAMPLES, so it is bounded by the window rather than by the pane: one gridline per sample is meaningless,
     // and a step wider than the window would draw none at all. XTickBuilders thins further if the pane is too narrow
@@ -181,8 +202,12 @@ root.SetAction(async (parse, ct) =>
     {
         audio = syntheticAudio ? new VerifyToneSource(bufferSamples) : live
             // A live device already hands out a rolling latest-window, so overlapping is purely a matter of sampling
-            // it more often -- nothing to configure on the source. A file has to retain the previous frame's tail.
+            // it more often -- nothing to configure on the source.
             ? new RecordingAudioSource(bufferSamples, RecordingAudioSource.ResolveDevice(deviceSpec, loopback), loopback, mono)
+            // --play makes the file a PUSH source too: the sound card pulls the samples and the scope taps them on
+            // the way past, so it is clocked by the device rather than by a timer. Without it the file is pulled and
+            // paced against the wall clock instead, and nothing is audible.
+            : play ? new PlayingFileAudioSource(filePath, bufferSamples)
             : new FileAudioSource(filePath, bufferSamples, overlap);
     }
     catch (Exception ex)
@@ -215,24 +240,59 @@ root.SetAction(async (parse, ct) =>
     // digital silence -- so a 40-frame scan covered 1.7s at the default buffer and failed, while the same 40 frames
     // at --buffer 4096 covered 3.4s and passed. The flag would have been reporting the buffer size, not the audio.
     const double MaxSilentSeconds = 8.0;
-    const int MinFeedMs = 4;
+
+    // THE REAL FLOOR ON A FEED INTERVAL IS THE OS TIMER TICK, not a constant we pick. Control.Feed waits with
+    // Task.Delay, which rounds up to the system timer resolution -- ~15.6ms on stock Windows, though any process on
+    // the box can raise it, which is exactly why this is measured rather than assumed. Measured here once: a handful
+    // of 1ms delays, median, so one outlier cannot skew it.
+    //
+    // Everything below depends on it. Asking for an interval shorter than a tick gets you a tick, so beyond that
+    // point more overlap changes nothing; asking for one longer than the window means consecutive frames do not
+    // even meet and the audio in between is never drawn.
+    var timerTickMs = MeasureTimerTick();
+    var windowMs = 1000.0 * bufferSamples / audio.SampleRate;
+
+    // What the pump ASKS for, and what it will actually get once the tick rounds it up.
     TimeSpan FeedIntervalFor(double ov) => TimeSpan.FromMilliseconds(
-        Math.Max(MinFeedMs, (int)Math.Round(1000.0 * bufferSamples * (1.0 - ov) / audio.SampleRate)));
+        Math.Max(1, (int)Math.Round(1000.0 * bufferSamples * (1.0 - ov) / audio.SampleRate)));
+    double ActualIntervalMs(double ov) =>
+        Math.Ceiling(FeedIntervalFor(ov).TotalMilliseconds / timerTickMs) * timerTickMs;
+
+    // What the feed ACHIEVES, from the interval it will really run at rather than the one requested. Negative would
+    // mean frames with a gap between them, which the clamp below rules out, so it floors at zero.
+    double AchievedOverlap(double ov) => Math.Max(0.0, 1.0 - (ActualIntervalMs(ov) / windowMs));
+
+    // The reachable range, both ends of it:
+    //   CEILING - once the interval is down to one tick it cannot get shorter, so every higher request lands on the
+    //   same feed and changes nothing.
+    //   FLOOR   - the interval must not exceed the window, or consecutive frames fail to meet and audio falls
+    //   through the seam unseen. On stock Windows with the default buffer that rules out everything below ~0.27:
+    //   --overlap 0.25 and --overlap 0 both quantised to 3 ticks (54.6ms against a 42.7ms window) and dropped ~12ms
+    //   of every frame, silently.
+    var maxOverlap = Math.Clamp(1.0 - (timerTickMs / windowMs), 0.0, 0.95);
+    // Whole ticks that fit in a window, then the longest INTEGER-millisecond ask that still rounds up to no more
+    // than that many. The second floor is the one that matters: the ask is whole milliseconds, so deriving the
+    // bound straight from ticks-times-window yields an ask one millisecond too long, which then rounds up to an
+    // extra tick and drops audio -- the exact bug this clamp exists to prevent.
+    var ticksPerWindow = Math.Max(1.0, Math.Floor(windowMs / timerTickMs));
+    var longestAskMs = Math.Floor(ticksPerWindow * timerTickMs);
+    var minOverlap = Math.Clamp(1.0 - (longestAskMs / windowMs), 0.0, maxOverlap);
+    overlap = Math.Clamp(overlap, minOverlap, maxOverlap);
     var feedInterval = FeedIntervalFor(overlap);
 
-    // What the feed ACHIEVES, which the floor above (and the ms rounding) can hold below what was asked for -- at the
-    // default buffer, --overlap 0.95 really runs at 0.91. Report the achieved value so the readout never overstates.
-    double AchievedOverlap(double ov) =>
-        Math.Max(0.0, 1.0 - (FeedIntervalFor(ov).TotalMilliseconds * audio.SampleRate / 1000.0 / bufferSamples));
+    static double MeasureTimerTick()
+    {
+        var samples = new List<double>();
+        for (var i = 0; i < 5; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            Thread.Sleep(1);
+            samples.Add(sw.Elapsed.TotalMilliseconds);
+        }
 
-    // The floor also caps how much overlap is REACHABLE: once the tick is at MinFeedMs it cannot get shorter, so every
-    // higher request lands on the same feed and changes nothing. Clamp to that ceiling rather than accepting values
-    // that do nothing -- at --buffer 384 / 48kHz one window is 8ms, so the ceiling is 0.50 and without this the
-    // readout sat at 50 while [ ] silently rebuilt all four feeds on every press. Small buffers are already fast
-    // enough that they need little overlap: 384 samples refreshes 125 times a second before any is applied.
-    var maxOverlap = Math.Clamp(1.0 - (MinFeedMs * audio.SampleRate / 1000.0 / bufferSamples), 0.0, 0.95);
-    overlap = Math.Min(overlap, maxOverlap);
-    feedInterval = FeedIntervalFor(overlap);
+        samples.Sort();
+        return Math.Clamp(samples[samples.Count / 2], 1.0, 50.0);
+    }
 
     // The single fan-out point and the single decoder that fills it (see ChannelBus / AudioPump).
     var bus = new ChannelBus();
@@ -294,10 +354,16 @@ root.SetAction(async (parse, ct) =>
     // real endpoint names whole and only trims the pathological ones.
     // The granted capture buffer rides along for a device, because it is the ceiling on how often the picture can
     // change: the panes cannot show new audio more often than the driver hands it over, however fast they sample.
-    var sourceText = audio is RecordingAudioSource rec
-        ? $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 44)}"
-          + (rec.CaptureLatencyMs is { } ms ? $" buf:{ms}ms" : "")
-        : $"file:{Trim(Path.GetFileName(filePath), 44)}";
+    var sourceText = audio switch
+    {
+        RecordingAudioSource rec => $"device:{(loopback ? "loop" : "live")}/{Trim(rec.DeviceName, 44)}"
+                                    + (rec.CaptureLatencyMs is { } ms ? $" buf:{ms}ms" : ""),
+        // The output latency is how far the picture LEADS the sound: the tap sees a block when the device asks for
+        // it, one buffer before it is audible.
+        PlayingFileAudioSource p => $"play:{Trim(Path.GetFileName(filePath), 30)} -> {Trim(p.OutputName, 30)}"
+                                    + (p.OutputLatencyMs is { } lead ? $" lead:{lead}ms" : ""),
+        _ => $"file:{Trim(Path.GetFileName(filePath), 44)}",
+    };
 
     // Each pane gets the tick scheme its x axis actually calls for, which is why --tick governs only the first:
     //   oscillo  x = sample index      -> a gridline every --tick samples, labelled with the sample number
@@ -531,7 +597,8 @@ root.SetAction(async (parse, ct) =>
     var retuning = false;
     async void SetOverlap(double next)
     {
-        next = Math.Clamp(next, 0.0, maxOverlap);
+        next = Math.Clamp(next, minOverlap, maxOverlap);   // the floor matters as much as the ceiling: below it,
+                                                           // consecutive frames stop meeting and audio goes unseen
         // Re-entrancy guard: each change tears down and rebuilds four feeds asynchronously, so a held key would
         // otherwise interleave two rebuilds and leak a feed.
         if (retuning || quitting || Math.Abs(next - overlap) < 1e-9) return;
@@ -552,19 +619,20 @@ root.SetAction(async (parse, ct) =>
         finally { retuning = false; }
     }
 
-    // Step until the FEED actually differs, rather than by a fixed 0.05. The feed period is a whole number of
-    // milliseconds, so a short window quantises coarsely -- at --buffer 384 (an 8.7ms window) there are only about
-    // nine distinct periods, and a 0.05 step lands on the same one two presses running, making the key look dead.
-    // Skipping to the next distinct period means every press changes something at any buffer size.
+    // Step until the feed ACTUALLY differs, rather than by a fixed 0.05. The step has to be measured against the
+    // interval the pump will really run at, not the one it asks for: the ask is rounded up to a whole timer tick,
+    // so several distinct requests collapse onto one period. At the default buffer only three periods exist in the
+    // whole reachable range, and stepping by requested milliseconds would spend most presses rebuilding four feeds
+    // to arrive at the same rate -- a key that looks dead while doing real work.
     void StepOverlap(int direction)
     {
-        var currentMs = FeedIntervalFor(overlap).TotalMilliseconds;
+        var currentMs = ActualIntervalMs(overlap);
         var next = overlap;
-        for (var i = 0; i < 40; i++)   // bounded: 0..maxOverlap can hold at most 20 steps of 0.05 either way
+        for (var i = 0; i < 40; i++)   // bounded: the reachable range holds at most 20 steps of 0.05 either way
         {
-            next = Math.Clamp(next + (direction * 0.05), 0.0, maxOverlap);
-            if (FeedIntervalFor(next).TotalMilliseconds != currentMs) break;
-            if (next <= 0.0 || next >= maxOverlap) break;   // at an end: nothing further to reach
+            next = Math.Clamp(next + (direction * 0.05), minOverlap, maxOverlap);
+            if (Math.Abs(ActualIntervalMs(next) - currentMs) > 1e-9) break;
+            if (next <= minOverlap || next >= maxOverlap) break;   // at an end: nothing further to reach
         }
         SetOverlap(next);
     }
