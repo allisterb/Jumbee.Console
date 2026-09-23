@@ -6,26 +6,26 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <Repo>C:\Projects\Jumbee.Console</Repo>
+    <IsPackable>false</IsPackable>
+    <!-- Derived from this file's own location, never hard-coded. An absolute path here is invisible to the build
+         script's sln guard (which only inspects the .sln) and breaks every checkout but the author's. That is the
+         failure that broke the Linux build for four days. -->
+    <Repo>$(MSBuildThisFileDirectory)..\..</Repo>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The Wolf3D harness lives in a SUBDIRECTORY, and the SDK's default glob would sweep its sources into this
-         project and break it. Exclude it explicitly; any future sibling harness needs the same line. -->
-    <Compile Remove="wolf3d\**\*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- The demo's own sources, minus its Program.cs entry point. -->
+    <!-- The demo's own sources, minus its Program.cs entry point. Anything the demo gains (a package reference
+         especially) has to be mirrored here, or this project stops compiling. That has happened twice. -->
     <Compile Include="$(Repo)\examples\Jumbee.Console.3DSandboxDemo\*.cs"
              Exclude="$(Repo)\examples\Jumbee.Console.3DSandboxDemo\Program.cs" />
   </ItemGroup>
 
   <!-- Same fork/vendored references examples/Directory.Build.props gives the real demo projects. -->
-  <Import Project="C:\Projects\Jumbee.Console\src\ExternalReferences.props" />
+  <Import Project="$(Repo)\src\ExternalReferences.props" />
 
   <ItemGroup>
     <PackageReference Include="Box3D.NET" Version="0.3.0" />
+    <PackageReference Include="Ply.Net" Version="5.6.3" />
     <ProjectReference Include="$(Repo)\src\Jumbee.Console\Jumbee.Console.csproj" />
     <ProjectReference Include="$(Repo)\src\Jumbee.Console.Snapshot\Jumbee.Console.Snapshot.csproj" />
   </ItemGroup>

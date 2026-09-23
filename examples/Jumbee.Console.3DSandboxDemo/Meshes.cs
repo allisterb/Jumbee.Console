@@ -58,6 +58,24 @@ public sealed class Mesh
     /// <summary>Triangle corner indices, three per triangle.</summary>
     public int[] Indices { get; }
 
+    /// <summary>Texture coordinates, or <see langword="null"/> when the mesh carries none.</summary>
+    public Vector2[]? Uvs { get; init; }
+
+    /// <summary>
+    /// Per-corner indices into <see cref="Uvs"/>, three per triangle and parallel to <see cref="Indices"/>, or
+    /// <see langword="null"/> when <see cref="Uvs"/> runs parallel to <see cref="Vertices"/> and
+    /// <see cref="Indices"/> addresses both.
+    /// </summary>
+    /// <remarks>
+    /// A separate index buffer because OBJ genuinely needs one — measured on the sample models, 723 of 800 face
+    /// corners in <c>plane.obj</c> have <c>vt != v</c>, and <c>LP_Sneaker3.obj</c> carries 1,461,581 vertices
+    /// against 1,557,366 UVs. A generated mesh has no such split and leaves this null.
+    /// </remarks>
+    public int[]? UvIndices { get; init; }
+
+    /// <summary>Whether this mesh can be textured.</summary>
+    public bool HasUvs => Uvs is { Length: > 0 };
+
     /// <summary>Number of triangles.</summary>
     public int TriangleCount => Indices.Length / 3;
 
@@ -78,6 +96,13 @@ public sealed class Mesh
     /// across a face a few sub-pixels wide, the average of the three corners lands on the same quantised colour the
     /// blend would have produced nearly everywhere. <c>PlyLoader</c> therefore averages corner colours at load and
     /// the renderers stay simple.
+    /// </para>
+    /// <para>
+    /// <b><see cref="Uvs"/> does not follow that reasoning, and the difference is the point.</b> A corner colour is
+    /// an approximation of one value per face, so averaging it loses almost nothing; a texture coordinate is an
+    /// <em>address</em>, and the variation it fetches lives <em>inside</em> the face rather than across its corners.
+    /// Averaging it would sample one texel per triangle and discard the whole texture. So UVs take the per-pixel
+    /// path and pay the barycentric interpolation this paragraph declines to pay for colour.
     /// </para>
     /// </remarks>
     public Color[]? FaceColors { get; init; }
@@ -129,12 +154,19 @@ public static class Meshes
     /// </remarks>
     public static Mesh TorusKnot(int p = 2, int q = 3, int segments = 120, int sides = 10, float radius = 0.5f)
     {
-        var vertices = new Vector3[segments * sides];
+        // One extra ring around the curve and one extra around the tube, each an exact duplicate of the seam it
+        // closes against. The geometry is unchanged — the duplicated vertices coincide — but it lets the UVs run
+        // 0..1 without the last column of quads having to wrap u backwards from 1 to 0, which is the classic seam
+        // artefact and reads as a defect in a render rather than as a texture.
+        var cols = segments + 1;
+        var rows = sides + 1;
+        var vertices = new Vector3[cols * rows];
+        var uvs = new Vector2[cols * rows];
         var indices = new int[segments * sides * 6];
 
-        for (var i = 0; i < segments; i++)
+        for (var i = 0; i < cols; i++)
         {
-            var u = MathF.Tau * i / segments;
+            var u = MathF.Tau * (i % segments) / segments;
             var centre = KnotPoint(u, p, q);
             // A Frenet-ish frame from the curve's tangent, so the tube keeps a consistent cross-section.
             var tangent = Vector3.Normalize(KnotPoint(u + 0.01f, p, q) - centre);
@@ -142,11 +174,21 @@ public static class Meshes
             if (!float.IsFinite(normal.X)) normal = Vector3.UnitX;
             var binormal = Vector3.Cross(tangent, normal);
 
-            for (var j = 0; j < sides; j++)
+            for (var j = 0; j < rows; j++)
             {
-                var v = MathF.Tau * j / sides;
+                var v = MathF.Tau * (j % sides) / sides;
                 var offset = (normal * MathF.Cos(v)) + (binormal * MathF.Sin(v));
-                vertices[(i * sides) + j] = centre + (offset * 0.55f);
+                vertices[(i * rows) + j] = centre + (offset * 0.55f);
+                // u runs along the curve, v around the tube. The natural parameterisation, and it is strongly
+                // ANISOTROPIC: measured, u spans 31.90 units of arc against v's 3.46, a ratio of 9.23:1. So a
+                // checker at one scale is 9:1 rectangles, and what it looks like is stripes running lengthwise
+                // along the tube that swap phase wherever a u boundary crosses — not a square checkerboard.
+                //
+                // Left alone deliberately. Separate u/v scales would make the stand-in prettier and would be
+                // tuning the instrument to flatter itself; a real .obj carries UVs an authoring tool laid out at
+                // roughly uniform texel density, so the stretch is a property of this generated mesh and not of
+                // the feature being measured.
+                uvs[(i * rows) + j] = new Vector2((float)i / segments, (float)j / sides);
             }
         }
 
@@ -155,10 +197,10 @@ public static class Meshes
         {
             for (var j = 0; j < sides; j++)
             {
-                int a = (i * sides) + j;
-                int b = (((i + 1) % segments) * sides) + j;
-                int c = (((i + 1) % segments) * sides) + ((j + 1) % sides);
-                int d = (i * sides) + ((j + 1) % sides);
+                int a = (i * rows) + j;
+                int b = ((i + 1) * rows) + j;
+                int c = ((i + 1) * rows) + j + 1;
+                int d = (i * rows) + j + 1;
                 indices[k++] = a; indices[k++] = b; indices[k++] = c;
                 indices[k++] = a; indices[k++] = c; indices[k++] = d;
             }
@@ -174,7 +216,7 @@ public static class Meshes
             for (var i = 0; i < vertices.Length; i++) vertices[i] *= s;
         }
 
-        return new Mesh(vertices, indices);
+        return new Mesh(vertices, indices) { Uvs = uvs };
     }
     #endregion
 

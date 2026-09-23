@@ -145,6 +145,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3DSandboxDemo", "3DSandboxD
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.Wolf3DDemo", "..\examples\Jumbee.Console.Wolf3DDemo\Jumbee.Console.Wolf3DDemo.csproj", "{26D7F366-1FA7-4D07-911D-761D261A4427}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wolf3dcheck", "..\tests\Jumbee.Console.Wolf3DDemo.Harness\wolf3dcheck.csproj", "{3900B505-1DEB-4E0D-9640-81867F62CBA9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "render3d", "..\tests\Jumbee.Console.SandboxDemo.Harness\render3d.csproj", "{051CCD3D-0758-46AB-BCEA-3829CFD2F201}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -503,6 +507,30 @@ Global
 		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x64.Build.0 = Release|Any CPU
 		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x86.ActiveCfg = Release|Any CPU
 		{26D7F366-1FA7-4D07-911D-761D261A4427}.Release|x86.Build.0 = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|x64.Build.0 = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Debug|x86.Build.0 = Debug|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|x64.ActiveCfg = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|x64.Build.0 = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|x86.ActiveCfg = Release|Any CPU
+		{3900B505-1DEB-4E0D-9640-81867F62CBA9}.Release|x86.Build.0 = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|x64.Build.0 = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Debug|x86.Build.0 = Debug|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|Any CPU.Build.0 = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x64.ActiveCfg = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x64.Build.0 = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x86.ActiveCfg = Release|Any CPU
+		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

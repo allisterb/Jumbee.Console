@@ -11,7 +11,7 @@ if (args.Contains("--probe")) { Probe.LaunchProbe.Run(98, 30); return 0; }
 if (args.Contains("--load"))
 {
     var dir = args.FirstOrDefault(a => a.Contains("dir="))?.Split('=')[1]
-              ?? @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
+              ?? RepoPaths.At("reference", "projects", "voxcii-main", "models");
     foreach (var f in Directory.GetFiles(dir).Where(ModelLoader.IsModel).OrderBy(x => x))
     {
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
@@ -123,6 +123,127 @@ if (args.Contains("--aa"))
     return 0;
 }
 
+// --- Textures, Phase 0: what does a per-sub-pixel tint cost the emitter? ----------------------------------------
+// The question that decides whether image textures are worth building at all, and it is asked BEFORE any decoder,
+// parser or asset is paid for -- see docs/internal/3D Textures Plan.md §4. Three procedural sources bracket the
+// range (checker cheapest, noise worst; see TextureMode) against the same frame untextured.
+//
+// Two passes, in this order and not the other. Pass A reads a settled frame through ConsoleSnapshot; pass B runs
+// the real compositor, which replaces ConsoleManager's console and orbits the camera, so nothing ConsoleSnapshot
+// needs can survive it.
+if (args.Contains("--texture"))
+{
+    var texOut = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1];
+    var texKnotId = Meshes.Register(Meshes.TorusKnot(), "knot");
+    var texRunner = new PhysicsRunner(s =>
+    {
+        s.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
+        s.GroundY = 0f;
+        // Knots rather than spheres: they are the only generated mesh carrying UVs, and they are also what a real
+        // textured model looks like to the rasteriser -- many small triangles at every angle to the camera. Two of
+        // them, close in, so the textured surface is a large share of the frame rather than a detail in it.
+        s.AddMeshBody(texKnotId, new Vector3(-1.9f, 1.7f, 0f), 3.2f, 3);
+        s.AddMeshBody(texKnotId, new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
+    });
+
+    var texView = new SceneView(texRunner, new ShadedRenderer());
+    texView.Camera.Distance = 9f;
+    _ = new ControlFrame(texView, borderStyle: BorderStyle.Rounded);
+    var texRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(texView), texView);
+    _ = ConsoleSnapshot.ToText(texRoot, W, H);
+    var texSettle = texRunner.Snapshot.StepCount + 240;
+    while (texRunner.Snapshot.StepCount < texSettle) Thread.Sleep(5);
+    // One settled snapshot for every configuration below. The knots must have stopped moving or each run measures
+    // a different scene while looking like a comparison -- the lesson the first bandwidth run in wolf3d taught.
+    var texScene = texRunner.Snapshot;
+
+    // Distinct fg/bg pairs: the honest proxy for what the emitter will have to spend, since a pair that differs
+    // from its neighbour's is a run boundary. Same measure --aa uses, so the two modes' numbers are comparable.
+    static int TexPairs(ConsoleBuffer b)
+    {
+        var pairs = new HashSet<(uint, uint)>();
+        for (var y = 0; y < b.Size.Height; y++)
+            for (var x = 0; x < b.Size.Width; x++)
+            {
+                var ch = b[x, y].Character;
+                if (ch.Foreground is { } f && ch.Background is { } g)
+                    pairs.Add(((uint)((f.Red << 16) | (f.Green << 8) | f.Blue),
+                               (uint)((g.Red << 16) | (g.Green << 8) | g.Blue)));
+            }
+
+        return pairs.Count;
+    }
+
+    var texOpt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+    var texModes = new[] { TextureMode.Checker, TextureMode.Gradient, TextureMode.Noise };
+    var texScales = new[] { 4f, 8f, 16f, 32f };
+
+    // --- Pass A: colour cost, and a picture to judge it by -------------------------------------------------------
+    foreach (var texRenderer in new MeshRenderer[] { new SolidRenderer(), new ShadedRenderer() })
+    {
+        texView.SetRenderer(texRenderer);
+        _ = ConsoleSnapshot.ToText(texRoot, W, H);
+
+        ConsoleBuffer TexFrame(string? name)
+        {
+            // Draw twice around a layout pass, as --aa does: BeginFrame sizes the sub-pixel buffers from the
+            // control's ActualWidth, which is only real once the tree has been laid out at least once.
+            texRenderer.Draw(texScene, texView.Camera);
+            _ = ConsoleSnapshot.ToText(texRoot, W, H);
+            texRenderer.Draw(texScene, texView.Camera);
+            var buffer = ConsoleSnapshot.Render(texRoot, W, H);
+            if (name is not null && texOut is not null)
+                ConsoleSnapshot.SavePng(texRoot, W, H, Path.Combine(texOut, name + ".png"), texOpt);
+            return buffer;
+        }
+
+        Console.WriteLine($"\n{texRenderer.Name} at {W}x{H} — distinct fg/bg pairs in one settled frame:");
+        texRenderer.Texture = TextureMode.None;
+        var texBase = TexPairs(TexFrame($"tex-{texRenderer.Name}-none"));
+        Console.WriteLine($"  {"none",-9} {"",-6}  {texBase,6} pairs   (baseline)");
+        foreach (var mode in texModes)
+        {
+            texRenderer.Texture = mode;
+            foreach (var scale in texScales)
+            {
+                texRenderer.TextureScale = scale;
+                // A PNG at the default scale only. The number says what it costs; the picture is the only thing
+                // that says whether it bought anything, and eight of them is enough to look at.
+                var name = scale == 8f ? $"tex-{texRenderer.Name}-{mode}".ToLowerInvariant() : null;
+                var pairs = TexPairs(TexFrame(name));
+                Console.WriteLine($"  {mode,-9} x{scale,-5:F0}  {pairs,6} pairs   " +
+                                  $"{(double)pairs / texBase,5:F2}x baseline");
+            }
+        }
+    }
+
+    // --- Pass B: the real emitter --------------------------------------------------------------------------------
+    // Pairs predict the cost; ANSI bytes per frame ARE the cost, and the exit criterion is stated in them.
+    Console.WriteLine($"\nframe cost over the real compositor at {W}x{H} (median of 120):");
+
+    // PerfProbe orbits the camera one notch per frame and never puts it back, so without this each configuration
+    // would be measured from a different angle -- a fair-looking comparison of unequal scenes. Coupled to
+    // PerfProbe's own Warmup + N; if those change, so must this.
+    const float PerfOrbit = (20 + 120) * 0.01f;
+    void TexTime(string label, MeshRenderer r, TextureMode mode, float scale)
+    {
+        r.Texture = mode;
+        r.TextureScale = scale;
+        texView.SetRenderer(r);
+        Probe.PerfProbe.Measure(label, r, texView.Camera, texScene, texRoot, W, H);
+        texView.Camera.Orbit(-PerfOrbit, 0);
+    }
+
+    foreach (var r in new MeshRenderer[] { new SolidRenderer(), new ShadedRenderer() })
+    {
+        TexTime(r.Name, r, TextureMode.None, 8f);
+        foreach (var mode in texModes) TexTime($"  ..{mode}".ToLowerInvariant(), r, mode, 8f);
+    }
+
+    texRunner.Dispose();
+    return 0;
+}
+
 // The left silhouette against the sky, in HALF-CELL units, one entry per half-row: the leftmost half-cell that is
 // not the background colour, PROVIDED some sky was crossed to reach it. 0 otherwise.
 //
@@ -210,7 +331,7 @@ void Check(string what, bool ok, string? detail = null)
 // --- meshes -------------------------------------------------------------------------------------------------------
 // Registered before anything else: the spawn path and the renderers all key off the registry.
 var knotId = Meshes.Register(Meshes.TorusKnot(), "knot");
-var teapotPath = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models\teapot.obj";
+var teapotPath = RepoPaths.At("reference", "projects", "voxcii-main", "models", "teapot.obj");
 var teapotId = File.Exists(teapotPath) ? Meshes.Register(ObjLoader.Load(teapotPath), "teapot") : -1;
 
 var runner = new PhysicsRunner(scene =>
@@ -566,7 +687,7 @@ else
     // sampling rate -- which swamps the signal (measured: 80% with the code correct against 84% with the bug, i.e.
     // backwards). At 240x80 it gets ~1,100 and blank means missing.
     const int CW = 240, CH = 80;
-    var planePath = @"C:\Projects\Jumbee.Console\media\models\plane.obj";
+    var planePath = RepoPaths.At("media", "models", "plane.obj");
     var subjects = new List<(string Name, int Id)> { (teapotId >= 0 ? "teapot" : "knot", meshId) };
     if (File.Exists(planePath)) subjects.Add(("plane", Meshes.Register(ObjLoader.Load(planePath), "plane")));
     else Console.WriteLine("  SKIP  plane.obj not found -- the non-uniform-tessellation subject");
@@ -738,7 +859,7 @@ Check("its footer names the model", viewerText.Contains(scene3.Name), scene3.Nam
 // One argument, two meanings. Every branch here is an edge case, which is why it lives in ModelLibrary rather than
 // inside Program where it could only be exercised by launching a UI.
 Console.WriteLine("\nobj path resolution:");
-var modelDir = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
+var modelDir = RepoPaths.At("reference", "projects", "voxcii-main", "models");
 
 var dirSet = ModelLibrary.Resolve(modelDir);
 Check("a directory loads every .obj in it", dirSet.Files.Length == 4 && dirSet.Error is null,
@@ -755,11 +876,11 @@ Check("but opens on that file", Path.GetFileName(fileSet.Files[fileSet.StartInde
 var missing = ModelLibrary.Resolve(Path.Combine(modelDir, "nope-does-not-exist"));
 Check("a path that is neither file nor directory is an error", missing.Error is not null, missing.Error);
 
-var emptyDir = ModelLibrary.Resolve(@"C:\Projects\Jumbee.Console\src");
+var emptyDir = ModelLibrary.Resolve(RepoPaths.At("src"));
 Check("a directory with no models is an error", emptyDir.Error is not null, emptyDir.Error);
 
 // No argument is NOT an error even with nothing to find: the viewer falls back to its generated mesh.
-var noneGiven = ModelLibrary.Resolve(null, @"C:\Projects\Jumbee.Console\src");
+var noneGiven = ModelLibrary.Resolve(null, RepoPaths.At("src"));
 Check("no argument is never an error", noneGiven.Error is null && noneGiven.Files.Length == 0,
     $"{noneGiven.Files.Length} files, error={noneGiven.Error ?? "none"}");
 
@@ -787,7 +908,7 @@ Check("and clamps an out-of-range one", new ModelScene(999).MeshId == Meshes.Reg
 // the winding of every triangle are all recomputed here from the raw bytes, so a loader that silently agreed with
 // itself would fail.
 Console.WriteLine("\nSTL:");
-var stlPath = @"C:\Projects\Jumbee.Console\media\models\cali-bee.stl";
+var stlPath = RepoPaths.At("media", "models", "cali-bee.stl");
 if (!File.Exists(stlPath))
 {
     Console.WriteLine("  SKIP  media/models/cali-bee.stl is not present");

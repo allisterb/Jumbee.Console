@@ -89,6 +89,23 @@ public abstract class MeshRenderer : ISceneRenderer
         set => surface.QuadrantSampling = value;
     }
 
+    /// <summary>
+    /// A procedural texture applied to mesh bodies that carry UVs, modulating the body's tint per sub-pixel before
+    /// it is shaded. <see cref="TextureMode.None"/> by default.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is a measuring instrument, not a feature.</b> It exists to answer the one question that decides
+    /// whether image textures are worth building at all: what a per-sub-pixel tint does to the emission budget once
+    /// it has been through <see cref="Quantise"/>. A texture breaks colour runs, and ANSI runs — not compute — are
+    /// what this renderer is bound by. Drive it from the harness's <c>--texture</c> mode; see
+    /// <c>docs/internal/3D Textures Plan.md</c> §4.
+    /// </remarks>
+    public TextureMode Texture { get; set; }
+
+    /// <summary>How many times <see cref="Texture"/> repeats across the UV range. The frequency dial, and the whole
+    /// point of the experiment — detail finer than a sub-pixel cannot be shown and is paid for regardless.</summary>
+    public float TextureScale { get; set; } = 8f;
+
     /// <summary>The coarsest shade ramp on offer — two levels is lit and unlit, and little else.</summary>
     public const float MinShadeLevels = 2f;
 
@@ -233,9 +250,18 @@ public abstract class MeshRenderer : ISceneRenderer
         var faceColors = Selected == snapshot.Ids[i] ? null : mesh.FaceColors;
 
         var idx = mesh.Indices;
+        // Textured only when the renderer is asking for one AND this mesh carries UVs -- the ground and every
+        // generated primitive but the knot have none, so they fall through to the untextured path unchanged.
+        var uvs = Texture == TextureMode.None ? null : mesh.Uvs;
+        var uvIdx = mesh.UvIndices ?? idx;
         for (var t = 0; t < idx.Length; t += 3)
-            Triangle(world[idx[t]], world[idx[t + 1]], world[idx[t + 2]],
-                     faceColors is null ? tint : faceColors[t / 3], BodyGroup);
+        {
+            var color = faceColors is null ? tint : faceColors[t / 3];
+            var uv = uvs is null
+                ? default
+                : new UvTriple(uvs[uvIdx[t]], uvs[uvIdx[t + 1]], uvs[uvIdx[t + 2]], true);
+            Triangle(world[idx[t]], world[idx[t + 1]], world[idx[t + 2]], color, BodyGroup, uv);
+        }
     }
 
     // PROJECTING PER VERTEX INSTEAD OF PER CORNER WAS TRIED AND DOES NOT PAY, which is worth recording because it
@@ -244,7 +270,7 @@ public abstract class MeshRenderer : ISceneRenderer
     // Hoisting them into two cached arrays measured 9.6% FASTER on that scan and 10% SLOWER on a 5.8k-triangle
     // model, interleaved A/B, 21 samples. The rasteriser is bound by the scattered `world[idx[t]]` reads, not by
     // the arithmetic: adding two more 4.8 MB arrays to walk randomly costs more bandwidth than the saved maths.
-    private void Triangle(Vector3 a, Vector3 b, Vector3 c, Color tint, byte group)
+    private void Triangle(Vector3 a, Vector3 b, Vector3 c, Color tint, byte group, UvTriple uv = default)
     {
         var va = View.Transform(a);
         var vb = View.Transform(b);
@@ -260,7 +286,10 @@ public abstract class MeshRenderer : ISceneRenderer
         if (lengthSquared < 1e-12f) return;
         normal /= MathF.Sqrt(lengthSquared);
 
-        var flat = ShadesPerPixel ? default : ShadeFace(normal, tint);
+        // A texture forces the per-pixel path even under SolidRenderer: a colour evaluated once per triangle cannot
+        // vary across it, which is the entire thing a texture is. That is also the honest way to price texturing
+        // for the flat renderer -- it loses the one-uniform-run-per-triangle property that makes it cheap.
+        var flat = ShadesPerPixel || uv.Textured ? default : ShadeFace(normal, tint);
 
         var pa = ToScreen(va);
         var pb = ToScreen(vb);
@@ -276,8 +305,10 @@ public abstract class MeshRenderer : ISceneRenderer
 
         // Swap two corners to restore a positive winding for the fill, which wants all three edge functions to agree
         // in sign. Swapping b and c swaps their barycentric weights too, so depth interpolation stays correct.
-        // World positions ride along in the same swapped order for per-pixel shading.
-        Fill(pa, pc, pb, a, c, b, -area, normal, tint, flat, group);
+        // World positions ride along in the same swapped order for per-pixel shading, and so must the UVs — an
+        // attribute interpolated against the wrong corner's weight is the classic way to get a texture that looks
+        // almost right and is mirrored along one edge.
+        Fill(pa, pc, pb, a, c, b, -area, normal, tint, flat, group, uv.Swapped);
     }
 
     // Camera space -> sub-pixel coordinates, carrying reciprocal depth as Z. Screen y is inverted because NDC +y is
@@ -291,7 +322,7 @@ public abstract class MeshRenderer : ISceneRenderer
     }
 
     private void Fill(Vector3 a, Vector3 b, Vector3 c, Vector3 wa, Vector3 wb, Vector3 wc,
-                      float area, Vector3 normal, Color tint, CColor flatColor, byte group)
+                      float area, Vector3 normal, Color tint, CColor flatColor, byte group, UvTriple uv = default)
     {
         var minX = Math.Max(0, (int)MathF.Floor(MathF.Min(a.X, MathF.Min(b.X, c.X))));
         var maxX = Math.Min(surface.PixelWidth - 1, (int)MathF.Ceiling(MathF.Max(a.X, MathF.Max(b.X, c.X))));
@@ -300,12 +331,18 @@ public abstract class MeshRenderer : ISceneRenderer
         if (minX > maxX || minY > maxY) return;
 
         var inverseArea = 1f / area;
-        var perPixel = ShadesPerPixel;
+        var textured = uv.Textured;
+        var perPixel = ShadesPerPixel || textured;
         // Perspective-correct interpolation needs the attribute divided by depth: (world/z) varies linearly in
         // screen space where world alone does not. Premultiply once per triangle, divide back per pixel.
         var wan = wa * a.Z;
         var wbn = wb * b.Z;
         var wcn = wc * c.Z;
+        // UVs are the same kind of attribute and take exactly the same treatment. Affine UVs on a face seen at a
+        // glancing angle -- the ground, or the far side of the knot -- swim visibly as the camera orbits.
+        var uan = uv.A * a.Z;
+        var ubn = uv.B * b.Z;
+        var ucn = uv.C * c.Z;
 
         for (var y = minY; y <= maxY; y++)
         {
@@ -337,14 +374,61 @@ public abstract class MeshRenderer : ISceneRenderer
                 if (inverseDepth <= surface.DepthAt(x, y)) continue;
 
                 var point = (((w1 * wan) + (w2 * wbn) + (w0 * wcn)) * inverseArea) / inverseDepth;
-                surface.TestAndSet(x, y, inverseDepth, ShadePixel(point, normal, tint), group);
+                // Same weights, same order, same divide -- copied structurally from the line above rather than
+                // re-derived, because the weight-to-corner mapping is rotated (w1 is a, w2 is b, w0 is c) and
+                // reasoning it out a second time is how the two fall out of step.
+                var texel = textured
+                    ? SampleTexture((((w1 * uan) + (w2 * ubn) + (w0 * ucn)) * inverseArea) / inverseDepth, tint)
+                    : tint;
+                surface.TestAndSet(x, y, inverseDepth, ShadePixel(point, normal, texel), group);
             }
         }
+    }
+
+    // The three procedural sources, chosen to bracket the real question rather than to look good: a checker is the
+    // BEST case (two colours, large patches, runs survive), a gradient the middle (smooth, and the quantiser snaps
+    // it back onto the ramp), and noise the WORST (every sub-pixel differs, which is what a detailed photograph
+    // minified 20:1 actually becomes). If the checker is already too expensive, no real texture can be affordable.
+    private Color SampleTexture(Vector2 uv, Color tint) => Texture switch
+    {
+        TextureMode.Checker =>
+            (((int)MathF.Floor(uv.X * TextureScale) + (int)MathF.Floor(uv.Y * TextureScale)) & 1) == 0
+                ? tint
+                : Modulate(tint, 0.35f),
+        TextureMode.Gradient => Modulate(tint, 0.25f + (0.75f * Fraction(uv.X * TextureScale))),
+        TextureMode.Noise => Modulate(tint, 0.2f + (0.8f * Hash(uv, TextureScale))),
+        _ => tint,
+    };
+
+    private static Color Modulate(Color tint, float factor) =>
+        new((byte)(tint.R * factor), (byte)(tint.G * factor), (byte)(tint.B * factor));
+
+    private static float Fraction(float value) => value - MathF.Floor(value);
+
+    // A cheap integer hash rather than value noise: the point is uncorrelated neighbours, which is the pathological
+    // case for run coalescing. Sampled at 4x the nominal scale so it is genuinely sub-pixel at useful scales.
+    private static float Hash(Vector2 uv, float scale)
+    {
+        var x = (int)MathF.Floor(uv.X * scale * 4f);
+        var y = (int)MathF.Floor(uv.Y * scale * 4f);
+        var h = (uint)((x * 374761393) + (y * 668265263));
+        h = (h ^ (h >> 13)) * 1274126177;
+        return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
     }
 
     private void EnsureVertexCapacity(int count)
     {
         if (world.Length < count) world = new Vector3[Math.Max(count, world.Length * 2)];
+    }
+    #endregion
+
+    #region Child types
+    // A triangle's three UVs, or default when it carries none. A struct rather than three optional Vector2
+    // parameters so the "is this textured at all" flag cannot drift from the coordinates it guards.
+    private readonly record struct UvTriple(Vector2 A, Vector2 B, Vector2 C, bool Textured)
+    {
+        // Mirrors the b/c swap Triangle applies to restore positive winding.
+        public UvTriple Swapped => new(A, C, B, Textured);
     }
     #endregion
 
@@ -361,4 +445,24 @@ public abstract class MeshRenderer : ISceneRenderer
     private float halfH;
     private float scaleY;
     #endregion
+}
+
+/// <summary>Which procedural texture <see cref="MeshRenderer.Texture"/> applies, if any.</summary>
+/// <remarks>Stand-ins for a real image map, used to price texturing before an image decoder is paid for. They
+/// bracket the range: <see cref="Checker"/> is the cheapest a texture can be and <see cref="Noise"/> the most
+/// expensive.</remarks>
+public enum TextureMode
+{
+    /// <summary>No texture; the body takes its palette tint as before.</summary>
+    None,
+
+    /// <summary>Two-tone squares in UV space. Large flat patches, so colour runs mostly survive.</summary>
+    Checker,
+
+    /// <summary>A repeating ramp along u. Smooth, and the shade quantiser bands it back onto the ramp.</summary>
+    Gradient,
+
+    /// <summary>Uncorrelated per-texel values — the worst case, and what a detailed photograph becomes once it is
+    /// minified to a hundred-odd sub-pixels across.</summary>
+    Noise,
 }

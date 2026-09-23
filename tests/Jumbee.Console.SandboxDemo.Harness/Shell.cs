@@ -21,13 +21,13 @@ internal static class ShellChecks
         }
 
         Meshes.Register(Meshes.TorusKnot(), "knot");
-        var models = @"C:\Projects\Jumbee.Console\reference\projects\voxcii-main\models";
+        var models = RepoPaths.At("reference", "projects", "voxcii-main", "models");
         // Both directories: the reference OBJs, and the repo's own media/models, which is where the STL samples
         // live. Registering them here is what puts an STL through the real viewer -- the loader checks in Check.cs
         // prove the file parses, and only this proves it draws.
         if (args.Contains("viewer"))
         {
-            foreach (var dir in new[] { models, @"C:\Projects\Jumbee.Console\media\models" })
+            foreach (var dir in new[] { models, RepoPaths.At("media", "models") })
             {
                 if (!Directory.Exists(dir)) continue;
                 foreach (var f in Directory.GetFiles(dir).Where(ModelLoader.IsModel).OrderBy(x => x))
@@ -66,7 +66,7 @@ internal static class ShellChecks
             {
                 var d = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
                 var o = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
-                var plane = @"C:\Projects\Jumbee.Console\reference\projects\3d-engine-on-terminal-main\assets\plane.obj";
+                var plane = RepoPaths.At("reference", "projects", "3d-engine-on-terminal-main", "assets", "plane.obj");
                 if (File.Exists(plane)) Meshes.Register(ObjLoader.Load(plane), "plane");
 
                 for (var i = 0; i < Meshes.RegisteredCount; i++)

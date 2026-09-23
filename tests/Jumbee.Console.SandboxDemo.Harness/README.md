@@ -1,12 +1,39 @@
-# 3D sandbox verification harness (parked)
+# 3D sandbox verification harness
 
-The headless harness the 3D sandbox was built against. Parked here rather than left in a session scratchpad,
-because it has caught two shipped bugs and several wrong assumptions, and **M5 should promote it into a real test
-project** (`tests/Jumbee.Console.SandboxDemo.Tests` or similar).
+The headless harness the 3D sandbox was built against. It has caught six shipped bugs and several wrong
+assumptions.
 
-It is not wired into the solution. To run it, drop these files in a folder and `dotnet run -c Release`; the
-`.csproj` compiles the demo's own sources (minus `Program.cs`) against `Jumbee.Console` and `Jumbee.Console.Snapshot`,
-with a `$(Repo)` property at the top pointing at the repo root.
+```bash
+dotnet run --project tests/Jumbee.Console.SandboxDemo.Harness -c Release        # the 97 checks
+```
+
+**It is in `src/Jumbee.Console.sln`, so an ordinary solution build compiles it.** That is the point: it is an
+`Exe` with its own runner rather than an xunit project, so `dotnet test` does not execute it, but nothing can
+silently break it either. The `.csproj` compiles the demo's own sources (minus `Program.cs`) against
+`Jumbee.Console` and `Jumbee.Console.Snapshot`; **anything the demo gains, a package reference especially, has to
+be mirrored into the `.csproj` here.**
+
+> **Why it is in the solution now.** It used to live under `docs/internal/scratch`, outside the solution, and on
+> 2026-09-20 it turned out to have stopped compiling two commits earlier — twice over. The demo had gained a
+> `Ply.Net` package reference that was never added here, and `ISceneRenderer.Draw` had been refactored to take a
+> `FrameRequest` and return a frame for a separate `Publish`, breaking all ~25 call sites at once. Both are
+> exactly the kind of break a build catches in a second; neither was caught, because nothing built it. Fixed with
+> the package reference and [`Compat.cs`](Compat.cs), a one-method shim restoring the two-argument `Draw`. Moved
+> in and added to the solution on 2026-09-21, along with dropping the hard-coded `C:\Projects\Jumbee.Console`
+> paths that made it single-machine (see [`RepoPaths.cs`](RepoPaths.cs)).
+
+> **One check is failing, and it is pre-existing:** `selecting a body repaints it` [10 sub-pixels changed],
+> against a threshold of >20. Confirmed by reverting — the entire texture change plus the `--texture` mode were
+> stashed and the failure reproduced byte-identically. `solidScene.Ids[0]` is one of the small 0.5-half-extent
+> boxes from the opening stack, so this is probably the same class of fault as the wolf3d size-tuned checks: a
+> threshold calibrated when that box settled somewhere else on screen. **It is a threshold, not a tint bug, until
+> someone shows otherwise** — diagnose it before trusting the suite.
+
+**Still to do:** the checks are top-level statements printing `PASS`/`FAIL` and returning a count, not test
+methods. Converting them to xunit (or wrapping the exe in a single test) would put them under `dotnet test` and
+CI. Not done, because several checks want assets that are not in every checkout — `media/models` is gitignored
+and `reference/projects` may be absent — so they would be flaky as-is. `RepoPaths.Optional` exists for exactly
+that gating when someone takes it on.
 
 ## Modes
 
@@ -17,6 +44,7 @@ with a `$(Repo)` property at the top pointing at the repo root.
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
 | `--aa out=DIR [WxH]` | one settled frame with quadrant sampling off and on: distinct fg/bg pairs, silhouette placement error, PNGs |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
+| `--texture [out=DIR] [WxH]` | textures Phase 0: three procedural sources × four frequencies × both solid renderers — distinct fg/bg pairs, ANSI bytes, frame time, PNGs |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
 | `--probe` | on-screen size of a launched body, frame by frame |
@@ -68,28 +96,11 @@ The `--solid` ASCII dump is kept only for quick structural checks. **Do not judg
 through a shell mangles `▀`, braille and `◆◇◈◊` into `?`, and it is very easy to mistake that for the renderer's
 output. Use `--png`, which sets `FontFamily = "Cascadia Mono"` for glyph coverage.
 
-## wolf3d/ — the Wolf3D walkthrough harness
+## The sibling harness
 
-A second parked harness, same idea and the same standing argument for promotion: **49 checks**, and it has caught
-several shipped bugs (the sprite-aspect break under quadrant sampling, the pad's focus trap, the input dead zone).
-
-```bash
-dotnet run --project docs/internal/scratch/wolf3d -c Release             # the 49 checks
-dotnet run --project docs/internal/scratch/wolf3d -c Release -- surfaces # glyph-grid + quantiser measurements
-dotnet run --project docs/internal/scratch/wolf3d -c Release -- perf     # ANSI bytes per frame
-dotnet run --project docs/internal/scratch/wolf3d -c Release -- png out=DIR
-dotnet run --project docs/internal/scratch/wolf3d -c Release -- rows     # buffer rows as text, to settle "is that spill?"
-```
-
-It needs the demo's game data present at `examples/Jumbee.Console.Wolf3DDemo/GameData` (see that folder's README).
-
-**`render3d.csproj` now carries a `<Compile Remove="wolf3d\**\*.cs" />`** — the SDK's default glob would otherwise
-sweep this harness's sources into it and break it. Any future sibling harness needs the same line.
-
-Two lessons from writing the checks that are worth keeping:
-
-- **Test what reaches the screen, not what a counter says.** The `--verify` path and the sprite-aspect check both
-  assert against composited cells; a frame drawn before the first layout renders nothing at all, and would have
-  passed any check that trusted the renderer's own numbers.
-- **Reset the scene between measurements.** The first bandwidth run left the camera buried in a wall by row three,
-  and every row after that was measuring a static frame while looking like a real result.
+The Wolf3D walkthrough has its own, at
+[`tests/Jumbee.Console.Wolf3DDemo.Harness`](../Jumbee.Console.Wolf3DDemo.Harness/README.md) — 49 checks, same
+shape, same reasons, and the two lessons from writing them live there now. It used to be a `wolf3d/`
+subdirectory of this one, which forced a `<Compile Remove="wolf3d\**\*.cs" />` here to stop the SDK's default
+glob sweeping its sources in. They are separate sibling projects now, so that line is gone and a future harness
+needs no equivalent.

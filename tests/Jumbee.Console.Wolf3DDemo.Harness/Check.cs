@@ -5,7 +5,7 @@ using Jumbee.Console.Wolf3DDemo;
 // Headless checks for the Wolf3D demo. Drives the REAL shell (Wolf3DShell.Build), not a rebuild of it, and routes
 // keys through the ROOT LAYOUT the way the live loop does — a key routed straight at a control takes a different
 // path and can pass while the running app receives nothing.
-const string GameData = @"C:\Projects\Jumbee.Console\examples\Jumbee.Console.Wolf3DDemo\GameData";
+var GameData = RepoPaths.At("examples", "Jumbee.Console.Wolf3DDemo", "GameData");
 // Overridable as a bare WxH argument: a sidebar bug is usually a bug at ONE height, and the compact layout only
 // appears below the threshold the pages derive for themselves.
 var size = args.FirstOrDefault(a => a.Contains('x') && a.All(c => char.IsDigit(c) || c == 'x'))?.Split('x');
