@@ -20,8 +20,8 @@
              Exclude="$(Repo)\examples\Jumbee.Console.3DSandboxDemo\Program.cs" />
   </ItemGroup>
 
-  <!-- Same fork/vendored references examples/Directory.Build.props gives the real demo projects. -->
-  <Import Project="$(Repo)\src\ExternalReferences.props" />
+  <!-- The fork/vendored references (src/ExternalReferences.props) come from tests/Directory.Build.props, as they do
+       for every project under tests/. Importing them here as well is a duplicate MSBuild ignores with MSB4011. -->
 
   <ItemGroup>
     <PackageReference Include="Box3D.NET" Version="0.3.0" />

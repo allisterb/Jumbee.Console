@@ -13,5 +13,9 @@ This directory contains (mostly) AI generated documentation about Jumbee.Console
 - [Theming](Theming.md) — the glyph/style theme split, styling primitives, how controls capture the theme, live theme switching (`UI.SetTheme`), and override-aware re-application.
 - [Multithreading](Multithreading.md)
 - [Snapshot Testing](Snapshot%20Testing.md) — the headless `ConsoleSnapshot` text/PNG renderer, and why to snapshot widgets under multiple fonts (glyph coverage varies by terminal font; block-element coverage table).
-- [Handoff](handoff.md) — current state, what to pick up next (ranked), and the operational notes for running the eval loop.
-- [Eval findings](eval-findings.md) — the running backlog of API/doc gaps surfaced by the jc-curious port evals, with evidence and disposition.
+
+## Agent docs
+Session handoffs, plans and working notes live in [`agent/`](agent/), kept apart from the architecture docs above.
+
+- [Handoff](agent/handoff.md) — current state, what to pick up next (ranked), and the operational notes for running the eval loop.
+- [Eval findings](agent/eval-findings.md) — the running backlog of API/doc gaps surfaced by the jc-curious port evals, with evidence and disposition.

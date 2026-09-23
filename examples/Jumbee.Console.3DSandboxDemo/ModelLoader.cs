@@ -12,15 +12,19 @@ public static class ModelLoader
     #region Methods
     /// <summary>Loads a model, centred on its bounding box and scaled so its largest half-extent is
     /// <paramref name="radius"/>.</summary>
+    /// <param name="path">The file to read.</param>
+    /// <param name="radius">The half-extent the model's largest axis is scaled to.</param>
+    /// <param name="withUvs">Also read texture coordinates, where the format has them. Only OBJ does here — STL has
+    /// no such concept and PLY's multi-texture scheme is out of scope — so it is ignored for the other two.</param>
     /// <exception cref="InvalidDataException">The file holds no usable geometry.</exception>
     /// <remarks>An unrecognised extension is read as OBJ rather than rejected: that was the behaviour before there
     /// was a second format, and a text mesh under some other suffix is a likelier thing to meet than a file that
     /// wants refusing.</remarks>
-    public static Mesh Load(string path, float radius = 0.5f) => Extension(path) switch
+    public static Mesh Load(string path, float radius = 0.5f, bool withUvs = false) => Extension(path) switch
     {
         ".stl" => StlLoader.Load(path, radius),
         ".ply" => PlyLoader.Load(path, radius),
-        _ => ObjLoader.Load(path, radius),
+        _ => ObjLoader.Load(path, radius, withUvs),
     };
 
     /// <summary>Whether this path names a model this app can read.</summary>

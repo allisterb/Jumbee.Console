@@ -471,7 +471,7 @@ public sealed class WireframeRenderer : ISceneRenderer
     /// <see cref="SubPixelsPerTriangle"/> does for any model that fills the frame — the bunny wants 1,689 triangles
     /// at "detail 4" and 3,379 at "detail 8", and gets 1,200 either way, so those two settings draw the same
     /// picture. It was written when the density was fixed; as a user-facing dial, a ceiling derived from that dial
-    /// would let the top half mean something. See open question 6 in <c>docs/internal/handoff.md</c>.
+    /// would let the top half mean something. See open question 6 in <c>docs/internal/agent/handoff.md</c>.
     /// </remarks>
     public const int MaxTriangles = 1200;
 

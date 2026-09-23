@@ -98,7 +98,7 @@ public abstract class MeshRenderer : ISceneRenderer
     /// whether image textures are worth building at all: what a per-sub-pixel tint does to the emission budget once
     /// it has been through <see cref="Quantise"/>. A texture breaks colour runs, and ANSI runs — not compute — are
     /// what this renderer is bound by. Drive it from the harness's <c>--texture</c> mode; see
-    /// <c>docs/internal/3D Textures Plan.md</c> §4.
+    /// <c>docs/internal/agent/3D Textures Plan.md</c> §4.
     /// </remarks>
     public TextureMode Texture { get; set; }
 
@@ -385,10 +385,13 @@ public abstract class MeshRenderer : ISceneRenderer
         }
     }
 
-    // The three procedural sources, chosen to bracket the real question rather than to look good: a checker is the
-    // BEST case (two colours, large patches, runs survive), a gradient the middle (smooth, and the quantiser snaps
-    // it back onto the ramp), and noise the WORST (every sub-pixel differs, which is what a detailed photograph
-    // minified 20:1 actually becomes). If the checker is already too expensive, no real texture can be affordable.
+    // The three procedural sources, chosen to bracket the real question rather than to look good. A checker is the
+    // BEST case: two tints, large patches, runs survive. The gradient turned out to be the WORST, not the middle --
+    // Quantise rounds only the LIGHTING intensity, never the tint, so a continuous tint reaches the screen
+    // unquantised and every sub-pixel gets a colour of its own. Measured on the capsule: 4.4x the untextured bytes,
+    // falling to 1.77x once the tint is snapped to 7 levels. Noise is blocky at 4x the nominal scale and sits
+    // between the two until its frequency rises to match. Left unquantised on purpose: it is the stand-in for a
+    // real image, whose texels are arbitrary 24-bit colours, and it is what shows the texture type must quantise.
     private Color SampleTexture(Vector2 uv, Color tint) => Texture switch
     {
         TextureMode.Checker =>
@@ -448,9 +451,9 @@ public abstract class MeshRenderer : ISceneRenderer
 }
 
 /// <summary>Which procedural texture <see cref="MeshRenderer.Texture"/> applies, if any.</summary>
-/// <remarks>Stand-ins for a real image map, used to price texturing before an image decoder is paid for. They
-/// bracket the range: <see cref="Checker"/> is the cheapest a texture can be and <see cref="Noise"/> the most
-/// expensive.</remarks>
+/// <remarks>Stand-ins for a real image map, used to price texturing before an image decoder is paid for.
+/// <see cref="Checker"/> is the cheapest a texture can be; <see cref="Gradient"/>, whose tint is never quantised,
+/// the most expensive.</remarks>
 public enum TextureMode
 {
     /// <summary>No texture; the body takes its palette tint as before.</summary>
@@ -459,10 +462,12 @@ public enum TextureMode
     /// <summary>Two-tone squares in UV space. Large flat patches, so colour runs mostly survive.</summary>
     Checker,
 
-    /// <summary>A repeating ramp along u. Smooth, and the shade quantiser bands it back onto the ramp.</summary>
+    /// <summary>A repeating ramp along u. The most expensive source: the shade quantiser rounds lighting, not tint,
+    /// so a continuous tint reaches the screen as a distinct colour per sub-pixel.</summary>
     Gradient,
 
-    /// <summary>Uncorrelated per-texel values — the worst case, and what a detailed photograph becomes once it is
-    /// minified to a hundred-odd sub-pixels across.</summary>
+    /// <summary>Uncorrelated values in texel blocks at 4× the nominal scale — what a detailed photograph becomes once
+    /// it is minified to a hundred-odd sub-pixels across. Converges on <see cref="Gradient"/>'s cost as the
+    /// frequency rises.</summary>
     Noise,
 }

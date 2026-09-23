@@ -12,14 +12,17 @@ if (args.Contains("--load"))
 {
     var dir = args.FirstOrDefault(a => a.Contains("dir="))?.Split('=')[1]
               ?? RepoPaths.At("reference", "projects", "voxcii-main", "models");
+    // `uvs` prices the texture-coordinate read: run with and without it on the same directory.
+    var withUvs = args.Contains("uvs");
     foreach (var f in Directory.GetFiles(dir).Where(ModelLoader.IsModel).OrderBy(x => x))
     {
         var sw0 = System.Diagnostics.Stopwatch.StartNew();
-        var m = ModelLoader.Load(f);
+        var m = ModelLoader.Load(f, withUvs: withUvs);
         Console.WriteLine($"  {Path.GetFileName(f),-14} {m.TriangleCount,7} tris  {m.Vertices.Length,7} verts  " +
                           $"parse {sw0.ElapsedMilliseconds,5} ms  {new FileInfo(f).Length / 1024,6} KB  " +
                           $"extents {m.Extents.X:F3},{m.Extents.Y:F3},{m.Extents.Z:F3}  " +
-                          $"up {m.AuthoredUpAxis?.ToString() ?? "-"}");
+                          $"up {m.AuthoredUpAxis?.ToString() ?? "-"}  " +
+                          $"uvs {(m.Uvs is { } u ? $"{u.Length}{(m.UvIndices is null ? " shared" : "")}" : "-")}");
     }
 
     return 0;
@@ -125,7 +128,7 @@ if (args.Contains("--aa"))
 
 // --- Textures, Phase 0: what does a per-sub-pixel tint cost the emitter? ----------------------------------------
 // The question that decides whether image textures are worth building at all, and it is asked BEFORE any decoder,
-// parser or asset is paid for -- see docs/internal/3D Textures Plan.md §4. Three procedural sources bracket the
+// parser or asset is paid for -- see docs/internal/agent/3D Textures Plan.md §4. Three procedural sources bracket the
 // range (checker cheapest, noise worst; see TextureMode) against the same frame untextured.
 //
 // Two passes, in this order and not the other. Pass A reads a settled frame through ConsoleSnapshot; pass B runs
@@ -133,17 +136,35 @@ if (args.Contains("--aa"))
 // needs can survive it.
 if (args.Contains("--texture"))
 {
-    var texOut = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1];
-    var texKnotId = Meshes.Register(Meshes.TorusKnot(), "knot");
+    var texOut = args.FirstOrDefault(a => a.StartsWith("out="))?[4..];
+    // model=PATH swaps the knots for a real file mapped through its OWN UVs -- Phase 1's exit, where the question
+    // stops being "what does a texture cost" and becomes "do the seams land where the file says they do".
+    var texModel = args.FirstOrDefault(a => a.StartsWith("model="))?[6..];
+    var texMesh = texModel is null ? Meshes.TorusKnot() : ModelLoader.Load(texModel, withUvs: true);
+    if (!texMesh.HasUvs)
+    {
+        Console.WriteLine($"{texModel} carries no texture coordinates, so there is nothing to map a texture through.");
+        return 1;
+    }
+
+    var texTag = texModel is null ? "knot" : Path.GetFileNameWithoutExtension(texModel).ToLowerInvariant();
+    var texMeshId = Meshes.Register(texMesh, texTag);
     var texRunner = new PhysicsRunner(s =>
     {
         s.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
         s.GroundY = 0f;
+        if (texModel is not null)
+        {
+            // One model, large and central: this run is for looking at, and a seam needs sub-pixels to show in.
+            s.AddMeshBody(texMeshId, new Vector3(0f, 2.5f, 0f), 5f, 3);
+            return;
+        }
+
         // Knots rather than spheres: they are the only generated mesh carrying UVs, and they are also what a real
         // textured model looks like to the rasteriser -- many small triangles at every angle to the camera. Two of
         // them, close in, so the textured surface is a large share of the frame rather than a detail in it.
-        s.AddMeshBody(texKnotId, new Vector3(-1.9f, 1.7f, 0f), 3.2f, 3);
-        s.AddMeshBody(texKnotId, new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
+        s.AddMeshBody(texMeshId, new Vector3(-1.9f, 1.7f, 0f), 3.2f, 3);
+        s.AddMeshBody(texMeshId, new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
     });
 
     var texView = new SceneView(texRunner, new ShadedRenderer());
@@ -199,7 +220,7 @@ if (args.Contains("--texture"))
 
         Console.WriteLine($"\n{texRenderer.Name} at {W}x{H} — distinct fg/bg pairs in one settled frame:");
         texRenderer.Texture = TextureMode.None;
-        var texBase = TexPairs(TexFrame($"tex-{texRenderer.Name}-none"));
+        var texBase = TexPairs(TexFrame($"tex-{texTag}-{texRenderer.Name}-none"));
         Console.WriteLine($"  {"none",-9} {"",-6}  {texBase,6} pairs   (baseline)");
         foreach (var mode in texModes)
         {
@@ -209,7 +230,7 @@ if (args.Contains("--texture"))
                 texRenderer.TextureScale = scale;
                 // A PNG at the default scale only. The number says what it costs; the picture is the only thing
                 // that says whether it bought anything, and eight of them is enough to look at.
-                var name = scale == 8f ? $"tex-{texRenderer.Name}-{mode}".ToLowerInvariant() : null;
+                var name = scale == 8f ? $"tex-{texTag}-{texRenderer.Name}-{mode}".ToLowerInvariant() : null;
                 var pairs = TexPairs(TexFrame(name));
                 Console.WriteLine($"  {mode,-9} x{scale,-5:F0}  {pairs,6} pairs   " +
                                   $"{(double)pairs / texBase,5:F2}x baseline");
@@ -789,6 +810,89 @@ var forms = ObjLoader.Parse(["v 0 0 0", "v 1 0 0", "v 0 1 0", "f 1/1 2//2 3/3/3"
 Check("v/vt/vn index forms parse", forms.TriangleCount == 1, $"{forms.TriangleCount} triangles");
 var relative = ObjLoader.Parse(["v 0 0 0", "v 1 0 0", "v 0 1 0", "f -3 -2 -1"]);
 Check("negative (relative) indices parse", relative.TriangleCount == 1, $"{relative.TriangleCount} triangles");
+
+// --- texture coordinates ----------------------------------------------------------------------------------------
+// Asserted on RESOLVED CORNERS -- the (position, UV) pair each triangle corner ends up with -- not on the index
+// arrays. The pairing is the contract and the arrays are one representation of it (a 1:1 file stores no UV index
+// buffer at all), so a check on the arrays would pass for a loader that stored them faithfully and paired them wrong.
+Console.WriteLine("\ntexture coordinates:");
+static (int V, Vector2 Uv)[] Corners(Mesh m) =>
+    m.Uvs is not { } uvs ? [] : [.. m.Indices.Select((v, k) => (v, uvs[(m.UvIndices ?? m.Indices)[k]]))];
+
+string[] tri = ["v 0 0 0", "v 1 0 0", "v 0 1 0", "vt 0 0", "vt 1 0", "vt 0 1"];
+Vector2 uv00 = new(0, 0), uv10 = new(1, 0), uv01 = new(0, 1), uv11 = new(1, 1);
+
+// A quad whose vt order is deliberately the REVERSE of its v order, so no pairing can come out right by coinciding
+// with v == vt. Both fan triangles must pair every corner with the coordinate the file declared for it.
+var quadUv = ObjLoader.Parse(["v -1 0 -1", "v 1 0 -1", "v 1 0 1", "v -1 0 1",
+                              "vt 0 0", "vt 1 0", "vt 1 1", "vt 0 1", "f 1/4 2/3 3/2 4/1"], withUvs: true);
+var quadWant = new Dictionary<int, Vector2> { [0] = uv01, [1] = uv11, [2] = uv10, [3] = uv00 };
+var quadCorners = Corners(quadUv);
+Check("a quad's UVs take the same fan as its positions, each on the right corner",
+    quadUv.TriangleCount == 2 && quadCorners.Length == 6 && quadCorners.All(c => quadWant[c.V] == c.Uv),
+    $"{quadCorners.Length} corners, {quadCorners.Count(c => quadWant.TryGetValue(c.V, out var w) && w != c.Uv)} mispaired");
+
+// The whole reason UvIndices exists: one position, two coordinates. Vertex 2 is (0.5,0) in the first triangle and
+// (1,0) in the second -- a seam.
+var seam = ObjLoader.Parse(["v 0 0 0", "v 1 0 0", "v 1 1 0", "v 0 1 0",
+                            "vt 0 0", "vt 0.5 0", "vt 0.5 1", "vt 1 0", "vt 1 1",
+                            "f 1/1 2/2 3/3", "f 2/4 4/5 3/3"], withUvs: true);
+var seamUvs = Corners(seam).Where(c => c.V == 1).Select(c => c.Uv).Distinct().Count();
+Check("a seam vertex keeps both of its UVs", seam.UvIndices is not null && seamUvs == 2,
+    $"{seamUvs} distinct UVs on the shared vertex");
+
+var shared = ObjLoader.Parse([.. tri, "f 1/1 2/2 3/3"], withUvs: true);
+Check("a file whose vt indices equal its v indices stores no second index buffer",
+    shared.HasUvs && shared.UvIndices is null, $"UvIndices {(shared.UvIndices is null ? "null" : "allocated")}");
+
+var negativeUv = ObjLoader.Parse([.. tri, "f -3/-1 -2/-2 -1/-3"], withUvs: true);
+var negativeWant = new[] { (0, uv01), (1, uv10), (2, uv00) };
+Check("negative vt indices count back from the latest vt", Corners(negativeUv).SequenceEqual(negativeWant),
+    string.Join(" ", Corners(negativeUv).Select(c => $"v{c.V}={c.Uv}")));
+
+// UV indices must be dropped IN LOCK-STEP with the triangles the cleaning pass throws away. The first face names a
+// vertex that does not exist and goes; if the UV list were not filtered with it, the survivor would inherit the
+// dead face's coordinates.
+var dropped = ObjLoader.Parse([.. tri, "f 1/1 2/2 9/3", "f 1/3 2/2 3/1"], withUvs: true);
+var droppedWant = new[] { (0, uv01), (1, uv10), (2, uv00) };
+Check("a dropped face takes its UVs with it, leaving the survivor's intact",
+    dropped.TriangleCount == 1 && Corners(dropped).SequenceEqual(droppedWant),
+    string.Join(" ", Corners(dropped).Select(c => $"v{c.V}={c.Uv}")));
+
+// All or nothing. A bare corner or a vt index past the end costs the mesh its UVs -- not a throw, and not a guessed
+// coordinate on the faces that happened to be complete.
+var bareCorner = ObjLoader.Parse([.. tri, "f 1/1 2//2 3/3"], withUvs: true);
+Check("a face with one bare corner drops UVs for the whole mesh", !bareCorner.HasUvs && bareCorner.TriangleCount == 1,
+    $"HasUvs={bareCorner.HasUvs}");
+var pastEnd = ObjLoader.Parse([.. tri, "f 1/1 2/2 3/9"], withUvs: true);
+Check("a vt index past the end drops UVs rather than throwing", !pastEnd.HasUvs && pastEnd.TriangleCount == 1,
+    $"HasUvs={pastEnd.HasUvs}");
+var noVt = ObjLoader.Parse(["v 0 0 0", "v 1 0 0", "v 0 1 0", "f 1/1 2//2 3/3/3"], withUvs: true);
+Check("asking for UVs from a file with no vt at all yields none", !noVt.HasUvs, $"HasUvs={noVt.HasUvs}");
+
+// The opt-in is where the parse-time saving comes from, so it is asserted rather than assumed: a complete, valid
+// UV'd file read WITHOUT asking must come back with no UVs, or every untextured load is paying for them.
+var notAsked = ObjLoader.Parse([.. tri, "f 1/1 2/2 3/3"]);
+Check("UVs are not read unless asked for", !notAsked.HasUvs && shared.HasUvs,
+    $"not asked: HasUvs={notAsked.HasUvs}; asked: HasUvs={shared.HasUvs}");
+
+// The real files. media/ is gitignored, so these are optional rather than failures in a fresh checkout.
+if (RepoPaths.Optional("media", "models", "capsule.obj") is { } capsulePath)
+{
+    var capsule = ObjLoader.Load(capsulePath, withUvs: true);
+    Check("capsule.obj loads all 5,252 of its UVs", capsule.Uvs?.Length == 5252,
+        $"{capsule.Uvs?.Length} UVs, index buffer {(capsule.UvIndices is null ? "shared with positions" : "separate")}");
+}
+else Console.WriteLine("  skip  capsule.obj — media/models not present");
+
+if (RepoPaths.Optional("media", "models", "plane.obj") is { } planeUvPath)
+{
+    var planeUv = ObjLoader.Load(planeUvPath, withUvs: true);
+    // 43,171 vt against 40,654 v: these cannot share an index buffer, so a null here would be a wrong mesh.
+    Check("plane.obj keeps a separate UV index buffer", planeUv.HasUvs && planeUv.UvIndices is not null,
+        $"{planeUv.Uvs?.Length} UVs over {planeUv.Vertices.Length} vertices");
+}
+else Console.WriteLine("  skip  plane.obj — media/models not present");
 
 // A mesh body must be a real dynamic rigid body: it falls, it lands, it sleeps. Spawned well clear of the box
 // tower -- an earlier version dropped it at the origin, straight into the stack, and "it never fell" was the tower

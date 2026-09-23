@@ -18,7 +18,7 @@
     <Compile Include="$(Repo)\examples\Jumbee.Console.Wolf3DDemo\engine\**\*.cs" />
   </ItemGroup>
 
-  <Import Project="$(Repo)\src\ExternalReferences.props" />
+  <!-- src/ExternalReferences.props comes from tests/Directory.Build.props; importing it here too is MSB4011. -->
 
   <ItemGroup>
     <ProjectReference Include="$(Repo)\src\Jumbee.Console\Jumbee.Console.csproj" />

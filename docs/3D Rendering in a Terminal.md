@@ -988,7 +988,7 @@ Choosing between them:
 | `SceneSnapshot.cs` | the immutable parallel-array tick handed to the renderer |
 
 Every measurement quoted here, plus the reasoning behind each decision and the bugs met on the way, is recorded
-milestone by milestone in [`docs/internal/3D Sandbox Plan.md`](internal/3D%20Sandbox%20Plan.md).
+milestone by milestone in [`docs/internal/agent/3D Sandbox Plan.md`](internal/agent/3D%20Sandbox%20Plan.md).
 
 ## See also
 
