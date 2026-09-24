@@ -249,21 +249,35 @@ public abstract class MeshRenderer : ISceneRenderer
         // selection tint has to win over the whole body or there is no way to see which one is selected.
         var selected = Selected == snapshot.Ids[i];
         var faceColors = selected ? null : mesh.FaceColors;
+        // Selection suppresses materials and textures for the reason it suppresses FaceColors: the selection tint has
+        // to win over the whole body, or there is no way to see which one is selected.
+        var mode = selected ? TextureMode.None : Texture;
 
         var idx = mesh.Indices;
-        // Textured only when the renderer is asking for one AND this mesh carries UVs -- the ground and every
-        // generated primitive but the knot have none, so they fall through to the untextured path unchanged. Image
-        // mode also needs the mesh's own map. Selection suppresses a texture for the reason it suppresses FaceColors.
-        bodyTexture = Texture == TextureMode.Image ? mesh.Texture : null;
-        var textured = !selected && Texture != TextureMode.None && (Texture != TextureMode.Image || bodyTexture is not null);
-        var uvs = textured ? mesh.Uvs : null;
+        // The procedural modes are measuring instruments: they map through the mesh's UVs whatever its materials. Auto
+        // and Image draw the MATERIALS instead -- each triangle its own material's map or flat colour. None draws
+        // neither, which is the look from before materials existed, and the one where the body colour applies.
+        var procedural = mode is TextureMode.Checker or TextureMode.Gradient or TextureMode.Noise;
+        var materials = mode is TextureMode.Auto or TextureMode.Image ? mesh.Materials : null;
+        var ids = mesh.MaterialIds;
+        var uvs = mesh.Uvs;
         var uvIdx = mesh.UvIndices ?? idx;
         for (var t = 0; t < idx.Length; t += 3)
         {
             var color = faceColors is null ? tint : faceColors[t / 3];
-            var uv = uvs is null
-                ? default
-                : new UvTriple(uvs[uvIdx[t]], uvs[uvIdx[t + 1]], uvs[uvIdx[t + 2]], true);
+            bodyTexture = null;
+            if (materials is not null && ids is not null && ids[t / 3] is >= 0 and var id)
+            {
+                var material = materials[id];
+                color = material.Colour;
+                // THE GATE. Auto draws a map only when it reads as an image rather than as noise; otherwise the face
+                // keeps its material's flat colour -- the plan's Tier 0. Image draws every map regardless.
+                if (material.Map is { } map && (mode == TextureMode.Image || map.Legible)) bodyTexture = map;
+            }
+
+            var uv = uvs is not null && (procedural || bodyTexture is not null)
+                ? new UvTriple(uvs[uvIdx[t]], uvs[uvIdx[t + 1]], uvs[uvIdx[t + 2]], true)
+                : default;
             Triangle(world[idx[t]], world[idx[t + 1]], world[idx[t + 2]], color, BodyGroup, uv);
         }
     }
@@ -406,7 +420,7 @@ public abstract class MeshRenderer : ISceneRenderer
         TextureMode.Noise => Modulate(tint, 0.2f + (0.8f * Hash(uv, TextureScale))),
         // The map's colour REPLACES the body's palette tint rather than modulating it: a diffuse map is the albedo.
         // Already reduced and quantised at load, so this is one clamped index and nothing else.
-        TextureMode.Image => bodyTexture!.Sample(uv),
+        TextureMode.Image or TextureMode.Auto => bodyTexture!.Sample(uv),
         _ => tint,
     };
 
@@ -451,7 +465,8 @@ public abstract class MeshRenderer : ISceneRenderer
     private readonly HalfBlockSurface surface = new();
 
     private Vector3[] world = new Vector3[64];
-    // The body being drawn's image map, when TextureMode.Image has one to sample. Per-draw scratch like `world`.
+    // The map the triangle being drawn samples, when its material has one the mode draws. Per-draw scratch, like
+    // `world`: set per triangle in DrawBody and read by SampleTexture down the same call.
     private Texture? bodyTexture;
     private float halfW;
     private float halfH;
@@ -465,7 +480,7 @@ public abstract class MeshRenderer : ISceneRenderer
 /// the most expensive.</remarks>
 public enum TextureMode
 {
-    /// <summary>No texture; the body takes its palette tint as before.</summary>
+    /// <summary>No texture and no materials; the body takes its palette tint, as before materials existed.</summary>
     None,
 
     /// <summary>Two-tone squares in UV space. Large flat patches, so colour runs mostly survive.</summary>
@@ -480,6 +495,11 @@ public enum TextureMode
     /// frequency rises.</summary>
     Noise,
 
-    /// <summary>The mesh's own <see cref="Mesh.Texture"/>. A mesh without one is drawn untextured.</summary>
+    /// <summary>The mesh's materials, every map drawn. A face without a mapped material shows its material's flat
+    /// colour; a mesh without materials is drawn as under <see cref="None"/>.</summary>
     Image,
+
+    /// <summary>The mesh's materials, each map drawn only if <see cref="Texture.Legible"/> — otherwise that material
+    /// shows its flat colour. The one to use by default: it declines to texture where texturing would read as noise.</summary>
+    Auto,
 }

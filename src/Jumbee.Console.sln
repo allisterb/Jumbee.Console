@@ -21,6 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{C9B2828B-D
 		..\CONTRIBUTING.md = ..\CONTRIBUTING.md
 		..\GEMINI.md = ..\GEMINI.md
 		..\GETTING-STARTED.md = ..\GETTING-STARTED.md
+		..\LICENSE = ..\LICENSE
 		..\README.md = ..\README.md
 		..\ext\RazorConsole.Core.Syntax\README.md = ..\ext\RazorConsole.Core.Syntax\README.md
 		..\docs\README.md = ..\docs\README.md

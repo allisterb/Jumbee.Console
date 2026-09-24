@@ -31,7 +31,7 @@ public sealed class Texture
 {
     #region Constructors
     private Texture(byte[] rgb, int width, int height, int sourceWidth, int sourceHeight, float retain,
-                    float contrast, int colours)
+                    float contrast, int colours, float busyness, Color average)
     {
         this.rgb = rgb;
         Width = width;
@@ -41,6 +41,8 @@ public sealed class Texture
         Retain = retain;
         Contrast = contrast;
         Colours = colours;
+        Busyness = busyness;
+        Average = average;
     }
     #endregion
 
@@ -69,6 +71,52 @@ public sealed class Texture
 
     /// <summary>Distinct colours in the baked map, after quantisation — the figure that predicts the run cost.</summary>
     public int Colours { get; }
+
+    /// <summary>The fraction of neighbouring baked texels, across and down, whose colours differ. Near 0 for large
+    /// flat regions, near 1 when every texel differs from the next.</summary>
+    /// <remarks>
+    /// The gate's measure (<see cref="Legible"/>), chosen over <see cref="Retain"/> because it judges the map the
+    /// screen will actually get rather than how much of the source was lost on the way. Phase 2 showed the difference
+    /// matters: the capsule's hairline grid <em>loses</em> most of its variance in the reduce (retain 0.18, below a
+    /// screenshot judged too busy) yet renders legibly, because the lines keep their <em>positions</em>. It is also
+    /// the literal cause of the emission cost — a differing neighbour is a broken ANSI run.
+    /// </remarks>
+    public float Busyness { get; }
+
+    /// <summary>The source's mean colour: what a material shows flat when its map is not drawn.</summary>
+    public Color Average { get; }
+
+    /// <summary>Whether the gate would draw this map rather than its <see cref="Average"/>: its
+    /// <see cref="Busyness"/> is at most <see cref="MaxBusyness"/>.</summary>
+    public bool Legible => Busyness <= MaxBusyness;
+
+    /// <summary>The <see cref="Busyness"/> above which a map reads as noise and is drawn flat instead.</summary>
+    /// <remarks>
+    /// <para>
+    /// Calibrated by looking, every map mapped onto the capsule at 200×52 (shaded, bytes against untextured):
+    /// </para>
+    /// <code>
+    ///  busyness  map                         verdict by eye                 bytes
+    ///   0.075    Spectre's large logo        legible                        1.23x
+    ///   0.113    screenshot, small text      sparse but clean, not messy    1.16x
+    ///   0.120    8x8 random blocks           a clean patchwork              1.69x
+    ///   0.209    rendered cow                legible                        1.33x
+    ///   0.251    screenshot of tables        a patterned label              2.07x
+    ///   0.267    NASA Blue Marble            unmistakably Earth             1.99x
+    ///   0.332    3x3 random blocks           a busy mosaic, shape survives  2.58x
+    ///   0.340    capsule0 UV grid            legible                        2.12x
+    ///   0.496    2x2 random blocks           confetti                       3.12x
+    ///   0.992    per-texel noise             confetti; shape lost           4.06x
+    /// </code>
+    /// <para>
+    /// The cut sits between the legible capsule grid (0.34), which must draw, and 2×2 confetti (0.50), which must
+    /// not. The first placeholder, 0.5, would have passed the confetti. <b>The limit, stated plainly:</b> busyness
+    /// cannot tell structure from randomness in the middle of its range — the 3×3 mosaic scores the same as the
+    /// capsule grid — so what the gate reliably does is refuse near-noise. It also bounds the byte cost at roughly
+    /// 2.6× the untextured frame.
+    /// </para>
+    /// </remarks>
+    public const float MaxBusyness = 0.42f;
 
     /// <summary>The longest side a map is reduced to by default.</summary>
     /// <remarks>
@@ -214,7 +262,21 @@ public sealed class Texture
             colours.Add((baked[b * 3] << 16) | (baked[(b * 3) + 1] << 8) | baked[(b * 3) + 2]);
         }
 
-        return new Texture(baked, bw, bh, width, height, retain, contrast, colours.Count);
+        // Busyness, on the QUANTISED map -- what the screen receives, so two texels the ramp made equal count as equal.
+        int pairs = 0, differing = 0;
+        bool Same(int a, int b) =>
+            baked[a * 3] == baked[b * 3] && baked[(a * 3) + 1] == baked[(b * 3) + 1] && baked[(a * 3) + 2] == baked[(b * 3) + 2];
+        for (var y = 0; y < bh; y++)
+            for (var x = 0; x < bw; x++)
+            {
+                var b = (y * bw) + x;
+                if (x + 1 < bw) { pairs++; if (!Same(b, b + 1)) differing++; }
+                if (y + 1 < bh) { pairs++; if (!Same(b, b + bw)) differing++; }
+            }
+        var busyness = pairs == 0 ? 0f : (float)differing / pairs;
+
+        var average = new Color((byte)Math.Round(gr), (byte)Math.Round(gg), (byte)Math.Round(gb));
+        return new Texture(baked, bw, bh, width, height, retain, contrast, colours.Count, busyness, average);
     }
 
     /// <summary>

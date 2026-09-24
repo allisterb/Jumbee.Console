@@ -56,6 +56,12 @@ public static class ObjLoader
         var indices = new List<int>();
         var uvs = new List<Vector2>();
         var uvIndices = new List<int>();
+        // Materials by name, in first-use order, and the one in force for each fan triangle. Cheap enough to keep
+        // always: a file has a handful of usemtl lines, and the per-triangle list is only kept if there are any.
+        var materialNames = new List<string>();
+        var materialIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        var triangleMaterials = new List<int>();
+        var currentMaterial = -1;
         ModelUpAxis? authoredUpAxis = null;
 
         foreach (var line in lines)
@@ -89,6 +95,16 @@ public static class ObjLoader
                 var end = v.IndexOf(' ');
                 uvs.Add(new Vector2(Number(u), v.IsEmpty ? 0f : Number(end < 0 ? v : v[..end])));
             }
+            else if (span.Length > 7 && span.StartsWith("usemtl") && span[6] is ' ' or '\t')
+            {
+                var name = span[7..].Trim().ToString();
+                if (!materialIndex.TryGetValue(name, out currentMaterial))
+                {
+                    currentMaterial = materialNames.Count;
+                    materialIndex[name] = currentMaterial;
+                    materialNames.Add(name);
+                }
+            }
             else if (span[0] == 'f' && span[1] == ' ')
             {
                 var parts = Split(span[2..]);
@@ -102,6 +118,7 @@ public static class ObjLoader
                     indices.Add(VertexIndex(parts[0], vertices.Count));
                     indices.Add(VertexIndex(parts[i], vertices.Count));
                     indices.Add(VertexIndex(parts[i + 1], vertices.Count));
+                    triangleMaterials.Add(currentMaterial);
                     if (!withUvs) continue;
                     uvIndices.Add(UvIndex(parts[0], uvs.Count));
                     uvIndices.Add(UvIndex(parts[i], uvs.Count));
@@ -118,6 +135,7 @@ public static class ObjLoader
         // two stay parallel whatever gets dropped.
         var clean = new List<int>(indices.Count);
         var cleanUv = new List<int>(uvs.Count > 0 ? indices.Count : 0);
+        var cleanMaterials = new List<int>(materialNames.Count > 0 ? indices.Count / 3 : 0);
         var uvComplete = withUvs && uvs.Count > 0;
         for (var i = 0; i + 2 < indices.Count; i += 3)
         {
@@ -126,6 +144,7 @@ public static class ObjLoader
             clean.Add(indices[i]);
             clean.Add(indices[i + 1]);
             clean.Add(indices[i + 2]);
+            if (materialNames.Count > 0) cleanMaterials.Add(triangleMaterials[i / 3]);
             if (!uvComplete) continue;
             for (var c = 0; c < 3; c++)
             {
@@ -148,6 +167,9 @@ public static class ObjLoader
             AuthoredUpAxis = authoredUpAxis,
             Uvs = uvComplete ? [.. uvs] : null,
             UvIndices = uvComplete && !sharedIndices ? [.. cleanUv] : null,
+            // Names and ids only. Resolving them against an .mtl -- and loading any maps -- is ModelLoader's job.
+            MaterialNames = materialNames.Count > 0 ? [.. materialNames] : null,
+            MaterialIds = materialNames.Count > 0 ? [.. cleanMaterials] : null,
         };
     }
     #endregion

@@ -29,8 +29,12 @@ using CColor = ConsoleGUI.Data.Color;
 public sealed class ShadedRenderer : MeshRenderer
 {
     #region Constructors
-    /// <summary>Creates the shaded renderer at its default shade-ramp resolution.</summary>
-    public ShadedRenderer() : base(DefaultShadeLevels) { }
+    /// <summary>Creates the shaded renderer at its default shade-ramp resolution, drawing materials with
+    /// <see cref="TextureMode.Auto"/>.</summary>
+    /// <remarks>The only renderer that textures by default, and the only one the UI offers it on: a texture costs
+    /// <see cref="SolidRenderer"/> more than this renderer costs untextured, because flat-per-face is the whole of
+    /// what makes that one cheap.</remarks>
+    public ShadedRenderer() : base(DefaultShadeLevels) => Texture = TextureMode.Auto;
     #endregion
 
     #region Properties

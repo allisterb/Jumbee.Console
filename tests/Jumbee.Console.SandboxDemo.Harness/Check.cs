@@ -157,10 +157,20 @@ if (args.Contains("--texture"))
     if (texImage is not null)
     {
         var map = Texture.Load(texImage, texReduce, texLevels);
-        texMesh = texMesh.WithTexture(map);
+        // One material over every triangle, so the map applies whatever materials the model came with (or none, for
+        // the knot). This is the explicit-override path; without image= a model's own .mtl is resolved by ModelLoader.
+        texMesh = new Mesh(texMesh.Vertices, texMesh.Indices)
+        {
+            AuthoredUpAxis = texMesh.AuthoredUpAxis,
+            Uvs = texMesh.Uvs,
+            UvIndices = texMesh.UvIndices,
+            MaterialNames = ["image"],
+            MaterialIds = new int[texMesh.TriangleCount],
+        }.WithMaterials([new Material("image", map.Average, map)]);
         texTag += $"-r{texReduce}-l{texLevels}";
         Console.WriteLine($"\n{Path.GetFileName(texImage)}: {map.SourceWidth}x{map.SourceHeight} -> {map.Width}x{map.Height}, " +
-                          $"{texLevels} levels  retain {map.Retain:F2}  contrast {map.Contrast:F3}  {map.Colours} colours");
+                          $"{texLevels} levels  busyness {map.Busyness:F3}  retain {map.Retain:F2}  " +
+                          $"contrast {map.Contrast:F3}  {map.Colours} colours  gate: {(map.Legible ? "TEXTURE" : "flat")}");
     }
 
     var texMeshId = Meshes.Register(texMesh, texTag);
@@ -1053,27 +1063,42 @@ Check("detail finer than a baked texel scores near 0 retained", fine.Retain < 0.
 Check("detail coarser than a baked texel scores near 1 retained", halves.Retain > 0.95f && halves.Contrast > 0.4f,
     $"retain {halves.Retain:F3}, contrast {halves.Contrast:F3}");
 
-// WithTexture must carry every OTHER init property, or a textured mesh silently loses one. Checked by reflection
-// over the setters Mesh actually has, against a source with every one of them set -- so a property added later is
-// caught here without anyone remembering to extend the check.
+// WithMaterials must carry every OTHER init property, or a material-bearing mesh silently loses one. Checked by
+// reflection over the setters Mesh actually has, against a source with every one of them set -- so a property added
+// later is caught here without anyone remembering to extend the check.
 var carried = new Mesh([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2])
 {
     AuthoredUpAxis = ModelUpAxis.Z,
     FaceColors = [red],
     Uvs = [new(0, 0), new(1, 0), new(0, 1)],
     UvIndices = [2, 1, 0],
-    Texture = wide,
+    MaterialNames = ["m"],
+    MaterialIds = [0],
+    Materials = [new Material("m", red, wide)],
 };
-var withMap = carried.WithTexture(tall);
+Material[] replacement = [new Material("m", blue, tall)];
+var withMap = carried.WithMaterials(replacement);
 // Every property is compared, not only the settable ones, so a copy that forgot to pass Vertices or Indices to the
 // constructor fails too. The settable ones must also all be SET on the source, or a dropped null passes vacuously.
 var meshProps = typeof(Mesh).GetProperties();
 var unset = meshProps.Where(p => p.SetMethod is not null && p.GetValue(carried) is null).Select(p => p.Name).ToArray();
-var lost = meshProps.Where(p => p.Name != nameof(Mesh.Texture) && !Equals(p.GetValue(carried), p.GetValue(withMap)))
+var lost = meshProps.Where(p => p.Name != nameof(Mesh.Materials) && !Equals(p.GetValue(carried), p.GetValue(withMap)))
                     .Select(p => p.Name).ToArray();
-Check("WithTexture carries every other property", unset.Length == 0 && lost.Length == 0 && withMap.Texture == tall,
+Check("WithMaterials carries every other property",
+    unset.Length == 0 && lost.Length == 0 && ReferenceEquals(withMap.Materials, replacement),
     unset.Length > 0 ? $"test source leaves unset: {string.Join(", ", unset)}"
                      : lost.Length > 0 ? $"dropped: {string.Join(", ", lost)}" : $"{meshProps.Length - 1} carried");
+
+// And it refuses materials that do not parallel the names -- a silent misalignment would put every face on the
+// wrong material.
+Check("WithMaterials refuses a list that does not parallel the names",
+    Throws<ArgumentException>(() => carried.WithMaterials([replacement[0], replacement[0]])));
+
+static bool Throws<T>(Action action) where T : Exception
+{
+    try { action(); return false; }
+    catch (T) { return true; }
+}
 
 if (RepoPaths.Optional("media", "models", "capsule0.png") is { } capsuleMap)
 {
@@ -1175,6 +1200,191 @@ if (RepoPaths.Optional("media", "models", "capsule0.jpg") is { } capsuleJpg
         $"{viaJpeg.Width}x{viaJpeg.Height}, {differ} of {samples} samples differ by more than one quantisation step");
 }
 else Console.WriteLine("  skip  capsule0.jpg/.png — media/models not present");
+
+// --- materials: MTL, usemtl, ModelLoader, the gate, and what each mode draws ----------------------------------------
+Console.WriteLine("\nmaterials:");
+
+var mtl = MtlLoader.Parse(["Kd 9 9 9", "newmtl red", "Kd 1 0 0", "map_Kd -s 2 2 1 -o 0.5 0 0 -clamp on my map.png",
+                           "newmtl plain", "newmtl loud", "Kd 3 -1 0.5"]);
+Check("an .mtl yields each material's Kd and map, in order, ignoring lines before the first newmtl",
+    mtl.Count == 3 && mtl[0] is { Name: "red", MapKd: "my map.png" } && mtl[0].Kd == new Vector3(1, 0, 0),
+    string.Join("; ", mtl.Select(d => $"{d.Name} Kd={d.Kd} map={d.MapKd ?? "-"}")));
+Check("map_Kd options are skipped, and a filename with a space survives", mtl[0].MapKd == "my map.png", mtl[0].MapKd ?? "null");
+Check("a material with no Kd is MTL's default white, and Kd is clamped to 0..1",
+    mtl[1].Kd == Vector3.One && mtl[2].Kd == new Vector3(1, 0, 0.5f), $"plain {mtl[1].Kd}, loud {mtl[2].Kd}");
+
+string[] quad = ["v -1 0 -1", "v 1 0 -1", "v 1 0 1", "v -1 0 1"];
+var used = ObjLoader.Parse([.. quad, "f 1 2 3", "usemtl a", "f 1 3 4", "usemtl b", "f 2 3 4", "usemtl a", "f 1 2 4"]);
+Check("usemtl gives each triangle its material, first-use order, and -1 before any usemtl",
+    used.MaterialNames is ["a", "b"] && used.MaterialIds is [-1, 0, 1, 0],
+    $"names [{string.Join(",", used.MaterialNames ?? [])}] ids [{string.Join(",", used.MaterialIds ?? [])}]");
+// Lock-step, the lesson from the UVs: a dropped face must take its material id with it.
+var droppedMat = ObjLoader.Parse([.. quad, "usemtl a", "f 1 2 9", "usemtl b", "f 1 2 3"]);
+Check("a dropped face takes its material with it, leaving the survivor's",
+    droppedMat.TriangleCount == 1 && droppedMat.MaterialIds is [1], $"ids [{string.Join(",", droppedMat.MaterialIds ?? [])}]");
+Check("a file with no usemtl carries no material ids", ObjLoader.Parse([.. quad, "f 1 2 3"]) is { MaterialNames: null, MaterialIds: null });
+
+// ModelLoader, against real files in a temp folder: an OBJ with two materials, one map that reads as an image and
+// one that is noise.
+var matDir = Directory.CreateTempSubdirectory("jc-materials-").FullName;
+try
+{
+    byte[] Png(Func<int, int, byte[]> px, int w, int h)
+    {
+        var rgb = new byte[w * h * 3];
+        for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) px(x, y).CopyTo(rgb, ((y * w) + x) * 3);
+        return PngSharp.Api.Png.EncodeToByteArray(PngSharp.Api.Png.CreateRgb(w, h, rgb));
+    }
+
+    var rng = new Random(7);
+    File.WriteAllBytes(Path.Combine(matDir, "calm.png"), Png((x, _) => x < 32 ? [200, 40, 40] : [40, 40, 200], 64, 64));
+    File.WriteAllBytes(Path.Combine(matDir, "busy.png"), Png((_, _) => [(byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256)], 64, 64));
+    File.WriteAllText(Path.Combine(matDir, "m.mtl"),
+        "newmtl calm\nKd 1 1 1\nmap_Kd calm.png\nnewmtl busy\nKd 0.5 0.5 0.5\nmap_Kd busy.png\nnewmtl bare\nKd 0 1 0\nmap_Kd gone.png\n");
+    string[] objBody = [.. quad, "vt 0 0", "vt 1 0", "vt 1 1", "vt 0 1",
+                        "usemtl calm", "f 1/1 2/2 3/3", "usemtl busy", "f 1/1 3/3 4/4", "usemtl bare", "f 2/2 3/3 4/4"];
+    File.WriteAllLines(Path.Combine(matDir, "m.obj"), ["mtllib m.mtl", .. objBody]);
+
+    var loaded = ModelLoader.Load(Path.Combine(matDir, "m.obj"));
+    var calm = loaded.Materials?.FirstOrDefault(m => m.Name == "calm");
+    var busy = loaded.Materials?.FirstOrDefault(m => m.Name == "busy");
+    var bare = loaded.Materials?.FirstOrDefault(m => m.Name == "bare");
+    Check("ModelLoader resolves an OBJ's materials from its mtllib, maps and all",
+        loaded.Materials?.Length == 3 && calm?.Map is not null && busy?.Map is not null,
+        $"{loaded.Materials?.Length ?? 0} materials: {string.Join(", ", loaded.Materials?.Select(m => $"{m.Name}{(m.Map is null ? "" : "+map")}") ?? [])}");
+    Check("UVs are read automatically when a material has a map", loaded.HasUvs, $"HasUvs={loaded.HasUvs}");
+    Check("a map's flat colour is Kd times its average (MTL's rule), not Kd alone",
+        busy is { } b && Math.Abs(b.Colour.R - (b.Map!.Average.R / 2)) <= 1 && calm!.Colour == calm.Map!.Average,
+        $"calm {Rgb(calm?.Colour ?? default)} vs its average {Rgb(calm?.Map?.Average ?? default)}; busy {Rgb(busy?.Colour ?? default)}");
+    Check("a map file that is absent leaves that material its Kd, not a failure",
+        bare is { Map: null } && bare.Colour == new Color(0, 255, 0), bare is null ? "missing" : Rgb(bare.Colour));
+    Check("the gate: a two-tone map reads as an image, per-texel noise does not",
+        calm!.Map!.Legible && !busy!.Map!.Legible, $"calm busyness {calm.Map.Busyness:F2}, busy {busy!.Map!.Busyness:F2}");
+
+    // Absent is not broken. No .mtl: no materials at all -- NOT a model's worth of MTL-default white.
+    File.WriteAllLines(Path.Combine(matDir, "nomtl.obj"), ["mtllib absent.mtl", .. objBody]);
+    var noMtl = ModelLoader.Load(Path.Combine(matDir, "nomtl.obj"));
+    Check("a missing .mtl leaves no materials, so the model is drawn in its body colour rather than white",
+        noMtl.Materials is null && noMtl.MaterialNames is not null, $"Materials {(noMtl.Materials is null ? "null" : "set")}");
+    Check("and without a map to draw, UVs are not paid for", !noMtl.HasUvs, $"HasUvs={noMtl.HasUvs}");
+
+    File.WriteAllLines(Path.Combine(matDir, "stranger.obj"), ["mtllib m.mtl", .. quad, "usemtl nobody", "f 1 2 3"]);
+    Check("usemtl names the library does not define leave no materials",
+        ModelLoader.Load(Path.Combine(matDir, "stranger.obj")).Materials is null);
+
+    // Broken is not absent: a map that exists and will not decode fails the load, naming the file.
+    File.WriteAllText(Path.Combine(matDir, "calm.png"), "not an image");
+    string? brokenError = null;
+    try { ModelLoader.Load(Path.Combine(matDir, "m.obj")); }
+    catch (InvalidDataException e) { brokenError = e.Message; }
+    Check("a map that exists but will not decode fails the load, naming the file",
+        brokenError?.Contains("calm.png") == true, brokenError ?? "no exception -- the failure was swallowed");
+}
+finally
+{
+    Directory.Delete(matDir, recursive: true);
+}
+
+// What each mode puts on the SCREEN. Pixel comparisons between renders of the same knot, so each check is about
+// what a human would see. The one that carries the gate: Auto with an unreadable map must render cell-for-cell as
+// the same material drawn flat.
+{
+    var knotBase = Meshes.TorusKnot();
+    Mesh Dressed(Material? material) => material is null ? knotBase : new Mesh(knotBase.Vertices, knotBase.Indices)
+    {
+        Uvs = knotBase.Uvs, MaterialNames = [material.Name], MaterialIds = new int[knotBase.TriangleCount],
+    }.WithMaterials([material]);
+
+    int[] Cells(Mesh mesh, TextureMode mode)
+    {
+        var snap = new SceneSnapshot(1) { Count = 1, AwakeCount = 1 };
+        snap.Ids[0] = 1;
+        snap.Shapes[0] = BodyShape.Mesh;
+        snap.MeshIds[0] = Meshes.Register(mesh, "materials-check");
+        snap.Positions[0] = new Vector3(0, 2f, 0);
+        snap.Rotations[0] = Quaternion.Identity;
+        snap.HalfExtents[0] = new Vector3(2f);
+        snap.ColorKeys[0] = 1;
+        snap.Awake[0] = true;
+        var shaded = new ShadedRenderer { Texture = mode, Edges = SilhouetteStyle.None, OcclusionStrength = 0f };
+        _ = ConsoleSnapshot.ToText(shaded.Surface, 80, 30);
+        shaded.Draw(snap, new OrbitCamera { Target = new Vector3(0, 2f, 0), Distance = 7f });
+        return CellColours((HalfBlockSurface)shaded.Surface);
+    }
+
+    static int Differ(int[] a, int[] b) => a.Zip(b).Count(p => p.First != p.Second);
+
+    var flatColour = new Color(210, 120, 40);
+    var noiseRgb = new byte[64 * 64 * 3];
+    new Random(3).NextBytes(noiseRgb);
+    var noiseMap = Texture.Bake(noiseRgb, 64, 64);
+    var calmMap = Texture.Bake(Pattern(64, 64, (x, _) => x < 32), 64, 64);
+
+    var plainCells = Cells(Dressed(null), TextureMode.Auto);
+    var flatCells = Cells(Dressed(new Material("m", flatColour, null)), TextureMode.Auto);
+    var autoNoise = Cells(Dressed(new Material("m", flatColour, noiseMap)), TextureMode.Auto);
+    var imageNoise = Cells(Dressed(new Material("m", flatColour, noiseMap)), TextureMode.Image);
+    var autoCalm = Cells(Dressed(new Material("m", flatColour, calmMap)), TextureMode.Auto);
+    var imageCalm = Cells(Dressed(new Material("m", flatColour, calmMap)), TextureMode.Image);
+    var offCalm = Cells(Dressed(new Material("m", flatColour, calmMap)), TextureMode.None);
+
+    Check("Off draws no materials: the body colour, exactly as a mesh without any",
+        Differ(offCalm, plainCells) == 0, $"{Differ(offCalm, plainCells)} cells differ");
+    Check("a material without a map draws its flat colour", Differ(flatCells, plainCells) > 0,
+        $"{Differ(flatCells, plainCells)} cells differ from the body colour");
+    Check("THE GATE: Auto draws an unreadable map exactly as its flat colour",
+        Differ(autoNoise, flatCells) == 0, $"{Differ(autoNoise, flatCells)} cells differ from flat");
+    // Exact, not "the colour changed": every body cell changes in all of these, which a wrong flat colour would pass
+    // just as well. Counting distinct colours was tried and is fragile -- a two-tone map gave 15 against flat's 14.
+    Check("Auto draws a readable map exactly as On does, and that is not the flat colour",
+        Differ(autoCalm, imageCalm) == 0 && Differ(imageCalm, flatCells) > 0,
+        $"{Differ(autoCalm, imageCalm)} cells differ from On, {Differ(imageCalm, flatCells)} from flat");
+    static int Distinct(int[] cells) => cells.Distinct().Count();
+    Check("On draws every map, the unreadable one included",
+        Distinct(imageNoise) > Distinct(flatCells) * 4, $"{Distinct(imageNoise)} distinct colours against flat's {Distinct(flatCells)}");
+}
+
+// End to end, as the app runs it: ModelLoader resolves the capsule's .mtl, the REAL viewer shell opens on it, and it
+// is drawn with whatever renderer and mode the viewer starts in. Every link above is checked on its own; this is the
+// check that the chain holds -- the answer to "if I load capsule.obj, do I see its texture?".
+if (RepoPaths.Optional("media", "models", "capsule.obj") is { } capsuleObj)
+{
+    var capsuleMesh = ModelLoader.Load(capsuleObj);
+    using var viewerApp = SandboxShell.BuildViewer(Meshes.Register(capsuleMesh, "capsule-e2e"));
+    _ = ConsoleSnapshot.ToText(viewerApp.Root, W, H);
+    var viewerView = viewerApp.View;
+
+    int[] ViewerCells()
+    {
+        viewerView.Renderer.Draw(viewerApp.Model.Snapshot, viewerView.Camera);
+        return CellColours((HalfBlockSurface)viewerView.Renderer.Surface);
+    }
+
+    Check("the viewer opens on the shaded renderer, texturing on Auto",
+        viewerView.Renderer is ShadedRenderer && viewerView.Texture == TextureMode.Auto,
+        $"{viewerView.Renderer.Name}, texture {viewerView.Texture?.ToString() ?? "n/a"}");
+    Check("capsule.obj arrives with its material and its map",
+        capsuleMesh.Materials is [{ Map: not null }] && capsuleMesh.HasUvs,
+        $"{capsuleMesh.Materials?.Length ?? 0} material(s), map {(capsuleMesh.Materials?[0].Map is null ? "none" : "loaded")}");
+    var opened = ViewerCells();
+
+    // e2epng=DIR: the whole real viewer shell as a picture, at a size its sidebar fits -- the only way to judge
+    // the Texture drop-down beside a textured model, and whether Colour really greys out.
+    if (args.FirstOrDefault(a => a.StartsWith("e2epng="))?[7..] is { } e2eDir)
+    {
+        var e2eOpt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
+        _ = ConsoleSnapshot.ToText(viewerApp.Root, 200, 60);
+        _ = ViewerCells();
+        ConsoleSnapshot.SavePng(viewerApp.Root, 200, 60, Path.Combine(e2eDir, "viewer-capsule-auto.png"), e2eOpt);
+    }
+
+    viewerView.SetTexture(TextureMode.None);
+    var untextured = ViewerCells();
+    var texturedCells = opened.Zip(untextured).Count(p => p.First != p.Second);
+    Check("so loading capsule.obj in the viewer shows its texture", texturedCells > 50,
+        $"{texturedCells} cells differ from the same view with textures off");
+}
+else Console.WriteLine("  skip  capsule.obj end to end — media/models not present");
 
 // A mesh body must be a real dynamic rigid body: it falls, it lands, it sleeps. Spawned well clear of the box
 // tower -- an earlier version dropped it at the origin, straight into the stack, and "it never fell" was the tower

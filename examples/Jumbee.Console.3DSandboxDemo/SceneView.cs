@@ -201,6 +201,19 @@ public sealed class SceneView : CompositeControl
         RendererChanged?.Invoke();
     }
 
+    /// <summary>How the shaded renderer draws a model's materials, or <see langword="null"/> under any other renderer,
+    /// which does not texture.</summary>
+    public TextureMode? Texture => renderer is ShadedRenderer s ? s.Texture : null;
+
+    /// <summary>Sets how the shaded renderer draws materials: <see cref="TextureMode.None"/>,
+    /// <see cref="TextureMode.Auto"/> or <see cref="TextureMode.Image"/>. A no-op under any other renderer.</summary>
+    public void SetTexture(TextureMode mode)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.Texture == mode) return;
+        shaded.Texture = mode;
+        RendererChanged?.Invoke();
+    }
+
     /// <summary>How hard the shaded renderer darkens creases and contacts, or <see langword="null"/> under a
     /// renderer that has no such pass.</summary>
     public float? OcclusionStrength => renderer is ShadedRenderer s ? s.OcclusionStrength : null;

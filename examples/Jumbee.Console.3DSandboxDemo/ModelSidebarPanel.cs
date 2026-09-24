@@ -25,6 +25,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         renderer = new Select([.. view.Renderers.Select(r => r.Name)]) { SelectedIndex = 0, FitContent = true };
         renderer.SelectionChanged += (_, _) => Push(() => view.SetRenderer(view.Renderers[renderer.SelectedIndex]));
         edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
+        texture.SelectionChanged += (_, _) => Push(() => view.SetTexture(TextureChoices[texture.SelectedIndex]));
         spin.Changed += (_, on) => Push(() => model.SpinRate = on ? DefaultSpin : 0f);
         zUp.Changed += (_, on) => Push(() => model.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
         color.SelectionChanged += (_, _) => Push(() => model.ColorKey = color.SelectedIndex);
@@ -77,8 +78,9 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Colour", color), spin), 5),
             // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
             // the shaded renderer's, so they belong together.
+            // Texture first: on a model with materials it changes the picture more than anything else here.
             new Section("Shaded detail",
-                Spaced(Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade), 9),
+                Spaced(Labelled("Texture", texture), Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade), 11),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -142,6 +144,15 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
             spin.IsChecked = model.SpinRate != 0f;
             color.SelectedIndex = model.ColorKey;
+
+            // Texture greys out under the renderers that do not texture AND on a model with no materials -- most of
+            // them -- because a control that visibly does nothing reads as broken. Colour greys out the other way:
+            // while materials are being drawn the body colour is not used, and a drop-down that changes nothing is
+            // exactly how the white-model bug presented. Off gives it back.
+            var materialsShown = model.Mesh.Materials is not null && (view.Texture ?? TextureMode.None) != TextureMode.None;
+            texture.SelectedIndex = Math.Max(0, Array.IndexOf(TextureChoices, view.Texture ?? TextureMode.Auto));
+            texture.Enabled = view.Texture is not null && model.Mesh.Materials is not null;
+            color.Enabled = !materialsShown;
             wrapLighting.IsChecked = view.WrapLighting ?? false;
             occlusion.Value = view.OcclusionStrength ?? 0f;
             edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
@@ -261,6 +272,11 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
 
     private readonly Select renderer;
     private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
+
+    // off / auto / on. Auto is the default: it draws a map only where the gate says it reads as an image, and a
+    // flat material colour where it would read as noise. On draws every map; Off draws no materials at all.
+    private readonly Select texture = new Select("off", "auto", "on") { FitContent = true };
+    private static readonly TextureMode[] TextureChoices = [TextureMode.None, TextureMode.Auto, TextureMode.Image];
     private readonly Switch spin = new Switch("Turntable", isOn: true);
 
     // Renderable options rather than text: the row is a swatch in the colour itself plus its name, which needs two

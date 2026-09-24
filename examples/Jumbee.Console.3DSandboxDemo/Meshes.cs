@@ -76,9 +76,23 @@ public sealed class Mesh
     /// <summary>Whether this mesh can be textured.</summary>
     public bool HasUvs => Uvs is { Length: > 0 };
 
-    /// <summary>The image map this mesh's <see cref="Uvs"/> address, or <see langword="null"/> when it has none.
-    /// Drawn only when the renderer's <see cref="MeshRenderer.Texture"/> is <see cref="TextureMode.Image"/>.</summary>
-    public Texture? Texture { get; init; }
+    /// <summary>The material names the file's <c>usemtl</c> lines used, in first-use order, or
+    /// <see langword="null"/> when it used none. <see cref="MaterialIds"/> indexes this.</summary>
+    public string[]? MaterialNames { get; init; }
+
+    /// <summary>Per triangle, an index into <see cref="MaterialNames"/> and <see cref="Materials"/>, or -1 for a face
+    /// the file drew before any <c>usemtl</c>; <see langword="null"/> when there are no material names.</summary>
+    public int[]? MaterialIds { get; init; }
+
+    /// <summary>The resolved materials, parallel to <see cref="MaterialNames"/>, or <see langword="null"/> when they
+    /// could not be — no <c>.mtl</c>, or none of its names matched.</summary>
+    /// <remarks>
+    /// Filled by <c>ModelLoader</c>, never by a geometry loader, and <b>deliberately absent rather than defaulted</b>:
+    /// a placeholder material would be MTL's default white, and a model whose <c>.mtl</c> went missing would then be
+    /// drawn white instead of in the body's own colour — the white-model bug in a new form. Drawn only when the
+    /// renderer's <see cref="MeshRenderer.Texture"/> is <see cref="TextureMode.Auto"/> or <see cref="TextureMode.Image"/>.
+    /// </remarks>
+    public Material[]? Materials { get; init; }
 
     /// <summary>Number of triangles.</summary>
     public int TriangleCount => Indices.Length / 3;
@@ -113,18 +127,29 @@ public sealed class Mesh
     #endregion
 
     #region Methods
-    /// <summary>A copy of this mesh carrying <paramref name="texture"/>. Geometry and UVs are shared, not copied.</summary>
-    /// <remarks>The seam a material loader attaches a map through, since the geometry loaders know nothing of
-    /// images. <b>Every init property must be carried here</b> — a new one left out is silently dropped from every
-    /// textured mesh, and the harness checks each one survives.</remarks>
-    public Mesh WithTexture(Texture? texture) => new(Vertices, Indices)
+    /// <summary>A copy of this mesh carrying <paramref name="materials"/>, which must parallel
+    /// <see cref="MaterialNames"/>. Geometry, UVs and ids are shared, not copied.</summary>
+    /// <remarks>The seam <c>ModelLoader</c> attaches resolved materials through, since the geometry loaders know
+    /// nothing of <c>.mtl</c> files or images. <b>Every init property must be carried here</b> — a new one left out
+    /// is silently dropped from every material-bearing mesh, and the harness checks each one survives.</remarks>
+    /// <exception cref="ArgumentException"><paramref name="materials"/> does not parallel <see cref="MaterialNames"/>.</exception>
+    public Mesh WithMaterials(Material[]? materials)
     {
-        AuthoredUpAxis = AuthoredUpAxis,
-        FaceColors = FaceColors,
-        Uvs = Uvs,
-        UvIndices = UvIndices,
-        Texture = texture,
-    };
+        if (materials is not null && materials.Length != (MaterialNames?.Length ?? 0))
+            throw new ArgumentException(
+                $"{materials.Length} materials for {MaterialNames?.Length ?? 0} names; they must run parallel", nameof(materials));
+
+        return new(Vertices, Indices)
+        {
+            AuthoredUpAxis = AuthoredUpAxis,
+            FaceColors = FaceColors,
+            Uvs = Uvs,
+            UvIndices = UvIndices,
+            MaterialNames = MaterialNames,
+            MaterialIds = MaterialIds,
+            Materials = materials,
+        };
+    }
     #endregion
 }
 
