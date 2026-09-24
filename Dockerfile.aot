@@ -80,12 +80,18 @@ RUN mkdir -p /app/media \
 #
 # Soft again -- models/ is untracked, so a fresh clone builds a working image where the sandbox shows its generated
 # torus knot instead. The README.txt keeps the directory non-empty so stage 2's COPY succeeds either way.
+#
+# The WHOLE folder, recursively, as ./Dockerfile does -- not a list of extensions. This used to copy *.obj and *.txt,
+# and quietly went stale as the sandbox grew: every .stl and .ply model was missing from this image, and so was every
+# .mtl and texture map, which made textured models render untextured. A list has to be kept in step with
+# ModelLoader.Extensions and every file a model can reference; the folder does not. Recursive because an .mtl may
+# name its map in a subfolder.
 RUN mkdir -p /app/models \
     && echo "3D sandbox models, loaded by the 3dsandbox demo and its obj viewer." > /app/models/README.txt \
     && if [ -d examples/Jumbee.Console.3DSandboxDemo/models ]; then \
-         cp examples/Jumbee.Console.3DSandboxDemo/models/*.obj /app/models/ 2>/dev/null || true; \
-         cp examples/Jumbee.Console.3DSandboxDemo/models/*.txt /app/models/ 2>/dev/null || true; \
-         echo "3D sandbox: $(ls /app/models/*.obj 2>/dev/null | wc -l) model(s) staged at /app/models."; \
+         cp -r examples/Jumbee.Console.3DSandboxDemo/models/. /app/models/; \
+         echo "3D sandbox: $(ls /app/models/*.obj /app/models/*.stl /app/models/*.ply 2>/dev/null | wc -l) model(s)," \
+              "$(ls /app/models/*.mtl 2>/dev/null | wc -l) material file(s) staged at /app/models."; \
        else \
          echo "3D sandbox NOTE: examples/Jumbee.Console.3DSandboxDemo/models is missing from the build context;" \
               "'3dsandbox' will show only its generated torus knot."; \
@@ -121,6 +127,11 @@ COPY --from=build /app/media/ ./media/
 # Likewise the sandbox's models: it looks for `models` in the working directory, which is /app.
 COPY --from=build /app/models/ ./models/
 COPY examples-aot.sh ./
+# Jumbee.Console's own licence and the notices for everything this image redistributes -- see the same lines in
+# ./Dockerfile for why they must ship inside the image. NativeAOT compiles the library and the demos' packages INTO
+# the binaries, so they are no less present here for being invisible.
+COPY LICENSE ./
+COPY THIRD-PARTY-NOTICES.TXT ./
 
 # The demos are INTERACTIVE full-screen TUIs (mouse, alternate screen, raw key input), so the container MUST be given
 # a TTY (`docker run -it`). examples-aot.sh execs the right native binary based on the first argument — no `dotnet`.

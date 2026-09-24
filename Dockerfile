@@ -49,8 +49,10 @@ RUN mkdir -p media examples/Jumbee.Console.3DSandboxDemo/models \
          echo "AudioScope WARNING: media/06_arido_III_the_oscilloscope_rmx.mp3 is missing from the build context;" \
               "'audio-scope' will need an explicit --path. See docker.md for the download link."; \
        fi \
-    && if [ -n "$(ls examples/Jumbee.Console.3DSandboxDemo/models/*.obj 2>/dev/null)" ]; then \
-         echo "3D sandbox: $(ls examples/Jumbee.Console.3DSandboxDemo/models/*.obj | wc -l) model(s) found."; \
+    && m=examples/Jumbee.Console.3DSandboxDemo/models \
+    && if [ -n "$(ls $m/*.obj $m/*.stl $m/*.ply 2>/dev/null)" ]; then \
+         echo "3D sandbox: $(ls $m/*.obj $m/*.stl $m/*.ply 2>/dev/null | wc -l) model(s)," \
+              "$(ls $m/*.mtl 2>/dev/null | wc -l) material file(s) found."; \
        else \
          echo "3D sandbox NOTE: examples/Jumbee.Console.3DSandboxDemo/models is missing from the build context;" \
               "'3dsandbox' will show only its generated torus knot."; \
@@ -95,6 +97,12 @@ WORKDIR /src
 # sample project out of its own output directory, so nothing here reads the repo at runtime. The two paths that ARE
 # read from disk are media/ (AudioScope's default track) and the sandbox's models/, both below.
 COPY --from=build /src/examples.sh ./examples.sh
+# Jumbee.Console's own licence, and the notices for everything this image redistributes: vendored source, embedded
+# data, and the demos' NuGet packages. Some of those licences (the IJG's, Apache 2.0's) attach their terms to the
+# distribution itself -- as MIT does to "all copies" -- so both have to ship inside the image, not only sit in the
+# repository it was built from.
+COPY --from=build /src/LICENSE ./LICENSE
+COPY --from=build /src/THIRD-PARTY-NOTICES.TXT ./THIRD-PARTY-NOTICES.TXT
 COPY --from=build /src/media ./media
 COPY --from=build /src/examples/Jumbee.Console.3DSandboxDemo/models ./examples/Jumbee.Console.3DSandboxDemo/models
 COPY --from=build /src/examples/Jumbee.Console.Examples/bin/Release/net10.0 ./examples/Jumbee.Console.Examples/bin/Release/net10.0
