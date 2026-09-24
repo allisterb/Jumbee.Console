@@ -337,6 +337,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+License notice for LibJpeg.Net (BitMiracle.LibJpeg.NET)
+-------------------------------------------------------
+https://github.com/BitMiracle/libjpeg.net
+(a NuGet package, not vendored: the 3D sandbox demo uses it to decode JPEG
+textures, so it is part of the binaries in both Docker images)
+
+This software is based in part on the work of the Independent JPEG Group.
+
+LibJpeg.Net is Copyright (C) 2008-2023 Bit Miracle, distributed under a
+three-clause BSD-style licence. It is a port of the Independent JPEG Group's
+libjpeg, Copyright (C) 1991-2016 Thomas G. Lane and Guido Vollbeding,
+distributed under the IJG licence, which asks that the documentation of a
+binary distribution carry the acknowledgement above. Both licences are
+reproduced in full in the project's README:
+https://github.com/BitMiracle/libjpeg.net#license
+
+
 License notice for Wolfenshine
 ------------------------------
 https://github.com/deanthecoder/Wolfenshine

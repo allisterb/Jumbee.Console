@@ -14,6 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.10" />
     <!-- A binding over Erin Catto's Box3D C engine (not a managed port): speaks System.Numerics, so no conversion
          at the boundary. Box3D.NET.Native ships six RIDs including linux-x64/arm64, and P/Invoke is the supported
          NativeAOT path — same situation as NAudio in AudioScopeDemo. -->
@@ -23,7 +24,7 @@
          binary_big_endian, which Ply.Net rejects outright — see PlyLoader for why that is an acceptable loss. -->
     <PackageReference Include="Ply.Net" Version="5.6.3" />
     <PackageReference Include="PngSharp" Version="0.6.0" />
-    <PackageReference Include="System.CommandLine" Version="2.0.10" />
+    <PackageReference Include="BitMiracle.LibJpeg.NET" Version="1.5.324" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1085,6 +1085,97 @@ if (RepoPaths.Optional("media", "models", "capsule0.png") is { } capsuleMap)
 }
 else Console.WriteLine("  skip  capsule0.png — media/models not present (convert capsule0.jpg once, see the plan)");
 
+// --- JPEG ---------------------------------------------------------------------------------------------------------
+// Encoded here with libjpeg.net's own compressor, so nothing depends on media/. The decoder is only safe behind
+// Texture's strict error manager: by default a truncated file decodes SILENTLY and an early cut throws
+// IndexOutOfRange from inside the library. These are the checks that fail if that manager is ever removed.
+static byte[] EncodeJpeg(byte[] pixels, int w, int h, int components)
+{
+    var encoder = new BitMiracle.LibJpeg.Classic.jpeg_compress_struct(new BitMiracle.LibJpeg.Classic.jpeg_error_mgr());
+    using var stream = new MemoryStream();
+    encoder.jpeg_stdio_dest(stream);
+    encoder.Image_width = w;
+    encoder.Image_height = h;
+    encoder.Input_components = components;
+    encoder.In_color_space = components == 1 ? BitMiracle.LibJpeg.Classic.J_COLOR_SPACE.JCS_GRAYSCALE
+                                             : BitMiracle.LibJpeg.Classic.J_COLOR_SPACE.JCS_RGB;
+    encoder.jpeg_set_defaults();
+    encoder.jpeg_set_quality(95, true);
+    encoder.jpeg_start_compress(true);
+    var row = new byte[1][];
+    for (var y = 0; y < h; y++)
+    {
+        row[0] = pixels[(y * w * components)..((y + 1) * w * components)];
+        encoder.jpeg_write_scanlines(row, 1);
+    }
+
+    encoder.jpeg_finish_compress();
+    return stream.ToArray();
+}
+
+var jpegSubject = EncodeJpeg(pngSubjectRgb, 96, 64, 3);
+Check("a JPEG is recognised by its signature and decodes", Decoded(jpegSubject) == "decoded 96x64", Decoded(jpegSubject));
+
+var jpegCuts = Enumerable.Range(1, 19).Select(p => Decoded(jpegSubject[..(jpegSubject.Length * p * 5 / 100)])).ToArray();
+Check("every JPEG truncation from 5% to 95% is refused — none decodes silently, none hangs",
+    jpegCuts.All(r => r.StartsWith("refused")),
+    $"{jpegCuts.Count(r => r.StartsWith("refused"))}/19 refused, {jpegCuts.Count(r => r.StartsWith("decoded"))} decoded silently, " +
+    $"{jpegCuts.Count(r => r.StartsWith("WRONG"))} wrong type, {jpegCuts.Count(r => r == "HANG")} hung");
+
+// A frame header claiming 60000x60000: refused from the header, before the decoder allocates for the image.
+var jpegAbsurd = (byte[])jpegSubject.Clone();
+for (var i = 0; i + 8 < jpegAbsurd.Length; i++)
+    if (jpegAbsurd[i] == 0xFF && jpegAbsurd[i + 1] is 0xC0 or 0xC1 or 0xC2)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(jpegAbsurd.AsSpan(i + 5), 60000);   // height
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(jpegAbsurd.AsSpan(i + 7), 60000);   // width
+        break;
+    }
+Check("an absurd size in a JPEG frame header is refused before anything is allocated",
+    Decoded(jpegAbsurd).Contains("pixel limit"), Decoded(jpegAbsurd));
+
+// Orientation through the JPEG path, which shares nothing with the PNG path until the bake. Top half red, bottom
+// half blue, split on the 8-row MCU boundary so the lossy coding cannot smear one into the other.
+var halves16 = new byte[16 * 16 * 3];
+for (var y = 0; y < 16; y++)
+    for (var x = 0; x < 16; x++) { var i = ((y * 16) + x) * 3; if (y < 8) halves16[i] = 255; else halves16[i + 2] = 255; }
+var jpegHalves = Texture.Decode(EncodeJpeg(halves16, 16, 16, 3), levels: 0);
+var jpegTop = jpegHalves.Sample(new(0.5f, 0.9f));
+var jpegBottom = jpegHalves.Sample(new(0.5f, 0.1f));
+Check("a JPEG map is the right way up: high v reads the top (red) half",
+    jpegTop.R > 200 && jpegTop.B < 60 && jpegBottom.B > 200 && jpegBottom.R < 60,
+    $"v=0.9 -> {Rgb(jpegTop)}, v=0.1 -> {Rgb(jpegBottom)}");
+
+// Greyscale JPEGs are common for masks and cheap assets; the port converts grey to RGB, so R = G = B.
+var greyPixels = new byte[32 * 32];
+for (var i = 0; i < greyPixels.Length; i++) greyPixels[i] = (byte)(i % 32 * 8);
+var greyMap = Texture.Decode(EncodeJpeg(greyPixels, 32, 32, 1), levels: 0);
+var greySample = greyMap.Sample(new(0.7f, 0.5f));
+Check("a greyscale JPEG decodes to RGB with equal channels",
+    greySample.R == greySample.G && greySample.G == greySample.B && greySample.R > 0, Rgb(greySample));
+
+// The real pair: the capsule's JPEG decoded here, against the PNG Windows' own decoder made from it. Two conforming
+// decoders differ by a few levels at most, so after the same reduce and quantise they should agree almost
+// everywhere -- and anything flipped or channel-swapped would disagree nearly everywhere.
+if (RepoPaths.Optional("media", "models", "capsule0.jpg") is { } capsuleJpg
+    && RepoPaths.Optional("media", "models", "capsule0.png") is { } capsulePng)
+{
+    var viaJpeg = Texture.Load(capsuleJpg);
+    var viaPng = Texture.Load(capsulePng);
+    int samples = 0, differ = 0;
+    for (var v = 0.01f; v < 1f; v += 0.02f)
+        for (var u = 0.01f; u < 1f; u += 0.02f)
+        {
+            samples++;
+            Color a = viaJpeg.Sample(new(u, v)), b = viaPng.Sample(new(u, v));
+            if (Math.Abs(a.R - b.R) > 30 || Math.Abs(a.G - b.G) > 30 || Math.Abs(a.B - b.B) > 30) differ++;
+        }
+    Check("capsule0.jpg bakes to the same map as the PNG made from it",
+        viaJpeg.Width == viaPng.Width && viaJpeg.Height == viaPng.Height && differ <= samples / 100,
+        $"{viaJpeg.Width}x{viaJpeg.Height}, {differ} of {samples} samples differ by more than one quantisation step");
+}
+else Console.WriteLine("  skip  capsule0.jpg/.png — media/models not present");
+
 // A mesh body must be a real dynamic rigid body: it falls, it lands, it sleeps. Spawned well clear of the box
 // tower -- an earlier version dropped it at the origin, straight into the stack, and "it never fell" was the tower
 // holding it up rather than anything wrong with the body.

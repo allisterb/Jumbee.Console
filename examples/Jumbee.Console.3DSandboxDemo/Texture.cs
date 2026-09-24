@@ -4,6 +4,8 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
 
+using BitMiracle.LibJpeg.Classic;
+
 using PngSharp.Api;
 using PngSharp.Spec.Chunks.IHDR;
 
@@ -96,12 +98,12 @@ public sealed class Texture
     #endregion
 
     #region Methods
-    /// <summary>Loads and bakes a PNG.</summary>
-    /// <param name="path">The PNG to read.</param>
+    /// <summary>Loads and bakes a PNG or JPEG, told apart by the file's signature rather than its extension.</summary>
+    /// <param name="path">The image to read.</param>
     /// <param name="size">The longest side of the baked map; a smaller source is not enlarged.</param>
     /// <param name="levels">Levels per channel to quantise to; 1 or less leaves colours unquantised.</param>
-    /// <exception cref="InvalidDataException">The file is not a complete, valid PNG. Every failure is reported as
-    /// this one type, raised here rather than on first sample.</exception>
+    /// <exception cref="InvalidDataException">The file is not a complete, valid PNG or JPEG. Every failure is
+    /// reported as this one type, raised here rather than on first sample.</exception>
     public static Texture Load(string path, int size = DefaultSize, int levels = DefaultLevels) =>
         Decode(File.ReadAllBytes(path), size, levels, Path.GetFileName(path));
 
@@ -125,20 +127,25 @@ public sealed class Texture
         return new Color(rgb[i], rgb[i + 1], rgb[i + 2]);
     }
 
-    /// <summary>Decodes and bakes PNG bytes. Split out so it can be exercised without a file.</summary>
+    /// <summary>Decodes and bakes PNG or JPEG bytes. Split out so it can be exercised without a file.</summary>
     /// <exception cref="InvalidDataException">Every failure, whatever raised it.</exception>
-    internal static Texture Decode(byte[] png, int size = DefaultSize, int levels = DefaultLevels, string name = "texture")
+    internal static Texture Decode(byte[] data, int size = DefaultSize, int levels = DefaultLevels, string name = "texture")
     {
         try
         {
-            ValidateStructure(png);
-            var image = Png.DecodeFromByteArray(png);
-            return Bake(ToRgb(image), (int)image.Ihdr.Width, (int)image.Ihdr.Height, size, levels);
+            // By signature, not by extension: a map saved as .png that is really a JPEG still loads, and a file that
+            // is neither gets a message that says so rather than a decoder error about the wrong format.
+            var (rgb, width, height) =
+                IsPng(data) ? DecodePng(data)
+                : IsJpeg(data) ? DecodeJpeg(data)
+                : throw new InvalidDataException("neither a PNG nor a JPEG: the file's signature is not recognised");
+            return Bake(rgb, width, height, size, levels);
         }
         catch (Exception e)
         {
             // One type for every failure. PngSharp raises its own format and CRC exceptions, EndOfStream on a short
-            // image stream, and KeyNotFound on a corrupt filter byte; a caller should not need to know which.
+            // image stream, and KeyNotFound on a corrupt filter byte; libjpeg raises through StrictJpegErrors. A
+            // caller should not need to know which.
             throw new InvalidDataException($"'{name}' is unreadable: {e.Message}", e);
         }
     }
@@ -231,7 +238,7 @@ public sealed class Texture
     /// absurd size is a clear refusal rather than an out-of-memory crash inside the decoder.
     /// </para>
     /// </remarks>
-    internal static void ValidateStructure(ReadOnlySpan<byte> png)
+    internal static void ValidatePngStructure(ReadOnlySpan<byte> png)
     {
         if (png.Length < 8 || !png[..8].SequenceEqual(Signature))
             throw new InvalidDataException("not a PNG: the signature is missing");
@@ -272,10 +279,59 @@ public sealed class Texture
 
     private static double Sq(double d) => d * d;
 
+    private static bool IsPng(ReadOnlySpan<byte> data) => data.Length >= 8 && data[..8].SequenceEqual(Signature);
+
+    // Start of image, then the first marker's 0xFF.
+    private static bool IsJpeg(ReadOnlySpan<byte> data) => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF;
+
+    private static (byte[] Rgb, int Width, int Height) DecodePng(byte[] png)
+    {
+        ValidatePngStructure(png);
+        var image = Png.DecodeFromByteArray(png);
+        return (PngToRgb(image), (int)image.Ihdr.Width, (int)image.Ihdr.Height);
+    }
+
+    // libjpeg.net, always under StrictJpegErrors: its default error manager decodes a truncated file silently and can
+    // crash in its own recovery path (see that class). Output is always requested as RGB, which the port converts to
+    // from greyscale, YCbCr and RGB sources; CMYK and YCCK are refused rather than guessed at.
+    private static (byte[] Rgb, int Width, int Height) DecodeJpeg(byte[] jpeg)
+    {
+        var decoder = new jpeg_decompress_struct(new StrictJpegErrors());
+        using var stream = new MemoryStream(jpeg, writable: false);
+        decoder.jpeg_stdio_src(stream);
+        decoder.jpeg_read_header(true);
+
+        // The same cap as the PNG path, read from the header BEFORE start_decompress allocates anything for the image.
+        if ((long)decoder.Image_width * decoder.Image_height > MaxSourcePixels)
+            throw new InvalidDataException(
+                $"{decoder.Image_width}x{decoder.Image_height} is outside the {MaxSourcePixels:N0}-pixel limit");
+
+        decoder.Out_color_space = J_COLOR_SPACE.JCS_RGB;
+        decoder.jpeg_start_decompress();
+        int width = decoder.Output_width, height = decoder.Output_height;
+        if (decoder.Output_components != 3)
+            throw new InvalidDataException($"decoded to {decoder.Output_components} components where RGB was asked for");
+
+        var rgb = new byte[width * height * 3];
+        var row = jpeg_common_struct.AllocJpegSamples(width * 3, 1);
+        while (decoder.Output_scanline < height)
+        {
+            var y = decoder.Output_scanline;
+            // A memory source never suspends, so a short read here means something went wrong. Refuse rather than
+            // hand back an image whose remaining rows were never written -- the silent partial image again.
+            if (decoder.jpeg_read_scanlines(row, 1) != 1)
+                throw new InvalidDataException($"the decoder stopped returning rows at {y} of {height}");
+            Buffer.BlockCopy(row[0], 0, rgb, y * width * 3, width * 3);
+        }
+
+        decoder.jpeg_finish_decompress();
+        return (rgb, width, height);
+    }
+
     // PngSharp hands back PixelData in the file's own layout rather than normalised: palette indices for an indexed
     // image, several samples packed per byte below 8 bits, two bytes per sample at 16. Flattening that to RGB is
     // ours. Alpha and tRNS are dropped -- a diffuse map is opaque here -- and 16-bit keeps its high byte.
-    private static byte[] ToRgb(IRawPng png)
+    private static byte[] PngToRgb(IRawPng png)
     {
         var h = png.Ihdr;
         int width = (int)h.Width, height = (int)h.Height;
@@ -345,5 +401,36 @@ public sealed class Texture
     #region Fields
     private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
     private readonly byte[] rgb;
+    #endregion
+
+    #region Child types
+    /// <summary>
+    /// libjpeg's error manager with every <b>warning</b> made fatal and all output suppressed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The default manager is unusable for untrusted files.</b> libjpeg treats a premature end of file as a warning:
+    /// it inserts a fake end-of-image marker and carries on, so a truncated texture decodes "successfully" — measured
+    /// at 87% of rows wrong for a file cut in half — and a file cut early crashes with an
+    /// <see cref="IndexOutOfRangeException"/> inside the library's recovery path. Throwing at the first warning stops
+    /// the decoder before it reaches either. See the ledger in <c>reference/README.md</c>.
+    /// </para>
+    /// <para>
+    /// What it cannot catch is a property of the format: JPEG carries no checksums, so a flipped bit inside the
+    /// compressed data decodes to a plausible-looking glitch with no warning at all.
+    /// </para>
+    /// </remarks>
+    private sealed class StrictJpegErrors : jpeg_error_mgr
+    {
+        public override void output_message() { }
+
+        // msg_level < 0 is a warning, which is fatal here; 0 and up are trace messages, which are dropped.
+        public override void emit_message(int msg_level)
+        {
+            if (msg_level < 0) throw new InvalidDataException(format_message());
+        }
+
+        public override void error_exit() => throw new InvalidDataException(format_message());
+    }
     #endregion
 }
