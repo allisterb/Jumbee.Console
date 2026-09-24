@@ -44,7 +44,8 @@ that gating when someone takes it on.
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
 | `--aa out=DIR [WxH]` | one settled frame with quadrant sampling off and on: distinct fg/bg pairs, silhouette placement error, PNGs |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
-| `--texture [out=DIR] [WxH]` | textures Phase 0: three procedural sources × four frequencies × both solid renderers — distinct fg/bg pairs, ANSI bytes, frame time, PNGs |
+| `--texture [out=DIR] [WxH]` | three procedural sources × four frequencies × both solid renderers — distinct fg/bg pairs, ANSI bytes, frame time, PNGs |
+| `--texture model=OBJ [image=PNG] [reduce=N] [levels=N] [imageonly]` | the same on a real model through its own UVs; `image=` adds its real map (`TextureMode.Image`), `reduce=`/`levels=` sweep the bake, `imageonly` skips the procedural sources |
 | `--png out=DIR [WxH]` | PNG of each renderer; add `viewer` for the model-viewer scene instead |
 | `--solid` | ASCII luminance dump (weaker than `--png`; see the note below) |
 | `--probe` | on-screen size of a launched body, frame by frame |

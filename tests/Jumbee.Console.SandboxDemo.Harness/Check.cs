@@ -148,6 +148,21 @@ if (args.Contains("--texture"))
     }
 
     var texTag = texModel is null ? "knot" : Path.GetFileNameWithoutExtension(texModel).ToLowerInvariant();
+
+    // image=PATH attaches a real map (Phase 2). reduce= and levels= are the bake's two dials, so they can be swept
+    // from the command line rather than by editing constants.
+    var texImage = args.FirstOrDefault(a => a.StartsWith("image="))?[6..];
+    var texReduce = int.TryParse(args.FirstOrDefault(a => a.StartsWith("reduce="))?[7..], out var rs) ? rs : Texture.DefaultSize;
+    var texLevels = int.TryParse(args.FirstOrDefault(a => a.StartsWith("levels="))?[7..], out var ls) ? ls : Texture.DefaultLevels;
+    if (texImage is not null)
+    {
+        var map = Texture.Load(texImage, texReduce, texLevels);
+        texMesh = texMesh.WithTexture(map);
+        texTag += $"-r{texReduce}-l{texLevels}";
+        Console.WriteLine($"\n{Path.GetFileName(texImage)}: {map.SourceWidth}x{map.SourceHeight} -> {map.Width}x{map.Height}, " +
+                          $"{texLevels} levels  retain {map.Retain:F2}  contrast {map.Contrast:F3}  {map.Colours} colours");
+    }
+
     var texMeshId = Meshes.Register(texMesh, texTag);
     var texRunner = new PhysicsRunner(s =>
     {
@@ -196,7 +211,8 @@ if (args.Contains("--texture"))
     }
 
     var texOpt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
-    var texModes = new[] { TextureMode.Checker, TextureMode.Gradient, TextureMode.Noise };
+    // `imageonly` skips the procedural sources, for sweeping the bake's dials without re-pricing all three each time.
+    TextureMode[] texModes = args.Contains("imageonly") ? [] : [TextureMode.Checker, TextureMode.Gradient, TextureMode.Noise];
     var texScales = new[] { 4f, 8f, 16f, 32f };
 
     // --- Pass A: colour cost, and a picture to judge it by -------------------------------------------------------
@@ -222,6 +238,12 @@ if (args.Contains("--texture"))
         texRenderer.Texture = TextureMode.None;
         var texBase = TexPairs(TexFrame($"tex-{texTag}-{texRenderer.Name}-none"));
         Console.WriteLine($"  {"none",-9} {"",-6}  {texBase,6} pairs   (baseline)");
+        if (texImage is not null)
+        {
+            texRenderer.Texture = TextureMode.Image;
+            var imagePairs = TexPairs(TexFrame($"tex-{texTag}-{texRenderer.Name}-image"));
+            Console.WriteLine($"  {"image",-9} {"",-6}  {imagePairs,6} pairs   {(double)imagePairs / texBase,5:F2}x baseline");
+        }
         foreach (var mode in texModes)
         {
             texRenderer.Texture = mode;
@@ -258,6 +280,7 @@ if (args.Contains("--texture"))
     foreach (var r in new MeshRenderer[] { new SolidRenderer(), new ShadedRenderer() })
     {
         TexTime(r.Name, r, TextureMode.None, 8f);
+        if (texImage is not null) TexTime("  ..image", r, TextureMode.Image, 8f);
         foreach (var mode in texModes) TexTime($"  ..{mode}".ToLowerInvariant(), r, mode, 8f);
     }
 
@@ -893,6 +916,174 @@ if (RepoPaths.Optional("media", "models", "plane.obj") is { } planeUvPath)
         $"{planeUv.Uvs?.Length} UVs over {planeUv.Vertices.Length} vertices");
 }
 else Console.WriteLine("  skip  plane.obj — media/models not present");
+
+// --- texture maps ------------------------------------------------------------------------------------------------
+// Three claims Phase 2 rests on: a malformed PNG can never hang the decoder, Sample reads the map the right way up,
+// and the bake reduces, quantises and measures what it says. The pngSubject PNG is ENCODED here, so none of this needs
+// an asset that a fresh checkout might lack.
+Console.WriteLine("\ntexture maps:");
+
+// Every decode runs under a watchdog: a hang is the failure being tested for, and it cannot be caught. On its OWN
+// background thread, not the pool -- with the guard mutated away, 17 decodes hung on pool threads and starved every
+// watchdog after them, so "not a PNG at all" reported HANG. A watchdog that misreports WHICH input hangs is worse
+// than none, because telling the inputs apart is its whole job.
+static string Decoded(byte[] bytes)
+{
+    string? result = null;
+    var worker = new Thread(() =>
+    {
+        try { var t = Texture.Decode(bytes); result = $"decoded {t.Width}x{t.Height}"; }
+        catch (InvalidDataException e) { result = "refused: " + e.Message; }
+        catch (Exception e) { result = $"WRONG TYPE {e.GetType().Name}: {e.Message}"; }
+    }) { IsBackground = true };
+    worker.Start();
+    return worker.Join(5000) ? result! : "HANG";
+}
+
+static uint Crc32(ReadOnlySpan<byte> data)
+{
+    var crc = 0xFFFFFFFFu;
+    foreach (var b in data)
+    {
+        crc ^= b;
+        for (var k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+    }
+
+    return ~crc;
+}
+
+// Rebuilds a PNG chunk by chunk, editing the named one's payload and recomputing every length and CRC -- so the
+// result is structurally VALID and only its content is wrong. That is what gets past a structure check, and so it
+// is the case that tests whether the check is sufficient.
+static byte[] EditChunk(byte[] png, string type, Func<byte[], byte[]> edit)
+{
+    var output = new List<byte>(png[..8]);
+    for (var pos = 8; pos + 12 <= png.Length;)
+    {
+        var length = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(pos));
+        var name = System.Text.Encoding.ASCII.GetString(png, pos + 4, 4);
+        var data = png[(pos + 8)..(pos + 8 + length)];
+        if (name == type) data = edit(data);
+        var chunk = new byte[12 + data.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(chunk, (uint)data.Length);
+        System.Text.Encoding.ASCII.GetBytes(name, chunk.AsSpan(4));
+        data.CopyTo(chunk, 8);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(8 + data.Length),
+                                                                    Crc32(chunk.AsSpan(4, 4 + data.Length)));
+        output.AddRange(chunk);
+        pos += 12 + length;
+    }
+
+    return [.. output];
+}
+
+var pngSubjectRgb = new byte[96 * 64 * 3];
+for (var i = 0; i < pngSubjectRgb.Length; i++) pngSubjectRgb[i] = (byte)(i * 7 % 251);
+var pngSubject = PngSharp.Api.Png.EncodeToByteArray(PngSharp.Api.Png.CreateRgb(96, 64, pngSubjectRgb));
+Check("an intact PNG decodes", Decoded(pngSubject).StartsWith("decoded"), Decoded(pngSubject));
+
+// The defect that made this guard mandatory: PngSharp spins forever on a file cut mid-chunk. Every cut must come
+// back as a refusal, and none as a hang.
+var cuts = Enumerable.Range(1, 19).Select(p => Decoded(pngSubject[..(pngSubject.Length * p * 5 / 100)])).ToArray();
+Check("every truncation from 5% to 95% is refused, and none hangs",
+    cuts.All(r => r.StartsWith("refused")),
+    $"{cuts.Count(r => r.StartsWith("refused"))}/19 refused, {cuts.Count(r => r == "HANG")} hung");
+
+// The case the structure check cannot see: every chunk intact and correctly CRC'd, but the compressed image inside
+// IDAT cut in half. The claim is that the DECODER's image path is safe on its own (its filter pass uses
+// ReadExactly), so the guard only has to cover chunks. This is where that claim is tested rather than trusted.
+var shortIdat = EditChunk(pngSubject, "IDAT", d => d[..(d.Length / 2)]);
+Check("a structurally valid PNG with a short image stream fails cleanly, and does not hang",
+    Decoded(shortIdat).StartsWith("refused"), Decoded(shortIdat));
+
+// A header claiming an absurd size, with a VALID CRC, so PngSharp's own check does not catch it first. It must be
+// refused before anything is allocated for it -- the alternative is an out-of-memory crash inside the decoder.
+var absurd = EditChunk(pngSubject, "IHDR", d =>
+{
+    var copy = (byte[])d.Clone();
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(copy, 100_000);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(copy.AsSpan(4), 100_000);
+    return copy;
+});
+Check("an absurd size in a valid IHDR is refused before anything is allocated",
+    Decoded(absurd).Contains("pixel limit"), Decoded(absurd));
+Check("not a PNG at all is refused", Decoded("this is not a png"u8.ToArray()).StartsWith("refused"),
+    Decoded("this is not a png"u8.ToArray()));
+
+// Orientation. Built unreduced and unquantised so each texel is exactly what was put in. OBJ puts v = 0 at the
+// BOTTOM of the image; a decoded image's first row is the TOP. Get this wrong and every real map is upside down --
+// invisible with a procedural source, which is why it is pinned here rather than judged from a render.
+Color red = new(255, 0, 0), blue = new(0, 0, 255);
+static string Rgb(Color c) => $"{c.R},{c.G},{c.B}";
+var tall = Texture.Bake([255, 0, 0, 0, 0, 255], 1, 2, levels: 0);   // top row red, bottom row blue
+Check("v is flipped: a high v reads the TOP of the image", tall.Sample(new(0.5f, 0.9f)) == red && tall.Sample(new(0.5f, 0.1f)) == blue,
+    $"v=0.9 -> {Rgb(tall.Sample(new(0.5f, 0.9f)))}, v=0.1 -> {Rgb(tall.Sample(new(0.5f, 0.1f)))}");
+var wide = Texture.Bake([255, 0, 0, 0, 0, 255], 2, 1, levels: 0);   // left red, right blue
+Check("u runs left to right", wide.Sample(new(0.1f, 0.5f)) == red && wide.Sample(new(0.9f, 0.5f)) == blue,
+    $"u=0.1 -> {Rgb(wide.Sample(new(0.1f, 0.5f)))}, u=0.9 -> {Rgb(wide.Sample(new(0.9f, 0.5f)))}");
+// An atlas puts edge texels at exactly 1.0. Wrapping there would fetch the OPPOSITE edge.
+Check("u = 1.0 clamps to the right edge instead of wrapping to the left",
+    wide.Sample(new(1f, 0.5f)) == blue && wide.Sample(new(0f, 0.5f)) == red, $"u=1.0 -> {Rgb(wide.Sample(new(1f, 0.5f)))}");
+Check("outside [0,1] repeats", wide.Sample(new(1.25f, 0.5f)) == red && wide.Sample(new(-0.25f, 0.5f)) == blue,
+    $"u=1.25 -> {Rgb(wide.Sample(new(1.25f, 0.5f)))}, u=-0.25 -> {Rgb(wide.Sample(new(-0.25f, 0.5f)))}");
+
+// The bake. A smooth ramp is the case that needs quantising most -- every value distinct going in.
+var ramp = new byte[256 * 4 * 3];
+for (var x = 0; x < 256; x++)
+    for (var y = 0; y < 4; y++) { var i = ((y * 256) + x) * 3; ramp[i] = ramp[i + 1] = ramp[i + 2] = (byte)x; }
+var rampBaked = Texture.Bake(ramp, 256, 4, size: 64, levels: 10);
+Check("the bake reduces to the requested longest side, keeping the aspect",
+    rampBaked.Width == 64 && rampBaked.Height == 1, $"{rampBaked.Width}x{rampBaked.Height} from 256x4");
+Check("the bake quantises: a 256-value ramp leaves at most 10 colours", rampBaked.Colours <= 10,
+    $"{rampBaked.Colours} colours");
+
+// Retain measures frequency against the BAKED resolution. A one-texel checker averages to flat grey (nothing
+// survives); two big halves survive the same reduce untouched. Same content type, opposite verdicts.
+byte[] Pattern(int w, int h, Func<int, int, bool> on)
+{
+    var rgb = new byte[w * h * 3];
+    for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++) { var v = on(x, y) ? (byte)255 : (byte)0; var i = ((y * w) + x) * 3; rgb[i] = rgb[i + 1] = rgb[i + 2] = v; }
+    return rgb;
+}
+var fine = Texture.Bake(Pattern(256, 256, (x, y) => ((x + y) & 1) == 0), 256, 256, size: 16);
+var halves = Texture.Bake(Pattern(256, 256, (x, _) => x < 128), 256, 256, size: 16);
+Check("detail finer than a baked texel scores near 0 retained", fine.Retain < 0.05f && fine.Contrast < 0.05f,
+    $"retain {fine.Retain:F3}, contrast {fine.Contrast:F3}");
+Check("detail coarser than a baked texel scores near 1 retained", halves.Retain > 0.95f && halves.Contrast > 0.4f,
+    $"retain {halves.Retain:F3}, contrast {halves.Contrast:F3}");
+
+// WithTexture must carry every OTHER init property, or a textured mesh silently loses one. Checked by reflection
+// over the setters Mesh actually has, against a source with every one of them set -- so a property added later is
+// caught here without anyone remembering to extend the check.
+var carried = new Mesh([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2])
+{
+    AuthoredUpAxis = ModelUpAxis.Z,
+    FaceColors = [red],
+    Uvs = [new(0, 0), new(1, 0), new(0, 1)],
+    UvIndices = [2, 1, 0],
+    Texture = wide,
+};
+var withMap = carried.WithTexture(tall);
+// Every property is compared, not only the settable ones, so a copy that forgot to pass Vertices or Indices to the
+// constructor fails too. The settable ones must also all be SET on the source, or a dropped null passes vacuously.
+var meshProps = typeof(Mesh).GetProperties();
+var unset = meshProps.Where(p => p.SetMethod is not null && p.GetValue(carried) is null).Select(p => p.Name).ToArray();
+var lost = meshProps.Where(p => p.Name != nameof(Mesh.Texture) && !Equals(p.GetValue(carried), p.GetValue(withMap)))
+                    .Select(p => p.Name).ToArray();
+Check("WithTexture carries every other property", unset.Length == 0 && lost.Length == 0 && withMap.Texture == tall,
+    unset.Length > 0 ? $"test source leaves unset: {string.Join(", ", unset)}"
+                     : lost.Length > 0 ? $"dropped: {string.Join(", ", lost)}" : $"{meshProps.Length - 1} carried");
+
+if (RepoPaths.Optional("media", "models", "capsule0.png") is { } capsuleMap)
+{
+    var map = Texture.Load(capsuleMap);
+    Check($"capsule0.png bakes from 2048x1024 to the default {Texture.DefaultSize}, keeping its 2:1 aspect",
+        map.Width == Texture.DefaultSize && map.Height == Texture.DefaultSize / 2 && map.SourceWidth == 2048,
+        $"{map.SourceWidth}x{map.SourceHeight} -> {map.Width}x{map.Height}, retain {map.Retain:F2}, " +
+        $"contrast {map.Contrast:F3}, {map.Colours} colours");
+}
+else Console.WriteLine("  skip  capsule0.png — media/models not present (convert capsule0.jpg once, see the plan)");
 
 // A mesh body must be a real dynamic rigid body: it falls, it lands, it sleeps. Spawned well clear of the box
 // tower -- an earlier version dropped it at the origin, straight into the stack, and "it never fell" was the tower

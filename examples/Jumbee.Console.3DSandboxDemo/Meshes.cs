@@ -76,6 +76,10 @@ public sealed class Mesh
     /// <summary>Whether this mesh can be textured.</summary>
     public bool HasUvs => Uvs is { Length: > 0 };
 
+    /// <summary>The image map this mesh's <see cref="Uvs"/> address, or <see langword="null"/> when it has none.
+    /// Drawn only when the renderer's <see cref="MeshRenderer.Texture"/> is <see cref="TextureMode.Image"/>.</summary>
+    public Texture? Texture { get; init; }
+
     /// <summary>Number of triangles.</summary>
     public int TriangleCount => Indices.Length / 3;
 
@@ -106,6 +110,21 @@ public sealed class Mesh
     /// </para>
     /// </remarks>
     public Color[]? FaceColors { get; init; }
+    #endregion
+
+    #region Methods
+    /// <summary>A copy of this mesh carrying <paramref name="texture"/>. Geometry and UVs are shared, not copied.</summary>
+    /// <remarks>The seam a material loader attaches a map through, since the geometry loaders know nothing of
+    /// images. <b>Every init property must be carried here</b> — a new one left out is silently dropped from every
+    /// textured mesh, and the harness checks each one survives.</remarks>
+    public Mesh WithTexture(Texture? texture) => new(Vertices, Indices)
+    {
+        AuthoredUpAxis = AuthoredUpAxis,
+        FaceColors = FaceColors,
+        Uvs = Uvs,
+        UvIndices = UvIndices,
+        Texture = texture,
+    };
     #endregion
 }
 

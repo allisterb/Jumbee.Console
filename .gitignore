@@ -424,3 +424,6 @@ BenchmarkDotNet.Artifacts/*
 /media/*
 *.stl
 *.ply
+*.png
+*.jpg
+*.mtl

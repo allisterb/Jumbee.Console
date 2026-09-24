@@ -26,6 +26,7 @@
   <ItemGroup>
     <PackageReference Include="Box3D.NET" Version="0.3.0" />
     <PackageReference Include="Ply.Net" Version="5.6.3" />
+    <PackageReference Include="PngSharp" Version="0.6.0" />
     <ProjectReference Include="$(Repo)\src\Jumbee.Console\Jumbee.Console.csproj" />
     <ProjectReference Include="$(Repo)\src\Jumbee.Console.Snapshot\Jumbee.Console.Snapshot.csproj" />
   </ItemGroup>

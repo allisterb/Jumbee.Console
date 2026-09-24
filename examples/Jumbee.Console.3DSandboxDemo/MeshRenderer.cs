@@ -94,11 +94,11 @@ public abstract class MeshRenderer : ISceneRenderer
     /// it is shaded. <see cref="TextureMode.None"/> by default.
     /// </summary>
     /// <remarks>
-    /// <b>This is a measuring instrument, not a feature.</b> It exists to answer the one question that decides
-    /// whether image textures are worth building at all: what a per-sub-pixel tint does to the emission budget once
-    /// it has been through <see cref="Quantise"/>. A texture breaks colour runs, and ANSI runs — not compute — are
-    /// what this renderer is bound by. Drive it from the harness's <c>--texture</c> mode; see
-    /// <c>docs/internal/agent/3D Textures Plan.md</c> §4.
+    /// The procedural modes are a <b>measuring instrument</b>: they price what a per-sub-pixel tint does to the
+    /// emission budget, and ANSI runs — not compute — are what this renderer is bound by. <see cref="TextureMode.Image"/>
+    /// draws a mesh's real map. Not yet exposed in the UI: it is driven from the harness's <c>--texture</c> mode,
+    /// and only <see cref="ShadedRenderer"/> should offer it — texturing costs <see cref="SolidRenderer"/> more than
+    /// the shaded renderer costs untextured. See <c>docs/internal/agent/3D Textures Plan.md</c>.
     /// </remarks>
     public TextureMode Texture { get; set; }
 
@@ -247,12 +247,16 @@ public abstract class MeshRenderer : ISceneRenderer
 
         // A mesh that brought its own colours (PLY) shades each face with its own, EXCEPT while selected: the
         // selection tint has to win over the whole body or there is no way to see which one is selected.
-        var faceColors = Selected == snapshot.Ids[i] ? null : mesh.FaceColors;
+        var selected = Selected == snapshot.Ids[i];
+        var faceColors = selected ? null : mesh.FaceColors;
 
         var idx = mesh.Indices;
         // Textured only when the renderer is asking for one AND this mesh carries UVs -- the ground and every
-        // generated primitive but the knot have none, so they fall through to the untextured path unchanged.
-        var uvs = Texture == TextureMode.None ? null : mesh.Uvs;
+        // generated primitive but the knot have none, so they fall through to the untextured path unchanged. Image
+        // mode also needs the mesh's own map. Selection suppresses a texture for the reason it suppresses FaceColors.
+        bodyTexture = Texture == TextureMode.Image ? mesh.Texture : null;
+        var textured = !selected && Texture != TextureMode.None && (Texture != TextureMode.Image || bodyTexture is not null);
+        var uvs = textured ? mesh.Uvs : null;
         var uvIdx = mesh.UvIndices ?? idx;
         for (var t = 0; t < idx.Length; t += 3)
         {
@@ -400,6 +404,9 @@ public abstract class MeshRenderer : ISceneRenderer
                 : Modulate(tint, 0.35f),
         TextureMode.Gradient => Modulate(tint, 0.25f + (0.75f * Fraction(uv.X * TextureScale))),
         TextureMode.Noise => Modulate(tint, 0.2f + (0.8f * Hash(uv, TextureScale))),
+        // The map's colour REPLACES the body's palette tint rather than modulating it: a diffuse map is the albedo.
+        // Already reduced and quantised at load, so this is one clamped index and nothing else.
+        TextureMode.Image => bodyTexture!.Sample(uv),
         _ => tint,
     };
 
@@ -444,6 +451,8 @@ public abstract class MeshRenderer : ISceneRenderer
     private readonly HalfBlockSurface surface = new();
 
     private Vector3[] world = new Vector3[64];
+    // The body being drawn's image map, when TextureMode.Image has one to sample. Per-draw scratch like `world`.
+    private Texture? bodyTexture;
     private float halfW;
     private float halfH;
     private float scaleY;
@@ -470,4 +479,7 @@ public enum TextureMode
     /// it is minified to a hundred-odd sub-pixels across. Converges on <see cref="Gradient"/>'s cost as the
     /// frequency rises.</summary>
     Noise,
+
+    /// <summary>The mesh's own <see cref="Mesh.Texture"/>. A mesh without one is drawn untextured.</summary>
+    Image,
 }
