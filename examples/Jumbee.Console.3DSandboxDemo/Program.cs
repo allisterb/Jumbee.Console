@@ -47,7 +47,8 @@ var sandboxModels = new Option<string[]>("--model", "-m")
 {
     Arity = ArgumentArity.ZeroOrMore,
     AllowMultipleArgumentsPerToken = true,
-    Description = "Model files (.obj, .stl, .ply) to make spawnable. Cycle them with 'm', then drop with 'n' or fire with 'f'.",
+    Description = "Model files (.obj, .stl, .ply), or directories of them, to make spawnable. Cycle them with 'm', then " +
+                  "drop with 'n' or fire with 'f'.",
 };
 
 var objCommand = new Command("obj", "Open the model viewer: one asset filling the viewport, on a turntable.")
@@ -159,15 +160,19 @@ static bool LoadModel(string path)
         Meshes.Register(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
         return true;
     }
-    catch (Exception ex) when (ex is IOException or InvalidDataException)
+    // UnauthorizedAccessException is not an IOException: it is what Windows reports for a path that can't be opened
+    // as a file — a permissions problem, or a directory handed to a file reader.
+    catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
     {
         Console.Error.WriteLine($"could not load '{path}': {ex.Message}");
         return false;
     }
 }
 
-// Registers each model, reporting the first failure rather than starting a UI that is missing what was asked for.
-static bool LoadModels(string[]? paths) => (paths ?? []).All(LoadModel);
+// Registers each model, reporting the first failure rather than starting a UI that is missing what was asked for. A
+// directory contributes every model in it, by the same rules as the viewer's path argument.
+static bool LoadModels(string[]? paths) =>
+    (paths ?? []).All(p => Directory.Exists(p) ? LoadModelDirectory(p) >= 0 : LoadModel(p));
 
 // The default scene: physics, a floor, and everything you can do to a pile of bodies.
 async Task<int> RunSandbox()
@@ -208,7 +213,7 @@ static void LoadMeshDialog(SandboxShell.Sandbox app) =>
             app.View.Spawn.MeshId = id;
             app.View.Spawn.Shape = BodyShape.Mesh;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             Dialog.Message("Could not load", $"{Path.GetFileName(path)}: {ex.Message}");
         }
