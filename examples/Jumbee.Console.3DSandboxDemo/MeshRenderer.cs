@@ -73,6 +73,22 @@ public abstract class MeshRenderer : ISceneRenderer
     }
 
     /// <summary>
+    /// How many levels per channel a texture map's colours are snapped to as it is drawn. Rounded and clamped to
+    /// [<see cref="MinTextureLevels"/>, <see cref="MaxTextureLevels"/>].
+    /// </summary>
+    /// <remarks>
+    /// The texture's counterpart to <see cref="ShadeLevels"/>: that dial quantises the <em>lighting</em> and never a
+    /// texel's colour, so a map's own gradients band at whatever this is, however smooth the shading. Paid for the
+    /// same way, in broken ANSI runs. Changes only how maps are drawn — which maps the gate draws is decided at
+    /// <see cref="SandboxDemo.Texture.DefaultLevels"/>, whatever this is set to.
+    /// </remarks>
+    public float TextureLevels
+    {
+        get => textureLevels;
+        set => textureLevels = Math.Clamp(MathF.Round(value), MinTextureLevels, MaxTextureLevels);
+    }
+
+    /// <summary>
     /// Doubles the horizontal sampling rate and composites each 2×2 block into a quadrant glyph, so a silhouette
     /// lands on a half-cell boundary instead of a whole-cell one. Off by default; costs twice the fill.
     /// </summary>
@@ -113,6 +129,17 @@ public abstract class MeshRenderer : ISceneRenderer
     /// and only the byte count keeps climbing. 32 rather than 24 since textures: a map's gradients read through the
     /// ramp, and the shaded default alone is now 16.</summary>
     public const float MaxShadeLevels = 32f;
+
+    /// <summary>The coarsest texture ramp on offer. The same range as <see cref="ShadeLevels"/>, so the two dials
+    /// read alike.</summary>
+    public const float MinTextureLevels = 2f;
+
+    /// <summary>The finest texture ramp on offer.</summary>
+    public const float MaxTextureLevels = 32f;
+
+    /// <summary>The default for <see cref="TextureLevels"/>, matching the shaded renderer's shade ramp: a map's
+    /// gradients band no more coarsely than the lighting across it.</summary>
+    public const float DefaultTextureLevels = 16f;
     #endregion
     #region Methods
     /// <inheritdoc/>
@@ -420,8 +447,8 @@ public abstract class MeshRenderer : ISceneRenderer
         TextureMode.Gradient => Modulate(tint, 0.25f + (0.75f * Fraction(uv.X * TextureScale))),
         TextureMode.Noise => Modulate(tint, 0.2f + (0.8f * Hash(uv, TextureScale))),
         // The map's colour REPLACES the body's palette tint rather than modulating it: a diffuse map is the albedo.
-        // Already reduced and quantised at load, so this is one clamped index and nothing else.
-        TextureMode.Image or TextureMode.Auto => bodyTexture!.Sample(uv),
+        // Reduced at load and quantised once per TextureLevels setting, so this is one clamped index.
+        TextureMode.Image or TextureMode.Auto => bodyTexture!.Sample(uv, (int)textureLevels),
         _ => tint,
     };
 
@@ -459,6 +486,7 @@ public abstract class MeshRenderer : ISceneRenderer
 
     #region Fields
     private float shadeLevels;
+    private float textureLevels = DefaultTextureLevels;
     // Scenery versus bodies: only bodies are outlined (see HalfBlockSurface.TestAndSet).
     private const byte GroundGroup = 0;
     private const byte BodyGroup = 1;

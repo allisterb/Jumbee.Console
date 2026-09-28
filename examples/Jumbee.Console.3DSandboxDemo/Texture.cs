@@ -30,10 +30,13 @@ using PngSharp.Spec.Chunks.IHDR;
 public sealed class Texture
 {
     #region Constructors
-    private Texture(byte[] rgb, int width, int height, int sourceWidth, int sourceHeight, float retain,
-                    float contrast, int colours, float busyness, Color average)
+    private Texture(byte[] rgb, byte[] reduced, int levels, int width, int height, int sourceWidth, int sourceHeight,
+                    float retain, float contrast, int colours, float busyness, Color average)
     {
         this.rgb = rgb;
+        this.reduced = reduced;
+        this.levels = levels;
+        ramp = new Ramp(levels, rgb);
         Width = width;
         Height = height;
         SourceWidth = sourceWidth;
@@ -133,11 +136,22 @@ public sealed class Texture
     /// </remarks>
     public const int DefaultSize = 256;
 
-    /// <summary>Levels per channel a map is quantised to by default.</summary>
-    /// <remarks>Wolf3D's measured default, re-checked here on the capsule: 6 levels saves ~6% of bytes but
-    /// posterises the hue into patchy steps; 16 costs ~3% more for nothing visible; off costs 2.33× against 2.06×.
-    /// The saving is content-dependent — modest on line art over black, which coalesces into runs regardless, and
-    /// large on a smooth gradient (4.4× → 1.77×), which is what a photograph is made of.</remarks>
+    /// <summary>Levels per channel a map is baked at: the ramp its <see cref="Busyness"/>, <see cref="Colours"/> and
+    /// the gate are measured on, and what <see cref="Sample(Vector2)"/> returns.</summary>
+    /// <remarks>
+    /// <para>
+    /// Wolf3D's measured default, re-checked here on the capsule: 6 levels saves ~6% of bytes but posterises the hue
+    /// into patchy steps; 16 costs ~3% more for nothing visible; off costs 2.33× against 2.06×. The saving is
+    /// content-dependent — modest on line art over black, which coalesces into runs regardless, and large on a smooth
+    /// gradient (4.4× → 1.77×), which is what a photograph is made of.
+    /// </para>
+    /// <para>
+    /// <b>Not what the renderer draws with.</b> That is the renderer's own <c>TextureLevels</c>, a dial the user
+    /// moves, read through <see cref="Sample(Vector2, int)"/>. This stays fixed because <see cref="MaxBusyness"/> was
+    /// calibrated at it: more levels make more neighbouring texels differ, so measuring busyness on the drawing ramp
+    /// would let a slider silently change which maps the gate draws.
+    /// </para>
+    /// </remarks>
     public const int DefaultLevels = 10;
 
     /// <summary>Largest source image accepted, in pixels. A header claiming more is refused before anything is
@@ -167,12 +181,26 @@ public sealed class Texture
     /// colour along every island. Past 1 is how a tiling texture is authored, and there repeating is the meaning.
     /// </para>
     /// </remarks>
-    public Color Sample(Vector2 uv)
+    public Color Sample(Vector2 uv) => Sample(rgb, uv);
+
+    /// <summary>The colour at a texture coordinate, nearest texel, on a ramp of <paramref name="levels"/> per channel
+    /// rather than the one the map was baked at; 1 or less is unquantised. Addressing as <see cref="Sample(Vector2)"/>.</summary>
+    /// <remarks>
+    /// Re-quantised from the reduced map the first time a new level is asked for, then cached, so a renderer that
+    /// holds one setting pays for it once — a 256-texel map re-quantises in well under a millisecond. The cache is
+    /// replaced whole, never edited, because the rasteriser samples from its own thread: a reader gets the previous
+    /// ramp or the new one, and a race costs at worst a second identical quantise.
+    /// </remarks>
+    public Color Sample(Vector2 uv, int levels)
     {
-        var x = Math.Clamp((int)(Wrap(uv.X) * Width), 0, Width - 1);
-        var y = Math.Clamp((int)((1f - Wrap(uv.Y)) * Height), 0, Height - 1);
-        var i = ((y * Width) + x) * 3;
-        return new Color(rgb[i], rgb[i + 1], rgb[i + 2]);
+        if (levels == this.levels) return Sample(rgb, uv);
+        var current = Volatile.Read(ref ramp);
+        if (current.Levels != levels)
+        {
+            current = new Ramp(levels, Quantise(reduced, levels));
+            Volatile.Write(ref ramp, current);
+        }
+        return Sample(current.Rgb, uv);
     }
 
     /// <summary>Decodes and bakes PNG or JPEG bytes. Split out so it can be exercised without a file.</summary>
@@ -247,8 +275,10 @@ public sealed class Texture
             spread += Sq(sum[b * 3] - mr) + Sq(sum[(b * 3) + 1] - mg) + Sq(sum[(b * 3) + 2] - mb);
         var contrast = (float)(Math.Sqrt(spread / (bw * bh)) / (255.0 * Math.Sqrt(3)));
 
-        // Quantise onto the ramp, and count what is left.
+        // Quantise onto the ramp, and count what is left. The unquantised reduce is kept alongside, rounded to bytes,
+        // so Sample(uv, levels) can put the map on another ramp without decoding it again.
         var baked = new byte[bw * bh * 3];
+        var reduced = new byte[bw * bh * 3];
         var step = levels > 1 ? 255.0 / (levels - 1) : 0.0;
         var colours = new HashSet<int>();
         for (var b = 0; b < bw * bh; b++)
@@ -257,6 +287,7 @@ public sealed class Texture
             {
                 var v = sum[(b * 3) + c];
                 baked[(b * 3) + c] = (byte)Math.Clamp(Math.Round(step > 0 ? Math.Round(v / step) * step : v), 0, 255);
+                reduced[(b * 3) + c] = (byte)Math.Clamp(Math.Round(v), 0, 255);
             }
 
             colours.Add((baked[b * 3] << 16) | (baked[(b * 3) + 1] << 8) | baked[(b * 3) + 2]);
@@ -276,7 +307,7 @@ public sealed class Texture
         var busyness = pairs == 0 ? 0f : (float)differing / pairs;
 
         var average = new Color((byte)Math.Round(gr), (byte)Math.Round(gg), (byte)Math.Round(gb));
-        return new Texture(baked, bw, bh, width, height, retain, contrast, colours.Count, busyness, average);
+        return new Texture(baked, reduced, levels, bw, bh, width, height, retain, contrast, colours.Count, busyness, average);
     }
 
     /// <summary>
@@ -336,6 +367,25 @@ public sealed class Texture
     #endregion
 
     #region Private methods
+    private Color Sample(byte[] map, Vector2 uv)
+    {
+        var x = Math.Clamp((int)(Wrap(uv.X) * Width), 0, Width - 1);
+        var y = Math.Clamp((int)((1f - Wrap(uv.Y)) * Height), 0, Height - 1);
+        var i = ((y * Width) + x) * 3;
+        return new Color(map[i], map[i + 1], map[i + 2]);
+    }
+
+    // The same per-channel ramp Bake snaps to, applied to an already-reduced map.
+    private static byte[] Quantise(byte[] source, int levels)
+    {
+        if (levels <= 1) return source;
+        var step = 255.0 / (levels - 1);
+        var result = new byte[source.Length];
+        for (var i = 0; i < source.Length; i++)
+            result[i] = (byte)Math.Clamp(Math.Round(Math.Round(source[i] / step) * step), 0, 255);
+        return result;
+    }
+
     // [0,1] inclusive clamps, anything else repeats -- see Sample.
     private static float Wrap(float t) => t is >= 0f and <= 1f ? t : t - MathF.Floor(t);
 
@@ -462,10 +512,16 @@ public sealed class Texture
 
     #region Fields
     private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
-    private readonly byte[] rgb;
+    private readonly byte[] rgb;       // quantised at `levels`, the bake's ramp
+    private readonly byte[] reduced;   // the same map before quantising, for other ramps
+    private readonly int levels;
+    private Ramp ramp;   // the last other ramp asked for; replaced whole, never edited
     #endregion
 
     #region Child types
+    // A class, not a tuple: it is published through Volatile, which takes only reference types.
+    private sealed record Ramp(int Levels, byte[] Rgb);
+
     /// <summary>
     /// libjpeg's error manager with every <b>warning</b> made fatal and all output suppressed.
     /// </summary>

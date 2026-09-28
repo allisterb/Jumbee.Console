@@ -153,14 +153,16 @@ if (args.Contains("--texture"))
 
     var texTag = texModel is null ? "knot" : Path.GetFileNameWithoutExtension(texModel).ToLowerInvariant();
 
-    // image=PATH attaches a real map (Phase 2). reduce= and levels= are the bake's two dials, so they can be swept
-    // from the command line rather than by editing constants.
+    // image=PATH attaches a real map (Phase 2). reduce= is the bake's size dial; levels= is the renderer's
+    // TextureLevels, the ramp the map is DRAWN at -- the app's Texel Levels slider. The bake itself stays at
+    // Texture.DefaultLevels, because that is where the gate is measured, so the verdict printed here is the app's.
     var texImage = args.FirstOrDefault(a => a.StartsWith("image="))?[6..];
     var texReduce = int.TryParse(args.FirstOrDefault(a => a.StartsWith("reduce="))?[7..], out var rs) ? rs : Texture.DefaultSize;
-    var texLevels = int.TryParse(args.FirstOrDefault(a => a.StartsWith("levels="))?[7..], out var ls) ? ls : Texture.DefaultLevels;
+    var texLevels = int.TryParse(args.FirstOrDefault(a => a.StartsWith("levels="))?[7..], out var ls)
+        ? ls : (int)MeshRenderer.DefaultTextureLevels;
     if (texImage is not null)
     {
-        var map = Texture.Load(texImage, texReduce, texLevels);
+        var map = Texture.Load(texImage, texReduce);
         // One material over every triangle, so the map applies whatever materials the model came with (or none, for
         // the knot). This is the explicit-override path; without image= a model's own .mtl is resolved by ModelLoader.
         texMesh = new Mesh(texMesh.Vertices, texMesh.Indices)
@@ -173,7 +175,7 @@ if (args.Contains("--texture"))
         }.WithMaterials([new Material("image", map.Average, map)]);
         texTag += $"-r{texReduce}-l{texLevels}";
         Console.WriteLine($"\n{Path.GetFileName(texImage)}: {map.SourceWidth}x{map.SourceHeight} -> {map.Width}x{map.Height}, " +
-                          $"{texLevels} levels  busyness {map.Busyness:F3}  retain {map.Retain:F2}  " +
+                          $"drawn at {texLevels} levels  busyness {map.Busyness:F3} (at {Texture.DefaultLevels})  retain {map.Retain:F2}  " +
                           $"contrast {map.Contrast:F3}  {map.Colours} colours  gate: {(map.Legible ? "TEXTURE" : "flat")}");
     }
 
@@ -230,7 +232,7 @@ if (args.Contains("--texture"))
     var texScales = new[] { 4f, 8f, 16f, 32f };
 
     // --- Pass A: colour cost, and a picture to judge it by -------------------------------------------------------
-    foreach (var texRenderer in new MeshRenderer[] { new SolidRenderer(), new ShadedRenderer() })
+    foreach (var texRenderer in new MeshRenderer[] { new SolidRenderer { TextureLevels = texLevels }, new ShadedRenderer { TextureLevels = texLevels } })
     {
         texView.SetRenderer(texRenderer);
         _ = ConsoleSnapshot.ToText(texRoot, W, H);
@@ -291,7 +293,7 @@ if (args.Contains("--texture"))
         texView.Camera.Orbit(-PerfOrbit, 0);
     }
 
-    foreach (var r in new MeshRenderer[] { new SolidRenderer(), new ShadedRenderer() })
+    foreach (var r in new MeshRenderer[] { new SolidRenderer { TextureLevels = texLevels }, new ShadedRenderer { TextureLevels = texLevels } })
     {
         TexTime(r.Name, r, TextureMode.None, 8f);
         if (texImage is not null) TexTime("  ..image", r, TextureMode.Image, 8f);
@@ -1050,6 +1052,15 @@ Check("the bake reduces to the requested longest side, keeping the aspect",
     rampBaked.Width == 64 && rampBaked.Height == 1, $"{rampBaked.Width}x{rampBaked.Height} from 256x4");
 Check("the bake quantises: a 256-value ramp leaves at most 10 colours", rampBaked.Colours <= 10,
     $"{rampBaked.Colours} colours");
+
+// Sampling on another ramp: the renderer's Texel Levels. It must re-quantise from the reduced map and agree exactly
+// with the baked map at the bake's own level. (The gate cannot move with it: Busyness is fixed at the bake.)
+int RampColours(Texture t, int levels) =>
+    Enumerable.Range(0, 64).Select(i => t.Sample(new((i + 0.5f) / 64f, 0.5f), levels).R).Distinct().Count();
+Check("sampling at 2 levels leaves black and white", RampColours(rampBaked, 2) == 2, $"{RampColours(rampBaked, 2)} values");
+Check("at 32 levels, more than the bake's 10", RampColours(rampBaked, 32) > 10, $"{RampColours(rampBaked, 32)} values");
+Check("at the bake's own level, exactly the baked map",
+    Enumerable.Range(0, 64).All(i => rampBaked.Sample(new((i + 0.5f) / 64f, 0.5f), 10) == rampBaked.Sample(new((i + 0.5f) / 64f, 0.5f))));
 
 // Retain measures frequency against the BAKED resolution. A one-texel checker averages to flat grey (nothing
 // survives); two big halves survive the same reduce untouched. Same content type, opposite verdicts.

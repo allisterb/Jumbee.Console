@@ -54,7 +54,7 @@ that gating when someone takes it on.
 
 `--shell` accepts `--png out=DIR` too, which is the only way to judge the sidebar beside a live viewport.
 
-**`--shell` has a floor of 36 rows, and `--shell viewer` one of 51**, and both are the harness's rather than the
+**`--shell` has a floor of 37 rows, and `--shell viewer` one of 53**, and both are the harness's rather than the
 app's. Either sidebar scrolls, so at any height every control is *reachable*; but most checks read a panel by
 finding its text in the rendered rows, and below the floor the last section (the sandbox's World, the viewer's
 Shear) is off screen. Only the camera-pad check scrolls to what it is looking for. The app itself is fine down
@@ -64,7 +64,8 @@ there — 30 rows renders and scrolls correctly.
 panel off the screen rather than off its state, and is the same maintenance smell as `SidebarPanel.SpacedRows`.
 Adding Quadrant AA took them to 37 and 52; removing the Smooth slider brought them back; the viewer's Texture
 drop-down (2026-09-24) took its floor 49 → 51, measured by sweep — 49 and 50 fail only the Shear checks, 51 up
-pass. Sweep them (`--shell 200xH`) after touching a sidebar rather than spot-checking one height.
+pass. The Texel Levels slider (2026-09-28) took them to 37 and 53, swept the same way: the sandbox's 36 fails only
+World's Reset, the viewer's 51 and 52 only the Shear checks. Sweep them (`--shell 200xH`) after touching a sidebar rather than spot-checking one height.
 
 The default run's `e2epng=DIR` writes the **real viewer shell** opened on `capsule.obj` through `ModelLoader` —
 the only picture that shows the app exactly as it loads a material-bearing model, since `--shell viewer` registers

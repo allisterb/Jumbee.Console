@@ -201,6 +201,18 @@ public sealed class SceneView : CompositeControl
         RendererChanged?.Invoke();
     }
 
+    /// <summary>The shaded renderer's texture-colour ramp, or <see langword="null"/> under any other renderer, which
+    /// does not texture.</summary>
+    public float? TextureLevels => renderer is ShadedRenderer s ? s.TextureLevels : null;
+
+    /// <summary>Sets the shaded renderer's texture-colour ramp. A no-op under any other renderer.</summary>
+    public void SetTextureLevels(float levels)
+    {
+        if (renderer is not ShadedRenderer shaded || shaded.TextureLevels == levels) return;
+        shaded.TextureLevels = levels;
+        RendererChanged?.Invoke();
+    }
+
     /// <summary>How the shaded renderer draws a model's materials, or <see langword="null"/> under any other renderer,
     /// which does not texture.</summary>
     public TextureMode? Texture => renderer is ShadedRenderer s ? s.Texture : null;

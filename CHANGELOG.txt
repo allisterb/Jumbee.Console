@@ -86,8 +86,8 @@ EXAMPLES
 
   * The 3D sandbox reads .STL and .PLY alongside .OBJ, with per-facet colour where the format carries it.
     Anti-aliasing is now a single quadrant-glyph path (the switch is labelled "Quadrant glyphs"), there is a
-    Shade level slider (the shaded renderer defaults to 16 levels, up to 32 - fine enough for a texture's
-    gradients to read), and the camera pad is docked bottom-right. Its rasteriser runs on a Control.Job, so
+    Shade level slider (the shaded renderer defaults to 16 levels, up to 32) and a Texel level slider beside it
+    for a texture's own colours (also 16, up to 32), and the camera pad is docked bottom-right. Its rasteriser runs on a Control.Job, so
     loading a large model no longer blocks the UI. --model takes a directory as well as files, making every
     model in it spawnable (it previously crashed on one).
 

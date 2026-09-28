@@ -36,6 +36,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
+        texels.ValueChanged += (_, v) => Push(() => view.SetTextureLevels((float)v));
         quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
 
         // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
@@ -80,7 +81,8 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             // the shaded renderer's, so they belong together.
             // Texture first: on a model with materials it changes the picture more than anything else here.
             new Section("Shaded detail",
-                Spaced(Labelled("Texture", texture), Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade), 11),
+                Spaced(Labelled("Texture", texture), Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade,
+                    texels), 13),
             // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
             // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
             // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
@@ -159,6 +161,10 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             quadrants.IsChecked = view.QuadrantSampling ?? false;
             shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
+            // Only where a map can actually be drawn: the texturing renderer, a model with materials, and Texture not
+            // off. Anywhere else it would move and change nothing.
+            texels.Value = view.TextureLevels ?? MeshRenderer.DefaultTextureLevels;
+            texels.Enabled = texture.Enabled && view.Texture is not TextureMode.None;
             zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
             (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
             // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
@@ -290,6 +296,11 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // rather than under the non-shaded renderers, since both solid ones have a ramp.
     private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "Shade Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
+
+    // The texture's own ramp: how many levels per channel a map's colours are snapped to. Shade Levels never touches
+    // a texel, so without this a map's gradients band at a fixed step however fine the lighting is.
+    private readonly Slider texels = new Slider(MeshRenderer.MinTextureLevels, MeshRenderer.MaxTextureLevels,
+        MeshRenderer.DefaultTextureLevels, "Texel Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
 
     // Half-cell horizontal resolution on every boundary, silhouette or not: the surface samples twice per column
     // and each 2x2 block becomes the quadrant glyph that best fits it. See HalfBlockSurface.QuadrantSampling. Named

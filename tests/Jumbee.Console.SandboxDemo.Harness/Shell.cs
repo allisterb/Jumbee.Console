@@ -280,6 +280,19 @@ internal static class ShellChecks
         view.SetShadeLevels(ShadedRenderer.DefaultShadeLevels);
         Draw();
 
+        // The texture's own ramp, the shaded renderer's alone -- the only one that textures.
+        view.SetRenderer(view.Renderers.First(r => r is ShadedRenderer));
+        var texelsBefore = view.TextureLevels;
+        view.SetTextureLevels(MeshRenderer.MaxTextureLevels);
+        Draw();
+        Check("the texel-levels dial reaches the renderer",
+            view.TextureLevels == MeshRenderer.MaxTextureLevels, $"{texelsBefore} -> {view.TextureLevels}");
+        Check("and its slider reads it back", SliderReads(root, width, height, "Texel Levels", MeshRenderer.MaxTextureLevels));
+        view.SetTextureLevels(0f);
+        Check("it clamps too", view.TextureLevels == MeshRenderer.MinTextureLevels, $"asked for 0, got {view.TextureLevels}");
+        view.SetTextureLevels(MeshRenderer.DefaultTextureLevels);
+        Draw();
+
         // The other resolution dial, and a switch rather than a slider -- so it is read back off the SCREEN by
         // requiring its row to change, which no glyph is hard-coded into. A switch wired to nothing, or laid out at
         // zero width, fails here; asserting view.QuadrantSampling alone would pass in both cases.

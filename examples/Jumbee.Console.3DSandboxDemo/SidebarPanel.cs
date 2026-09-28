@@ -42,6 +42,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
+        texels.ValueChanged += (_, v) => Push(() => view.SetTextureLevels((float)v));
         quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
         stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
         scanCap.SelectionChanged += (_, _) =>
@@ -89,7 +90,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     /// that cannot hold it, and the frame scrolls instead of clipping. It used to decide whether the bottom section
     /// existed at all. Still worth keeping honest — the harness's <c>--shell 200xH</c> sweeps both tiers.
     /// </remarks>
-    public const int SpacedRows = 61;
+    public const int SpacedRows = 63;
 
     // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
     // being handed to whichever one has focus.
@@ -185,6 +186,9 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             quadrants.IsChecked = view.QuadrantSampling ?? false;
             shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
+            // Only the shaded renderer draws maps, and only while its texturing is on.
+            texels.Value = view.TextureLevels ?? MeshRenderer.DefaultTextureLevels;
+            texels.Enabled = view.Texture is { } mode && mode != TextureMode.None;
             stratify.IsChecked = view.Stratify ?? false;
             scanCap.SelectedIndex = IndexOfScanCap();
             density.Value = DetailOf(view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
@@ -292,8 +296,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
             // a large model is examined and does nothing to a model below that cap.
             new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                quadrants, wrapLighting, occlusion, shade, stratify, density, Labelled("Scan", scanCap)),
-                9 + (8 * gap)),
+                quadrants, wrapLighting, occlusion, shade, texels, stratify, density, Labelled("Scan", scanCap)),
+                10 + (9 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale, Row(resetWorld)),
@@ -382,6 +386,11 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     // resolution -- and the renderer's largest performance lever, so it is deliberately not buried in a menu.
     private readonly Slider shade = Param("Shade Levels", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
         ShadedRenderer.DefaultShadeLevels, "F0");
+
+    // The texture's own ramp, levels per channel. Shade Levels quantises the lighting and never a texel, so a spawned
+    // model's map bands at this step however fine the shading is.
+    private readonly Slider texels = Param("Texel Levels", MeshRenderer.MinTextureLevels, MeshRenderer.MaxTextureLevels,
+        MeshRenderer.DefaultTextureLevels, "F0");
 
     // Half-cell horizontal resolution: the surface samples twice per column and composites each 2x2 block into the
     // best-fitting quadrant glyph. Named for what it draws rather than for what it resembles -- nothing is blended,
