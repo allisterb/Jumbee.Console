@@ -30,6 +30,8 @@ using ShellType = Jumbee.Console.SandboxDemo.SandboxShell.ShellType;
 ShellType? pending = null;
 var viewerStart = 0;
 var scannedModelsFolder = false;
+// A folder the next viewer should load once its UI is up — behind a modal, not before the UI appears.
+ModelSet? pendingFolder = null;
 
 var modelPath = new Argument<string?>("path")
 {
@@ -37,8 +39,8 @@ var modelPath = new Argument<string?>("path")
     Description = "An .obj, .stl or .ply file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
                   "cycle through it; naming a file just decides which one opens first. With no path, a 'models' " +
                   "folder in the current directory is used if there is one, and otherwise the viewer opens on its " +
-                  "generated torus knot. NOTE: models are parsed before the UI appears, so a directory holding " +
-                  "large ones pauses at startup (a 250k-triangle model takes ~600ms; a 6k-triangle one takes ~4ms).",
+                  "generated torus knot. Models load after the viewer appears, behind a progress dialog; Esc stops " +
+                  "the load and keeps what has loaded so far.",
 };
 
 // An OPTION on the root, not a positional argument: a positional there would be inherited by the `obj` subcommand
@@ -58,14 +60,21 @@ var objCommand = new Command("obj", "Open the model viewer: one asset filling th
 
 objCommand.SetAction(async (parse, ct) =>
 {
-    var start = LoadModelDirectory(parse.GetValue(modelPath));
-    if (start < 0) return 1;
+    // Resolving is cheap and its errors are about the command line, so they still end the app before any UI. Only
+    // the parsing — the slow part — waits for the viewer to be up.
+    var set = ModelLibrary.Resolve(parse.GetValue(modelPath));
+    if (set.Error is { } error)
+    {
+        Console.Error.WriteLine(error);
+        return 1;
+    }
     scannedModelsFolder = true;   // this IS the scan, whether or not a path narrowed it
+    pendingFolder = set;
 
-    // The generated knot goes last, so it is always reachable with '[' / ']' even when a directory was given, and
-    // so the viewer still has something to show if the directory turns out to hold no models at all.
+    // The generated knot goes FIRST: it is what the viewer shows while the folder loads, spinning behind the modal,
+    // and what it still has to show if the folder turns out to hold nothing that parses.
     Meshes.Register(Meshes.TorusKnot(), "knot");
-    return await Run(ShellType.ModelViewer, start);
+    return await Run(ShellType.ModelViewer, 0);
 });
 
 // A headless smoke check, on the ROOT so one invocation covers both scenes -- that is what a container build wants
@@ -119,21 +128,20 @@ async Task<int> Run(ShellType shell, int startIndex)
 
 // Switching INTO the viewer from a sandbox that was launched without the obj verb: nothing has looked at the models
 // folder, because only that verb does at startup — so the viewer arrived with just the generated knot even with a
-// folder full of models sitting right there. Look now, once: repeated switches must not re-parse a directory that
-// takes ~750 ms, and models loaded this way stay in the registry, spawnable back in the sandbox.
+// folder full of models sitting right there. Look now, once: repeated switches must not re-parse the directory, and
+// models loaded this way stay in the registry, spawnable back in the sandbox. The viewer opens on `fallback` and
+// moves to the folder's first model when the load behind its modal finishes.
 int OpenModelsFolder(int fallback)
 {
     if (scannedModelsFolder) return fallback;
     scannedModelsFolder = true;
 
-    var before = Meshes.RegisteredCount;
-    var start = LoadModelDirectory(null);
-    // LoadModelDirectory returns the index PAST the registry when it finds nothing, so "did anything load" has to be
-    // asked of the registry rather than inferred from that index.
-    return start >= 0 && Meshes.RegisteredCount > before ? start : fallback;
+    if (ModelLibrary.Resolve(null) is { Error: null, Files.Length: > 0 } set) pendingFolder = set;
+    return fallback;
 }
 
-// Loads every model the path resolved to, returning the index to open on, or -1 on a reported failure.
+// Loads every model the path resolved to, before any UI, returning the index to open on, or -1 on a reported
+// failure. Only the sandbox's --model uses it now: the viewer loads its folder behind ModelLoadDialog instead.
 //
 // Loading is EAGER. Parsing on first display would trade a one-off startup cost for a stall in the middle of
 // cycling, which is the worse place to put it: measured, the four reference models total ~750 ms and the
@@ -221,19 +229,39 @@ static void LoadMeshDialog(SandboxShell.Sandbox app) =>
 
 // The viewer browses by DIRECTORY: '[' and ']' cycle everything in it, so opening a folder of models is the useful
 // unit — the same rule ModelLibrary.Resolve applies to the command line.
-static void OpenModelsDialog(SandboxShell.Viewer app) =>
+static void OpenModelsDialog(SandboxShell.Viewer app)
+{
+    // 'o' is a global hotkey, and global hotkeys fire even under a modal — so it can arrive mid-load.
+    if (ModelLoadDialog.IsLoading) return;
+
     FileBrowser.OpenDirectory("Open a model folder", null, directory =>
     {
         if (directory is null) return;
-        var start = LoadModelDirectory(directory);
-        if (start < 0)
+        var set = ModelLibrary.Resolve(directory);
+        if (set.Error is { } error)
         {
-            Dialog.Message("Nothing to show", $"No model files in {directory} ({ModelLibrary.Formats}).");
+            Dialog.Message("Nothing to show", error);
             return;
         }
 
-        app.Model.Reload(start);
+        LoadFolder(app, set);
+    });
+}
+
+// Loads a folder behind the progress modal, then shows its first model — or the one the path named. The viewer is
+// live throughout: it keeps turning whatever it was showing until the load hands it something new.
+static void LoadFolder(SandboxShell.Viewer app, ModelSet set) =>
+    ModelLoadDialog.Load(set, result =>
+    {
+        if (result.StartId >= 0) app.Model.Reload(result.StartId);
         app.Sidebar.Report();
+
+        if (result.Failures.Length > 0)
+        {
+            var lines = string.Join("\n", result.Failures.Select(f => $"{f.File}: {f.Reason}"));
+            Dialog.Message("Some models did not load",
+                $"{result.Failures.Length} of {result.Failures.Length + result.Loaded} files could not be loaded.\n\n{lines}");
+        }
     });
 
 // The `obj` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
@@ -250,6 +278,12 @@ async Task<int> RunModelViewer(int startIndex)
     SandboxShell.Viewer app = default;
     app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app), RequestSwitch);
     UI.Post(() => UI.SetFocus(app.View));
+    // Posted, so it runs once Start is up: the modal needs the overlay Start creates.
+    if (pendingFolder is { } folder)
+    {
+        pendingFolder = null;
+        UI.Post(() => LoadFolder(app, folder));
+    }
 
     await UI.Start(app.Root, width: 120, height: 48, fps: 60);
     // Come back to the model you left on, if this one is switched away from and later returned to.

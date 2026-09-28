@@ -124,6 +124,25 @@ public class DialogTests
     }
 
     [Fact]
+    public void Escape_DismissesAButtonlessDialog_OverNonFocusableContent()
+    {
+        // The progress-modal shape: no buttons, and content with nothing to focus. Escape is then the only way out,
+        // so it has to arrive even though the dialog has no focus stop at all.
+        var overlay = Host();
+        var completed = false;
+        var d = new Dialog("Loading", new ProgressBar("working", 3, 10) { Width = 40 }, DialogButtons.None);
+        d.Completed += (_, _) => completed = true;
+        d.Show();
+        ConsoleSnapshot.Render(overlay, 60, 20);
+
+        Send(overlay, K(ConsoleKey.Escape));
+
+        Assert.True(completed);
+        Assert.Equal(DialogResult.None, d.Result);
+        Assert.False(overlay.IsShowing);
+    }
+
+    [Fact]
     public void Message_Ok_ReportsOk()
     {
         var overlay = Host();

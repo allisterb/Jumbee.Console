@@ -43,6 +43,10 @@ if (args.Contains("--shell")) return Render3d.ShellChecks.Run(W, H, args);
 // UI LOOP; everything else renders through ConsoleSnapshot with no loop at all.
 if (args.Contains("--switch")) return Render3d.SwitchChecks.Run(W, H);
 
+// --- Loading a folder behind the progress modal -----------------------------------------------------------------
+// Also a UI-loop mode: the loader reports to a running UI, and stands down without one.
+if (args.Contains("--loading")) return Render3d.LoadChecks.Run(W, H, args);
+
 // --- Edge smoothing: the same frame at several strengths, so the softening can be judged rather than asserted ----
 if (args.Contains("--aa"))
 {

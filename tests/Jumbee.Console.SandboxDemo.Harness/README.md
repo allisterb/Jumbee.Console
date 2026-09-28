@@ -42,6 +42,7 @@ that gating when someone takes it on.
 | *(none)* | 97 behaviour checks — the default |
 | `--shell [viewer] [WxH]` | the M3 UI: layout, key↔widget agreement in both directions, sidebar toggle |
 | `--switch [WxH]` | three real `UI.Start`/`UI.Stop` cycles over the real shells — the scene-switch path |
+| `--loading [show] [WxH]` | a folder loaded behind the progress modal over the real viewer, under a real `UI.Start`: modal on screen, viewer still painting, a broken file reported, Escape mid-load. `show` prints the captured screen |
 | `--aa out=DIR [WxH]` | one settled frame with quadrant sampling off and on: distinct fg/bg pairs, silhouette placement error, PNGs |
 | `--perf [WxH]` | frame cost of every renderer over the real `ConsoleManager`: scene, paint, emit, ANSI bytes |
 | `--texture [out=DIR] [WxH]` | three procedural sources × four frequencies × both solid renderers — distinct fg/bg pairs, ANSI bytes, frame time, PNGs |

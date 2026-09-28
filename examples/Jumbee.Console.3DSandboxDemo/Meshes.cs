@@ -1,6 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
 using System.Numerics;
+using System.Threading;
 
 /// <summary>A triangle mesh in unit local space, scaled and rotated onto each body as it is drawn.</summary>
 /// <remarks>
@@ -169,24 +170,33 @@ public static class Meshes
     #region Methods
     /// <summary>Registers a loaded mesh and returns the id a <see cref="SceneSnapshot"/> refers to it by.</summary>
     /// <remarks>
+    /// <para>
     /// A registry rather than a reference on the snapshot: the snapshot crosses threads every tick, and an id keeps
-    /// it a plain value type all the way through. Meshes are added at startup and never removed, so a bare list
-    /// needs no synchronisation of its own.
+    /// it a plain value type all the way through.
+    /// </para>
+    /// <para>
+    /// <b>Copy-on-write, because meshes arrive while the app runs.</b> A folder loads behind a modal after the UI is
+    /// up, so a registration can land while the rasteriser is reading the registry on its own thread — and a
+    /// <see cref="List{T}"/> growing under a reader is a data race. Each registration publishes a new array instead:
+    /// a reader sees the old one or the new one, both complete. Registering happens on the UI thread only, so there
+    /// is one writer and no lock. Meshes are never removed, so an id stays valid for the life of the process.
+    /// </para>
     /// </remarks>
     public static int Register(Mesh mesh, string name)
     {
-        loaded.Add((mesh, name));
-        return loaded.Count - 1;
+        var next = Volatile.Read(ref loaded);
+        Volatile.Write(ref loaded, [.. next, (mesh, name)]);
+        return next.Length;
     }
 
     /// <summary>A registered mesh by id.</summary>
-    public static Mesh Get(int id) => loaded[id].Mesh;
+    public static Mesh Get(int id) => Volatile.Read(ref loaded)[id].Mesh;
 
     /// <summary>The display name a mesh was registered under.</summary>
-    public static string NameOf(int id) => loaded[id].Name;
+    public static string NameOf(int id) => Volatile.Read(ref loaded)[id].Name;
 
     /// <summary>How many meshes have been registered.</summary>
-    public static int RegisteredCount => loaded.Count;
+    public static int RegisteredCount => Volatile.Read(ref loaded).Length;
 
     /// <summary>
     /// A torus knot: complex, non-convex geometry available without shipping anyone's model file.
@@ -293,7 +303,7 @@ public static class Meshes
         return new Mesh(v, i);
     }
 
-    private static readonly List<(Mesh Mesh, string Name)> loaded = [];
+    private static (Mesh Mesh, string Name)[] loaded = [];   // replaced whole, never edited — see Register
 
     private static Mesh BuildSphere(int rings, int segments)
     {

@@ -7,9 +7,9 @@ ADDED
     producer runs off the UI thread and hands back a finished object, which the apply callback installs on
     the UI thread, so the expensive half never blocks a frame. Requests coalesce: asking again while a run
     is in flight does not queue a second run, it rides the pending one, so a control cannot accumulate an
-    unbounded backlog of stale work. JobHandle exposes Request, Cancel, StopAsync and Completion, plus Completed and Coalesced as
-    diagnostics - a steadily climbing Coalesced means the callers are outrunning the producer, which is the
-    job doing its job. Moving the 3D model rasteriser onto one took its worst-case round trip from over five
+    unbounded backlog of stale work. JobHandle exposes Request, Cancel, StopAsync and Completion, plus
+    Completed and Coalesced as diagnostics - a steadily climbing Coalesced means the callers are outrunning
+    the producer, which is the job doing its job. Moving the 3D model rasteriser onto one took its worst-case round trip from over five
     seconds of blocked UI to under four milliseconds.
 
   * Grid accepts empty cells. The controls parameter is IFocusable?[][], so a cell can be null and a whole
@@ -71,6 +71,14 @@ FIXED
     cell means everywhere else, and the next layout fills it in. A blank cell for one pass is a recoverable
     glitch; a throw out of a paint is not.
 
+  * A Plot point just outside the top or left edge of its area threw inside the braille brush. The bounds check
+    ran after dividing the sub-pixel coordinate into a cell, and integer division truncates toward zero - so a
+    point less than one cell outside the edge came out as cell 0 with a negative sub-pixel, passed the check,
+    and BrailleBrush threw ArgumentOutOfRangeException for it. The exception was swallowed upstream, so it never
+    surfaced as an error; it surfaced as one throw per clipped point, per frame - a waveform just touching the
+    top of its box pays that on every sample that touches it. Negative coordinates are now rejected before the
+    division, as the deeper overshoots always were.
+
 EXAMPLES
 
   * New Wolf3D demo - the Wolfenstein 3D engine ported to the terminal, with a software raycaster, sprites,
@@ -80,7 +88,37 @@ EXAMPLES
   * The 3D sandbox reads .STL and .PLY alongside .OBJ, with per-facet colour where the format carries it.
     Anti-aliasing is now a single quadrant-glyph path (the switch is labelled "Quadrant glyphs"), there is a
     Shade level slider, and the camera pad is docked bottom-right. Its rasteriser runs on a Control.Job, so
-    loading a large model no longer blocks the UI.
+    loading a large model no longer blocks the UI. --model takes a directory as well as files, making every
+    model in it spawnable (it previously crashed on one).
+
+  * The 3D model viewer comes up at once and loads its folder behind a modal progress dialog, instead of
+    parsing every model before the UI appeared - which, on a folder of large models, was seconds of blank
+    terminal. The viewer keeps turning its generated knot, dimmed, under the dialog, which names each file as
+    it parses. Esc stops the load and keeps what has loaded. A file that fails no longer ends the app: the rest
+    of the folder loads and the failures are listed afterwards. The same dialog covers opening a folder from
+    inside the viewer, which used to freeze it for the length of the parse.
+
+  * The 3D model viewer draws textures. An OBJ's .mtl materials are read - diffuse colour and map_Kd, from PNG
+    or JPEG - and drawn by the shaded renderer, with a Texture off/auto/on drop-down in the viewer. Auto, the
+    default, draws a map only when it will read at terminal resolution: a busy one (fine print, dense noise)
+    renders as noise worse than the shading it replaces, so it falls back to the material's flat colour. Maps
+    are reduced and quantised once at load, so a texture costs nothing per frame beyond its sampling. Damaged
+    image files fail the load with the file named rather than drawing wrongly: the PNG decoder is guarded
+    against a truncation that would otherwise hang it, and JPEG decoding treats every warning as an error.
+
+  * The AudioScope demo gained --play, which plays the file through the default output device and scopes the
+    samples on their way there, so the picture and the sound are the same audio at the same moment. File input
+    now plays at real time - each frame advances by the audio actually elapsed - and the status bar reports the
+    overlap achieved rather than the one requested. On Windows, loopback capture opens a sized, event-driven
+    WASAPI stream instead of the legacy default, so the waveform slides rather than stepping at the device's
+    callback rate.
+
+  * The 3D sandbox harness and the other demo harnesses moved to tests/*.Harness and joined the solution, so a
+    solution build compiles them instead of letting them rot.
+
+  * THIRD-PARTY-NOTICES.TXT lists the demos' NuGet dependencies as well as the vendored code, and both Docker
+    images ship it alongside LICENSE. The images carry every model file the 3D sandbox can read, with their
+    materials and texture maps.
 
   * build.cmd and examples.cmd take a target (browser, agent-harness, ide, audio-scope, 3dsandbox, wolf3d,
     core, examples, all), and --verify runs each demo's headless smoke check - 47 example screens plus five
