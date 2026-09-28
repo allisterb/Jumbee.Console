@@ -7,7 +7,7 @@
 #   docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #   docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
 #   docker run --rm -it jumbee-console-aot audio-scope     # AudioScope demo (bundled sample track)
-#   docker run --rm -it jumbee-console-aot 3dsandbox       # 3D physics sandbox (3dsandbox obj = model viewer)
+#   docker run --rm -it jumbee-console-aot 3dsandbox       # 3D physics sandbox (3dsandbox view = model viewer)
 #
 # The first argument picks the app; any remaining arguments pass through. Quit any app with Ctrl+Q.
 set -euo pipefail

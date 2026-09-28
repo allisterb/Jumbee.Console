@@ -21,8 +21,8 @@ Jumbee.Console demos — pick one to run:
   audio-scope       Real-time oscilloscope, vectorscope and spectroscope reading audio from a file or recording device
                     (no arguments plays the bundled sample track; --help lists --path, --live, --scheme and the rest)
   ide  [dir]        VS Code-style IDE demo (opens an optional project directory)
-  3dsandbox [args]  Real-time 3D rigid-body sandbox and OBJ model viewer, three renderers over one scene
-                    (`3dsandbox obj [path]` opens the model viewer instead; --help lists the rest)
+  3dsandbox [args]  Real-time 3D rigid-body sandbox and model viewer, three renderers over one scene
+                    (`3dsandbox view [path]` opens the model viewer instead; --help lists the rest)
   wolf3d [args]     The Wolf3D game engine ported to the terminal
                     (needs the game data -- see examples/Jumbee.Console.Wolf3DDemo/GameData/README.md)
 

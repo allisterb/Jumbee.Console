@@ -1410,7 +1410,7 @@ Check("and comes to rest on the floor", landed.Positions[landedIndex].Y > 0f && 
     $"y={landed.Positions[landedIndex].Y:F2}");
 
 // --- model viewer -------------------------------------------------------------------------------------------------
-// The `obj` scene: no physics, one body, full affine transform. The claim under test is that shear reaches the
+// The `view` scene: no physics, one body, full affine transform. The claim under test is that shear reaches the
 // rasteriser at all -- a quaternion cannot carry it, so it travels via SceneSnapshot.LocalTransforms.
 Console.WriteLine("\nmodel viewer:");
 var scene3 = new ModelScene();
@@ -1455,7 +1455,7 @@ Check("the viewer renders the model", viewerText.Count(c => c is not (' ' or '\n
     $"{viewerText.Count(c => c is not (' ' or '\n' or '\r'))} glyphs");
 Check("its footer names the model", viewerText.Contains(scene3.Name), scene3.Name);
 
-// --- obj path resolution ------------------------------------------------------------------------------------------
+// --- view path resolution -----------------------------------------------------------------------------------------
 // One argument, two meanings. Every branch here is an edge case, which is why it lives in ModelLibrary rather than
 // inside Program where it could only be exercised by launching a UI.
 Console.WriteLine("\nobj path resolution:");

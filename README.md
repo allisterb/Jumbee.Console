@@ -48,7 +48,7 @@ The audio scope example, from the AOT image:
 docker run --rm -it --pull always allisterb/jumbee-console-aot:latest audio-scope
 ```
 
-The 3D physics sandbox (add `obj` for its model viewer):
+The 3D physics sandbox (add `view` for its model viewer):
 
 ```sh
 docker run --rm -it --pull always allisterb/jumbee-console-aot:latest 3dsandbox

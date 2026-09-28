@@ -18,7 +18,7 @@ One image bundles six apps. The first argument picks which; with none, the examp
 | `agent-harness` | Claude-desktop-style agent UI (session rail, transcript, live task list) |
 | `ide` | VS Code–style IDE demo — file explorer, multi-tab editor and a working terminal pane over a sample project |
 | `audio-scope` | Real-time oscilloscope, vectorscope and spectroscope over a bundled audio track |
-| `3dsandbox` | Real-time 3D rigid-body sandbox over three terminal renderers; `3dsandbox obj` opens its OBJ model viewer |
+| `3dsandbox` | Real-time 3D rigid-body sandbox over three terminal renderers; `3dsandbox view` opens its model viewer (`.obj`, `.stl`, `.ply`) |
 | `wolf3d` | Wolfenstein 3D walkthrough — real maps and textures through a raycaster (needs game data, see below) |
 
 ```sh
@@ -122,8 +122,8 @@ error inside the demo.
 
 ### The 3D sandbox's models
 
-Same arrangement, same reason. `3dsandbox` looks for a `models` folder and loads every `.obj` in it — the sandbox
-makes them spawnable, and `3dsandbox obj` opens the viewer on the first. That folder lives at
+Same arrangement, same reason. `3dsandbox` looks for a `models` folder and loads every model in it (`.obj`, `.stl`
+and `.ply`) — the sandbox makes them spawnable, and `3dsandbox view` opens the viewer on the first. That folder lives at
 `examples/Jumbee.Console.3DSandboxDemo/models` and is **not in the repository**: the meshes are third-party research
 assets (the Stanford bunny and dragon, the Utah teapot, and friends), each with its own terms.
 

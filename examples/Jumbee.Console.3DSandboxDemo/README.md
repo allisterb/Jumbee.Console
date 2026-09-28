@@ -22,13 +22,13 @@ coloured sub-pixels — so the solid renderers draw at `width × 2·height` with
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release
 
 # The model viewer: one asset filling the viewport, on a turntable. Reads .obj, .stl and .ply.
-dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- obj path/to/models
+dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- view path/to/models
 
 # Make models spawnable in the sandbox instead, so you can throw them at things.
 dotnet run --project examples/Jumbee.Console.3DSandboxDemo -c Release -- --model path/to/part.stl
 ```
 
-`obj` takes **one** path, a file *or* a directory. Either way the whole directory is loaded and `[` / `]` cycle
+`view` takes **one** path, a file *or* a directory. (It was called `obj` until 0.2.1, and `obj` still works.) Either way the whole directory is loaded and `[` / `]` cycle
 through it — naming a file only decides which one opens first.
 
 With **no path** it looks for a `models` folder in the current directory and loads that; with no such folder it opens
@@ -39,18 +39,19 @@ Whichever you launch, **Scene ▸ Switch to model viewer** (and **Model ▸ Swit
 between the two without leaving the process. Loaded models are kept, so nothing is re-parsed, and the viewer opens on
 whichever model you were last looking at — or, coming from the sandbox, on whatever the spawn drop-down was set to.
 
-> **Loading a directory can pause at startup.** Models are parsed eagerly, before the UI appears, and a large one
-> is not fast: the 250,000-triangle Stanford dragon takes ~600 ms on its own, where a 6,000-triangle teapot takes
-> ~4 ms. A directory of big models will sit for a moment before anything is drawn. This is deliberate — parsing on
-> first display would move that pause into the middle of cycling, and a stall mid-interaction reads as a hang where
-> a stall at startup reads as loading. Point `obj` at a single file's directory, or a directory of small models, if
-> you would rather not wait.
+**A directory loads behind a progress dialog.** The viewer comes up at once, turning its generated torus knot, and
+parses the directory's models on a background thread while a modal shows which file it is on. Every model is parsed
+up front rather than on first display — a large one is not fast (the 250,000-triangle Stanford dragon takes ~600 ms,
+a 6,000-triangle teapot ~4 ms), and parsing on demand would move that pause into the middle of cycling, where it
+reads as a hang. **Esc** stops the load and keeps what has loaded so far. A file that will not parse is skipped, and
+the ones that failed are listed when the load finishes. Opening a folder from inside the viewer (`o`) uses the same
+dialog.
 
 ## File formats
 
 | | |
 |---|---|
-| **`.obj`** | Wavefront. Geometry only — `v` and `f`, with n-gons fan-triangulated. `vt`/`vn` are parsed past, and materials are not read at all. |
+| **`.obj`** | Wavefront. `v` and `f`, with n-gons fan-triangulated, plus the `.mtl` materials it names — diffuse colour and a PNG or JPEG `map_Kd`, read with its `vt` texture coordinates. `vn` is parsed past. |
 | **`.stl`** | Binary and ASCII, auto-detected. The CAD and 3D-printing interchange format, which is the reason it is here. |
 | **`.ply`** | ASCII and binary little-endian. **The only one that carries colour**, per vertex or per face, with no side-car file. |
 

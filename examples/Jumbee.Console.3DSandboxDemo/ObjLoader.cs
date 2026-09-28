@@ -44,7 +44,7 @@ public static class ObjLoader
     /// <summary>Parses OBJ text. Split out from <see cref="Load"/> so it can be tested without a file.</summary>
     /// <remarks>
     /// <paramref name="withUvs"/> is opt-in because it roughly adds half as much again to a textured model's parse
-    /// time, and models are parsed before the UI appears. Measured on the 219 MB <c>LP_Sneaker3.obj</c>, medians:
+    /// time, and every model in a folder is parsed while the user waits on the loading dialog. Measured on the 219 MB <c>LP_Sneaker3.obj</c>, medians:
     /// 1,502 ms without, ~2,166 ms with — ~290 ms reading its 1.56M <c>vt</c> lines and ~370 ms reading a UV index at
     /// each of its 8.8M face corners. Neither is waste to optimise away; it is the price of 3.1M more floats and 8.8M
     /// more integers, through a loader whose position and face parsing is just as plain. So a caller that will not

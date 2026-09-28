@@ -11,7 +11,7 @@ using ShellType = Jumbee.Console.SandboxDemo.SandboxShell.ShellType;
 //
 //   (default)  a real-time rigid-body sandbox: Box3D simulating on its own thread, an orbit camera, spawn, launch,
 //              grab and throw.
-//   obj        a model viewer: one asset filling the viewport on a turntable. A loaded model at sandbox scale is a
+//   view       a model viewer: one asset filling the viewport on a turntable. A loaded model at sandbox scale is a
 //              few dozen cells across, where a teapot and a rock look identical -- the parser and the renderers can
 //              only really be judged at a size the terminal can resolve.
 //
@@ -33,18 +33,8 @@ var scannedModelsFolder = false;
 // A folder the next viewer should load once its UI is up — behind a modal, not before the UI appears.
 ModelSet? pendingFolder = null;
 
-var modelPath = new Argument<string?>("path")
-{
-    Arity = ArgumentArity.ZeroOrOne,
-    Description = "An .obj, .stl or .ply file, or a directory of them. Either way the whole directory is loaded and '[' / ']' " +
-                  "cycle through it; naming a file just decides which one opens first. With no path, a 'models' " +
-                  "folder in the current directory is used if there is one, and otherwise the viewer opens on its " +
-                  "generated torus knot. Models load after the viewer appears, behind a progress dialog; Esc stops " +
-                  "the load and keeps what has loaded so far.",
-};
-
-// An OPTION on the root, not a positional argument: a positional there would be inherited by the `obj` subcommand
-// (so its help lists `<models>` twice) and would make `app foo.obj` versus `app obj` ambiguous to parse.
+// An OPTION on the root, not a positional argument: a positional there would be inherited by the `view` subcommand
+// (so its help lists `<models>` twice) and would make `app foo.obj` versus `app view` ambiguous to parse.
 var sandboxModels = new Option<string[]>("--model", "-m")
 {
     Arity = ArgumentArity.ZeroOrMore,
@@ -53,29 +43,12 @@ var sandboxModels = new Option<string[]>("--model", "-m")
                   "drop with 'n' or fire with 'f'.",
 };
 
-var objCommand = new Command("obj", "Open the model viewer: one asset filling the viewport, on a turntable.")
-{
-    modelPath,
-};
-
-objCommand.SetAction(async (parse, ct) =>
-{
-    // Resolving is cheap and its errors are about the command line, so they still end the app before any UI. Only
-    // the parsing — the slow part — waits for the viewer to be up.
-    var set = ModelLibrary.Resolve(parse.GetValue(modelPath));
-    if (set.Error is { } error)
-    {
-        Console.Error.WriteLine(error);
-        return 1;
-    }
-    scannedModelsFolder = true;   // this IS the scan, whether or not a path narrowed it
-    pendingFolder = set;
-
-    // The generated knot goes FIRST: it is what the viewer shows while the folder loads, spinning behind the modal,
-    // and what it still has to show if the folder turns out to hold nothing that parses.
-    Meshes.Register(Meshes.TorusKnot(), "knot");
-    return await Run(ShellType.ModelViewer, 0);
-});
+// `view`, not the `obj` it started as: the viewer reads STL and PLY too, and takes a directory as readily as a file.
+// `obj` still works, because 0.2.0's docs and Docker images tell people to type it — as a HIDDEN twin rather than an
+// alias, since help lists aliases alphabetically and would print "obj, view", leading with the name being retired.
+var viewCommand = ViewerCommand("view");
+var objCommand = ViewerCommand("obj");
+objCommand.Hidden = true;
 
 // A headless smoke check, on the ROOT so one invocation covers both scenes -- that is what a container build wants
 // to run, and a flag it had to repeat per subcommand would get one of them checked and the other forgotten.
@@ -89,6 +62,7 @@ var root = new RootCommand("A real-time 3D rigid-body sandbox in the terminal, w
 {
     sandboxModels,
     verify,
+    viewCommand,
     objCommand,
 };
 
@@ -105,6 +79,41 @@ root.SetAction(async (parse, ct) =>
 });
 
 return await root.Parse(args).InvokeAsync();
+
+// The viewer verb under a given name. Each call builds its own argument: a symbol belongs to one command.
+Command ViewerCommand(string name)
+{
+    var path = new Argument<string?>("path")
+    {
+        Arity = ArgumentArity.ZeroOrOne,
+        Description = "An .obj, .stl or .ply file, or a directory of them. Either way the whole directory is loaded and " +
+                      "'[' / ']' cycle through it; naming a file just decides which one opens first. With no path, a " +
+                      "'models' folder in the current directory is used if there is one, and otherwise the viewer opens " +
+                      "on its generated torus knot. Models load after the viewer appears, behind a progress dialog; Esc " +
+                      "stops the load and keeps what has loaded so far.",
+    };
+    var command = new Command(name, "Open the model viewer: one asset filling the viewport, on a turntable.") { path };
+
+    command.SetAction(async (parse, ct) =>
+    {
+        // Resolving is cheap and its errors are about the command line, so they still end the app before any UI.
+        // Only the parsing — the slow part — waits for the viewer to be up.
+        var set = ModelLibrary.Resolve(parse.GetValue(path));
+        if (set.Error is { } error)
+        {
+            Console.Error.WriteLine(error);
+            return 1;
+        }
+        scannedModelsFolder = true;   // this IS the scan, whether or not a path narrowed it
+        pendingFolder = set;
+
+        // The generated knot goes FIRST: it is what the viewer shows while the folder loads, spinning behind the
+        // modal, and what it still has to show if the folder turns out to hold nothing that parses.
+        Meshes.Register(Meshes.TorusKnot(), "knot");
+        return await Run(ShellType.ModelViewer, 0);
+    });
+    return command;
+}
 
 // The app's whole lifetime: run one scene until its UI stops, and if it stopped in order to become the other one,
 // build that and go round again. Quit leaves `pending` null and falls out.
@@ -126,7 +135,7 @@ async Task<int> Run(ShellType shell, int startIndex)
     }
 }
 
-// Switching INTO the viewer from a sandbox that was launched without the obj verb: nothing has looked at the models
+// Switching INTO the viewer from a sandbox that was launched without the view verb: nothing has looked at the models
 // folder, because only that verb does at startup — so the viewer arrived with just the generated knot even with a
 // folder full of models sitting right there. Look now, once: repeated switches must not re-parse the directory, and
 // models loaded this way stay in the registry, spawnable back in the sandbox. The viewer opens on `fallback` and
@@ -264,7 +273,7 @@ static void LoadFolder(SandboxShell.Viewer app, ModelSet set) =>
         }
     });
 
-// The `obj` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
+// The `view` scene: one model, no physics. Same camera, same three renderers, same edge styles. The checkerboard
 // ground stays — it costs nothing and it earns its place, giving the model a sense of scale and somewhere for the
 // ambient occlusion to land, both of which a model floating in a void loses.
 async Task<int> RunModelViewer(int startIndex)

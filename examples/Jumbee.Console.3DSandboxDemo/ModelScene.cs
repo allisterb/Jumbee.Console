@@ -27,7 +27,7 @@ public enum ModelUpAxis
 
 /// <summary>
 /// A single model on a turntable: no physics, no gravity, one body at the origin, sized to fill the view. The
-/// scene behind the <c>obj</c> verb.
+/// scene behind the <c>view</c> verb.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -2,15 +2,14 @@
 -----
 ADDED
 
-  * protected Control.Job<T>(produce, apply, onError), returning a JobHandle - the on-demand counterpart to
+  * `protected Control.Job<T>(produce, apply, onError)`, which returns a `JobHandle` and is the on-demand counterpart to
     Control.Feed, for control authors. A feed runs on a timer; a job runs when something asks it to. The
     producer runs off the UI thread and hands back a finished object, which the apply callback installs on
     the UI thread, so the expensive half never blocks a frame. Requests coalesce: asking again while a run
     is in flight does not queue a second run, it rides the pending one, so a control cannot accumulate an
     unbounded backlog of stale work. JobHandle exposes Request, Cancel, StopAsync and Completion, plus
     Completed and Coalesced as diagnostics - a steadily climbing Coalesced means the callers are outrunning
-    the producer, which is the job doing its job. Moving the 3D model rasteriser onto one took its worst-case round trip from over five
-    seconds of blocked UI to under four milliseconds.
+    the producer, which is the job doing its job. 
 
   * Grid accepts empty cells. The controls parameter is IFocusable?[][], so a cell can be null and a whole
     row can be [], instead of needing a filler control to hold a gap open. (This surfaced a latent null
@@ -38,7 +37,7 @@ CHANGED
 
 FIXED
 
-  * Input is dead on a legacy Windows console. Such a console refuses VT mode on both handles; rendering
+  * Input was dead on a legacy Windows console. Such a console refuses VT mode on both handles; rendering
     correctly fell back to the Win32 path, but the input source did not follow, because UI.Start only chooses
     one when the caller supplied none - and VtInputSource then ignored its own SetConsoleMode failure and kept
     reading stdin. Without VT input mode the console never encodes arrows, function keys, mouse or paste as
@@ -97,6 +96,9 @@ EXAMPLES
     it parses. Esc stops the load and keeps what has loaded. A file that fails no longer ends the app: the rest
     of the folder loads and the failures are listed afterwards. The same dialog covers opening a folder from
     inside the viewer, which used to freeze it for the length of the parse.
+
+  * The model viewer's command is now "3dsandbox view" rather than "3dsandbox obj", since it reads .STL and
+    .PLY as well and takes a directory as readily as a file. "obj" still works as an alias.
 
   * The 3D model viewer draws textures. An OBJ's .mtl materials are read - diffuse colour and map_Kd, from PNG
     or JPEG - and drawn by the shaded renderer, with a Texture off/auto/on drop-down in the viewer. Auto, the

@@ -83,7 +83,7 @@ its models with `ObjLoader` directly and so never has materials.
   however steeply the plane recedes. Measured at 0 false positives out of ~3,500 sub-pixels.
 - **Colour read back from emitted ANSI** (`AnsiConsoleSnapshot`), so a selection highlight is verified as pixels
   rather than as internal state.
-- **The `obj` path-resolution rules**, all of which are edge cases, via `ModelLibrary.Resolve`.
+- **The `view` path-resolution rules**, all of which are edge cases, via `ModelLibrary.Resolve`.
 - **The STL loader against the raw bytes** — facet count, degenerate facets and every triangle's winding are
   recomputed from the file, so a loader that agreed with itself would still fail.
 - **The only mode that runs the UI LOOP.** Everything else renders through `ConsoleSnapshot` with no loop at all, so

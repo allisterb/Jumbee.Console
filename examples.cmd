@@ -92,7 +92,7 @@ echo   browser                Interactive examples browser ^(default^)
 echo   agent-harness          Claude-style agent harness demo
 echo   ide  [dir]             VS Code-style IDE demo ^(opens an optional project directory^)
 echo   audio-scope  [args]    Real-time oscilloscope, vectorscope and spectroscope reading audio from a file or recording device
-echo   3dsandbox  [args]      Real-time 3D rigid-body sandbox and OBJ model viewer ^(`3dsandbox obj [path]` opens the viewer^)
+echo   3dsandbox  [args]      Real-time 3D rigid-body sandbox and model viewer ^(`3dsandbox view [path]` opens the viewer^)
 echo   wolf3d  ^[args^]         The Wolf3D game engine ported to the terminal ^(needs the game data^)
 echo.
 echo Usage:

@@ -119,7 +119,7 @@ COPY --from=build /src/examples/Jumbee.Console.Wolf3DDemo/bin/Release/net10.0 ./
 #     docker run --rm -it jumbee-console agent-harness   # agent harness demo
 #     docker run --rm -it jumbee-console ide             # IDE demo
 #     docker run --rm -it jumbee-console audio-scope     # AudioScope demo (bundled sample track)
-#     docker run --rm -it jumbee-console 3dsandbox       # 3D physics sandbox (3dsandbox obj = the model viewer)
+#     docker run --rm -it jumbee-console 3dsandbox       # 3D physics sandbox (3dsandbox view = the model viewer)
 #     docker run --rm -it jumbee-console wolf3d          # Wolfenstein 3D walkthrough (needs mounted game data)
 # Quit any app with Ctrl+Q; it restores your terminal on exit.
 #
