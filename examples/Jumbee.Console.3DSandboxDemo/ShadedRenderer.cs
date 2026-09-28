@@ -148,9 +148,11 @@ public sealed class ShadedRenderer : MeshRenderer
     private const float Ambient = 0.28f;
 
     // More levels than SolidRenderer: with a genuine gradient to represent there is something for them to do. Each
-    // extra level costs ANSI bytes, so this is deliberately still small.
+    // extra level costs ANSI bytes. It was 7 until textures arrived: a textured face shows its map through the shade
+    // ramp, and at 7 levels the map's own gradients banded into poster shades. 16 is worth the bytes, and the
+    // rasteriser runs off the UI thread (Control.Job), so the frame loop does not pay for the extra shading.
     /// <summary>The default for <see cref="MeshRenderer.ShadeLevels"/>, so a UI offering the dial can mark it.</summary>
-    public const float DefaultShadeLevels = 7f;
+    public const float DefaultShadeLevels = 16f;
 
     // How sharply the inverse-depth field must bend, relative to local depth, to count as an edge. Low enough to
     // catch a box crease seen face-on, high enough that a sphere's curvature does not light up its whole interior.

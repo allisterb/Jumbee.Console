@@ -60,7 +60,7 @@ public abstract class MeshRenderer : ISceneRenderer
     /// banding; lowering it flattens the scene into poster shades.
     /// </para>
     /// <para>
-    /// It is <b>also the largest performance lever the renderer has</b>, which is why the defaults are low. Coarse
+    /// It is <b>also the largest performance lever the renderer has</b>, which is why the solid default stays low. Coarse
     /// levels mean neighbouring cells share a colour and the emitter coalesces them into long runs; fine levels break
     /// those runs and the ANSI byte count climbs. Cheap to raise for a recording, where nothing is waiting on the
     /// terminal; think before raising it for interactive use on a slow one.
@@ -110,8 +110,9 @@ public abstract class MeshRenderer : ISceneRenderer
     public const float MinShadeLevels = 2f;
 
     /// <summary>The finest shade ramp on offer. Past this the bands are below what the palette and the eye resolve,
-    /// and only the byte count keeps climbing.</summary>
-    public const float MaxShadeLevels = 24f;
+    /// and only the byte count keeps climbing. 32 rather than 24 since textures: a map's gradients read through the
+    /// ramp, and the shaded default alone is now 16.</summary>
+    public const float MaxShadeLevels = 32f;
     #endregion
     #region Methods
     /// <inheritdoc/>
