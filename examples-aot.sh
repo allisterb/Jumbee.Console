@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Entry point for the SLIM NativeAOT image (Dockerfile.aot). Unlike the full image's examples.sh — which runs each
-# demo via `dotnet <dll>` — this execs the pre-compiled NATIVE binaries. Only the AOT-eligible apps are bundled:
-# the examples browser, the agent-harness demo, the AudioScope demo and the 3D sandbox. The IDE demo is NOT here: it
-# is not AOT-eligible — use the full `jumbee-console` image for it.
+# Entry point for the Docker image (Dockerfile.aot), published as both jumbee-console and jumbee-console-aot. It execs
+# the pre-compiled NATIVE binaries, where examples.sh -- the launcher for a checkout -- runs each demo via
+# `dotnet <dll>`. It accepts exactly the targets examples.sh does, and the old JIT image's entry point was examples.sh,
+# so every command written for that image still works against this one.
 #
 #   docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #   docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
+#   docker run --rm -it jumbee-console-aot ide             # IDE demo (its Build menu offers to install the SDK)
 #   docker run --rm -it jumbee-console-aot audio-scope     # AudioScope demo (bundled sample track)
 #   docker run --rm -it jumbee-console-aot 3dsandbox       # 3D physics sandbox (3dsandbox view = model viewer)
+#   docker run --rm -it -v /path/to/WL1:/app/wolf3d/GameData jumbee-console-aot wolf3d
+#                                                          # Wolf3D walkthrough (the game data is yours to supply)
 #
 # The first argument picks the app; any remaining arguments pass through. Quit any app with Ctrl+Q.
 set -euo pipefail
@@ -20,28 +23,27 @@ if [[ -d /app ]]; then cd /app; fi
 
 examples=/app/examples/Jumbee.Console.Examples
 agent=/app/agent/Jumbee.Console.AgentHarnessDemo
+ide=/app/ide/Jumbee.Console.IdeDemo
 audioscope=/app/audioscope/Jumbee.Console.AudioScopeDemo
 sandbox=/app/sandbox/Jumbee.Console.3DSandboxDemo
+wolf3d=/app/wolf3d/Jumbee.Console.Wolf3DDemo
 
 case "${1:-}" in
   agent-harness)           shift; exec "$agent" "$@" ;;
   audio-scope)
                            shift; exec "$audioscope" "$@" ;;
   3dsandbox)               shift; exec "$sandbox" "$@" ;;
+  wolf3d)                  shift; exec "$wolf3d" "$@" ;;
   browser)                 shift; exec "$examples" "$@" ;;
-  ide)
-    echo "The IDE demo is not AOT-eligible and is not in the slim image." >&2
-    echo "Use the full image:  docker run --rm -it jumbee-console ide" >&2
-    exit 2 ;;
+  ide)                     shift; exec "$ide" "$@" ;;
   -h|--help|help)
-    echo "Slim AOT image apps:  browser (default) | agent-harness | audio-scope | 3dsandbox"
-    echo "(The IDE demo is not AOT-eligible — use the full 'jumbee-console' image.)"
+    echo "Apps:  browser (default) | agent-harness | ide | audio-scope | 3dsandbox | wolf3d"
     exit 0 ;;
   '')                      exec "$examples" ;;
   # An OPTION rather than a verb goes to the default browser; a mistyped target is an error (mirrors examples.sh).
   -*)                      exec "$examples" "$@" ;;
   *)
     echo "Unknown target: $1" >&2
-    echo "Slim AOT image apps:  browser (default) | agent-harness | audio-scope | 3dsandbox" >&2
+    echo "Apps:  browser (default) | agent-harness | ide | audio-scope | 3dsandbox | wolf3d" >&2
     exit 2 ;;
 esac

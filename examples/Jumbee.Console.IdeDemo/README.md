@@ -34,12 +34,15 @@ dotnet run --project examples/Jumbee.Console.IdeDemo -c Release
 dotnet run --project examples/Jumbee.Console.IdeDemo -c Release -- /path/to/a/csharp/project
 ```
 
-In Docker (the image builds this demo too — see the repo `Dockerfile`):
+In Docker, as a native binary:
 
 ```bash
-docker run --rm -it --entrypoint dotnet jumbee-console \
-    /src/examples/Jumbee.Console.IdeDemo/bin/Release/net10.0/Jumbee.Console.IdeDemo.dll
+docker run --rm -it allisterb/jumbee-console ide
 ```
+
+The image carries no .NET SDK, so the first time you choose **Build**, **Run** or **Clean** the IDE offers to install
+one (`apt-get install dotnet-sdk-10.0`, about 150 MB), running the install in its own terminal pane. See
+[docker.md](../../docker.md#building-the-ide-demos-sample-project).
 
 Headless: `-- --verify` renders the layout offscreen and exits (a CI smoke check); `-- --dump` prints that render.
 

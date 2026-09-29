@@ -22,10 +22,12 @@ Non-ANSI terminals like the Windows legacy terminal are also supported but with 
 Easiest way to try out the examples is to pull the [Docker image](https://hub.docker.com/r/allisterb/jumbee-console):
 
 Pull the latest image and run the examples browser:
-`docker run --rm -it allisterb/jumbee-console:latest` 
+`docker run --rm -it --pull always allisterb/jumbee-console:latest` 
 
 Pull the latest image and run the agent harness example: 
-`docker run --rm -it allisterb/jumbee-console:latest agent-harness` 
+`docker run --rm -it --pull always allisterb/jumbee-console:latest agent-harness` 
+
+The same image runs `ide`, `audio-scope`, `3dsandbox` and `wolf3d` too; see [docker.md](docker.md) for all of them.
 
 ## Add the library to a project
 

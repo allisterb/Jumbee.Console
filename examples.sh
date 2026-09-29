@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Single entry point for the Jumbee.Console demos. The first argument picks which app to run; with no argument the
 # interactive examples browser runs, and an unrecognized one is an error. Any remaining arguments are passed through
-# to the chosen app. This is also the Docker image entry point, so the same selection works there:
+# to the chosen app. The Docker image's entry point, examples-aot.sh, takes the same targets, so the same selection
+# works there:
 #
 #   ./examples.sh                       docker run --rm -it jumbee-console
 #   ./examples.sh agent-harness         docker run --rm -it jumbee-console agent-harness

@@ -11,6 +11,11 @@
          equivalent, so the demo's own files opt back IN with a `#nullable enable` line each: that keeps this
          project's code null-checked without a single edit to engine/. -->
     <Nullable>disable</Nullable>
+    <!-- PublishAot is per-project, not inherited: a plain `dotnet publish` on a project without it yields a
+         framework-dependent apphost stub that crashes silently in an SDK-less image. See Dockerfile.aot. Trims clean
+         (0 IL warnings) since Program stopped reading Assembly.Location, which is "" under NativeAOT. -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,17 +1,31 @@
 @echo off
-rem Build the examples projects, then BOTH Docker images tagged with the shared ProjectAssemblyVersion: the full
-rem playground image (Dockerfile) and the slim NativeAOT image (Dockerfile.aot). Each image is then VERIFIED by
-rem running every app it ships with --verify, so a broken image fails here rather than for whoever pulls it.
-rem `--no-verify` skips that; any other argument is passed through to `docker build`. Mirrors build-docker.sh.
+rem Build the examples projects, then the Docker image (Dockerfile.aot: every app as a NativeAOT binary), tagged with the
+rem shared ProjectAssemblyVersion under BOTH names it is published as -- jumbee-console-aot and jumbee-console -- plus
+rem `latest`. One image, four tags: all of them point at the same multi-arch image.
+rem It is MULTI-ARCH (linux/amd64 + linux/arm64, for Apple Silicon); the arm64 half is cross-compiled (see
+rem Dockerfile.aot). Every app it ships is then VERIFIED with --verify, on both architectures -- arm64 under QEMU
+rem emulation -- so a broken image fails here rather than for whoever pulls it.
+rem `--no-verify` skips verification; `--no-arm64` builds for amd64 only (quicker, for local iteration -- not for
+rem publishing); any other argument is passed through to `docker build`.
+rem Mirrors build-docker.sh.
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-rem --no-verify is consumed here so it can never reach `docker build`, which would reject it.
+rem Our flags are consumed here so they can never reach `docker build`, which would reject them.
 set "VERIFY=1"
+set "ARM64=1"
 set "DOCKERARGS="
+rem Extra `docker run` arguments for the verify passes: empty for the machine's own platform.
+set "RUNPLATFORM="
 :parse
 if "%~1"=="" goto parsed
-if /i "%~1"=="--no-verify" (set "VERIFY=") else (set "DOCKERARGS=!DOCKERARGS! %~1")
+if /i "%~1"=="--no-verify" (
+  set "VERIFY="
+) else if /i "%~1"=="--no-arm64" (
+  set "ARM64="
+) else (
+  set "DOCKERARGS=!DOCKERARGS! %~1"
+)
 shift
 goto parse
 :parsed
@@ -44,25 +58,32 @@ if not defined VERSION (
   exit /b 1
 )
 
-echo Building Docker image jumbee-console:%VERSION% (also tagged latest)...
-docker build !DOCKERARGS! -t jumbee-console:%VERSION% -t jumbee-console:latest .
+set "PLATFORMS=linux/amd64"
+if defined ARM64 set "PLATFORMS=linux/amd64,linux/arm64"
+echo Building Docker image jumbee-console-aot:%VERSION% = jumbee-console:%VERSION% for %PLATFORMS% (both also tagged latest)...
+docker build !DOCKERARGS! --platform %PLATFORMS% -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest -t jumbee-console:%VERSION% -t jumbee-console:latest .
 if errorlevel 1 exit /b 1
-call :verify jumbee-console:%VERSION% browser agent-harness ide audio-scope 3dsandbox
+rem wolf3d is deliberately absent from the --verify list: .dockerignore excludes the id Software assets from the build
+rem context (they are not redistributable), so the image never carries game data and `wolf3d --verify` inside it
+rem cannot pass. :wolf3d_starts checks what can be checked without it.
+call :verify jumbee-console-aot:%VERSION% browser agent-harness ide audio-scope 3dsandbox
 if errorlevel 1 exit /b 1
-rem wolf3d is deliberately absent above: .dockerignore excludes the id Software assets from the build context (they
-rem are not redistributable), so the images never carry game data and `wolf3d --verify` inside one cannot pass.
-if defined VERIFY echo   (wolf3d not verified: .dockerignore keeps the game data out of the image.)
-
-rem Also build the slim NativeAOT image (examples browser, agent harness and AudioScope as native binaries; see
-rem Dockerfile.aot). The IDE demo is not in the AOT image.
-echo Building NativeAOT Docker image jumbee-console-aot:%VERSION% (also tagged latest)...
-docker build !DOCKERARGS! -f Dockerfile.aot -t jumbee-console-aot:%VERSION% -t jumbee-console-aot:latest .
-if errorlevel 1 exit /b 1
-rem Four apps, not five: the IDE demo is not AOT-eligible and is not in the slim image (see examples-aot.sh).
-call :verify jumbee-console-aot:%VERSION% browser agent-harness audio-scope 3dsandbox
+call :wolf3d_starts jumbee-console-aot:%VERSION%
 if errorlevel 1 exit /b 1
 
-echo Done: jumbee-console:%VERSION% and jumbee-console-aot:%VERSION% (both also tagged latest).
+rem The arm64 half, run under QEMU: slower, but it executes the real arm64 binaries, which is the point.
+if not defined ARM64 goto done
+if not defined VERIFY goto done
+echo Verifying the arm64 build (under QEMU emulation)...
+set "RUNPLATFORM=--platform linux/arm64"
+call :verify jumbee-console-aot:%VERSION% browser agent-harness ide audio-scope 3dsandbox
+if errorlevel 1 exit /b 1
+call :wolf3d_starts jumbee-console-aot:%VERSION%
+if errorlevel 1 exit /b 1
+set "RUNPLATFORM="
+
+:done
+echo Done: jumbee-console-aot:%VERSION% and jumbee-console:%VERSION%, one image (%PLATFORMS%), both also tagged latest.
 exit /b 0
 
 rem Runs every app an image ships with --verify. Each prints one PASS/FAIL line and exits, so this is the whole
@@ -77,10 +98,23 @@ echo Verifying %IMAGE%...
 shift
 :verify_loop
 if "%~1"=="" exit /b 0
-docker run --rm %IMAGE% %~1 --verify
+docker run --rm %RUNPLATFORM% %IMAGE% %~1 --verify
 if errorlevel 1 (
   echo FAIL  %IMAGE%: '%~1 --verify' did not pass. 1>&2
   exit /b 1
 )
 shift
 goto verify_loop
+
+rem The most wolf3d can be checked without game data: that it STARTS -- runs, looks for its data and reports it missing
+rem -- rather than, say, being an apphost stub that exits silently in an image with no runtime. Only a binary that
+rem actually ran can print that message.
+:wolf3d_starts
+if not defined VERIFY exit /b 0
+docker run --rm %RUNPLATFORM% %~1 wolf3d 2>&1 | findstr /C:"No Wolfenstein 3D game data" >nul
+if errorlevel 1 (
+  echo FAIL  %~1: 'wolf3d' did not start and report its missing game data. 1>&2
+  exit /b 1
+)
+echo PASS  wolf3d starts and reports its missing game data ^(not verified further: no data in the image^).
+exit /b 0

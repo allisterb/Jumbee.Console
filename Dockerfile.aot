@@ -3,19 +3,23 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Jumbee.Console — SLIM, NATIVE-AOT image.
 #
-# Unlike the full playground image (./Dockerfile), this ships only the four
-# AOT-eligible demos — the examples browser, the agent-harness demo, the AudioScope
-# demo and the 3D sandbox — each compiled to a self-contained native binary with
-# NativeAOT.
-# No .NET runtime and no SDK in the final image. The IDE demo is excluded on
-# purpose: it is not AOT-eligible (its terminal emulator and file-browser paths do
-# not survive trimming), so keep using ./Dockerfile for that one.
+# THE published image — pushed as both allisterb/jumbee-console-aot and
+# allisterb/jumbee-console. Every demo app, each compiled to a self-contained native
+# binary with NativeAOT: the examples browser, the agent-harness demo, the IDE demo,
+# the AudioScope demo, the 3D sandbox and the Wolf3D walkthrough. No .NET runtime and
+# no SDK in the final image; the IDE demo's Build menu offers to apt-install the SDK
+# when it is used. (It replaced an older JIT-based image in 0.2.1, whose Dockerfile was
+# removed.)
 #
-#     docker build -f Dockerfile.aot -t jumbee-console-aot .
+#     docker build -f Dockerfile.aot -t jumbee-console-aot .                                    # this machine's arch
+#     docker build --platform linux/amd64,linux/arm64 -f Dockerfile.aot -t jumbee-console-aot .  # multi-arch
 #     docker run --rm -it jumbee-console-aot                 # examples browser (default)
 #     docker run --rm -it jumbee-console-aot agent-harness   # agent harness demo
+#     docker run --rm -it jumbee-console-aot ide             # IDE demo (Build menu offers to install the SDK)
 #     docker run --rm -it jumbee-console-aot audio-scope     # AudioScope demo (bundled sample track)
 #     docker run --rm -it jumbee-console-aot 3dsandbox       # 3D physics sandbox (3dsandbox view = model viewer)
+#     docker run --rm -it -v /path/to/WL1:/app/wolf3d/GameData jumbee-console-aot wolf3d
+#                                                            # Wolf3D walkthrough (bring your own game data)
 #
 # The first `docker run` argument picks the app (see examples-aot.sh). Quit with
 # Ctrl+Q; it restores your terminal on exit.
@@ -28,7 +32,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build + NativeAOT-publish the AOT-eligible demos ────────────────
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# MULTI-ARCH: this stage always runs on the BUILD machine's own platform and CROSS-COMPILES to the target. Building
+# `--platform linux/arm64` any other way would run the SDK and the NativeAOT compiler under QEMU emulation, which is
+# many times slower and has a history of hangs. Only the small runtime stage below runs as the target platform.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILDARCH
+ARG TARGETARCH
 
 # NativeAOT compiles and links a native binary, which needs the clang toolchain and
 # zlib headers (not present in the SDK image by default).
@@ -36,26 +45,66 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends clang zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# The arm64 cross toolchain, only when building arm64 on an amd64 machine: the aarch64 binutils and GCC runtime that
+# clang links against, and arm64 zlib. The SDK image is Ubuntu, which serves arm64 packages from a SEPARATE mirror
+# (ports.ubuntu.com), so the existing sources are pinned to amd64 and a ports source is added for arm64 -- without
+# that, `apt-get update` fails asking the main mirror for arm64 indexes it does not carry. The release codename comes
+# from os-release rather than being written down, so a newer base image does not quietly point at the wrong suite.
+RUN if [ "$TARGETARCH" = "$BUILDARCH" ]; then exit 0; fi \
+    && if [ "$BUILDARCH" != amd64 ] || [ "$TARGETARCH" != arm64 ]; then \
+         echo "Cross-compiling $BUILDARCH -> $TARGETARCH is not set up here; only amd64 -> arm64 is." >&2; exit 1; \
+       fi \
+    && . /etc/os-release \
+    && sed -i '/^Signed-By:/i Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources \
+    && printf 'Types: deb\nURIs: http://ports.ubuntu.com/ubuntu-ports/\nSuites: %s %s-updates %s-security\nComponents: main universe\nArchitectures: arm64\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
+         "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" > /etc/apt/sources.list.d/ubuntu-ports.sources \
+    && dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends llvm binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu zlib1g-dev:arm64 \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1
+
+# One publish command for every app, so the architecture handling lives in one place: the runtime identifier follows
+# the target, and a cross build strips symbols with the TARGET's objcopy (the host's cannot read an arm64 binary).
+# PublishAot/InvariantGlobalization are passed explicitly rather than relying on each csproj -- PublishAot is
+# per-project, and a project without it publishes a framework-dependent apphost stub that dies silently in this
+# runtime-less image.
+RUN cat > /usr/local/bin/aot-publish <<'EOF'
+#!/bin/sh
+# aot-publish <project> <output directory>
+set -e
+case "$TARGETARCH" in
+  amd64) rid=linux-x64 ;;
+  arm64) rid=linux-arm64 ;;
+  *) echo "aot-publish: unsupported TARGETARCH '$TARGETARCH'" >&2; exit 1 ;;
+esac
+cross=""
+if [ "$TARGETARCH" != "$BUILDARCH" ]; then cross="-p:ObjCopyName=aarch64-linux-gnu-objcopy"; fi
+echo "aot-publish: $1 for $rid${cross:+ (cross-compiled from $BUILDARCH)}"
+exec dotnet publish "$1" -c Release -r "$rid" -p:PublishAot=true -p:InvariantGlobalization=true $cross -o "$2"
+EOF
+RUN chmod +x /usr/local/bin/aot-publish
 
 WORKDIR /src
 COPY . .
 
-# Produce trimmed, self-contained NATIVE-AOT binaries (no ICU needed). PublishAot/InvariantGlobalization are passed
-# explicitly here rather than relying on the csproj (the examples project sets them, but the agent-harness project
-# does not — without the flags it would publish a framework-dependent apphost that needs a runtime the slim image
-# lacks). Restores every project reference (ext/*, src/*) and NuGet package (AdocNet, Mermaider, …) from nuget.org.
-# The agent-harness references Jumbee.Console.Snapshot (ImageSharp) only for a headless smoke check; the trimmer
-# drops it from the native binary.
-RUN dotnet publish examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj \
-        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/examples
-RUN dotnet publish examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj \
-        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/agent
-RUN dotnet publish examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj \
-        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/audioscope
-RUN dotnet publish examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj \
-        -c Release -r linux-x64 -p:PublishAot=true -p:InvariantGlobalization=true -o /app/sandbox
+# Trimmed, self-contained NATIVE-AOT binaries (no ICU needed). Restores every project reference (ext/*, src/*) and
+# NuGet package (AdocNet, Mermaider, …) from nuget.org. The agent-harness references Jumbee.Console.Snapshot
+# (ImageSharp) only for a headless smoke check; the trimmer drops it from the native binary. The one native library a
+# package brings -- Box3D, in the 3D sandbox -- ships linux-arm64 as well as linux-x64.
+RUN aot-publish examples/Jumbee.Console.Examples/Jumbee.Console.Examples.csproj /app/examples
+RUN aot-publish examples/Jumbee.Console.AgentHarnessDemo/Jumbee.Console.AgentHarnessDemo.csproj /app/agent
+# The IDE publishes its sample project (SampleProject/) next to the binary as content; at run time it copies that to a
+# writable temp folder and opens it, with its terminal pane rooted there.
+RUN aot-publish examples/Jumbee.Console.IdeDemo/Jumbee.Console.IdeDemo.csproj /app/ide
+RUN aot-publish examples/Jumbee.Console.AudioScopeDemo/Jumbee.Console.AudioScopeDemo.csproj /app/audioscope
+RUN aot-publish examples/Jumbee.Console.3DSandboxDemo/Jumbee.Console.3DSandboxDemo.csproj /app/sandbox
+# The game data is NOT in the build context (.dockerignore keeps the id Software files out), so this publishes the
+# engine and an empty GameData/ holding only its README: the folder a user mounts their own .WL1/.WL6 files over. The
+# demo defaults to GameData beside its binary, so the mount point is /app/wolf3d/GameData.
+RUN aot-publish examples/Jumbee.Console.Wolf3DDemo/Jumbee.Console.Wolf3DDemo.csproj /app/wolf3d
 
 # Stage the AudioScope demo's default input (the bundled sample track) into the layout the runtime stage copies from.
 # media/ is NOT tracked in git (see docker.md), so this is deliberately soft: a checkout without it still produces a
@@ -81,13 +130,13 @@ RUN mkdir -p /app/media \
 # Soft again -- models/ is untracked, so a fresh clone builds a working image where the sandbox shows its generated
 # torus knot instead. The README.txt keeps the directory non-empty so stage 2's COPY succeeds either way.
 #
-# The WHOLE folder, recursively, as ./Dockerfile does -- not a list of extensions. This used to copy *.obj and *.txt,
+# The WHOLE folder, recursively -- not a list of extensions. This used to copy *.obj and *.txt,
 # and quietly went stale as the sandbox grew: every .stl and .ply model was missing from this image, and so was every
 # .mtl and texture map, which made textured models render untextured. A list has to be kept in step with
 # ModelLoader.Extensions and every file a model can reference; the folder does not. Recursive because an .mtl may
 # name its map in a subfolder.
 RUN mkdir -p /app/models \
-    && echo "3D sandbox models, loaded by the 3dsandbox demo and its obj viewer." > /app/models/README.txt \
+    && echo "3D sandbox models, loaded by the 3dsandbox demo and its model viewer." > /app/models/README.txt \
     && if [ -d examples/Jumbee.Console.3DSandboxDemo/models ]; then \
          cp -r examples/Jumbee.Console.3DSandboxDemo/models/. /app/models/; \
          echo "3D sandbox: $(ls /app/models/*.obj /app/models/*.stl /app/models/*.ply 2>/dev/null | wc -l) model(s)," \
@@ -100,10 +149,20 @@ RUN mkdir -p /app/models \
 # ── Stage 2: minimal runtime image (no SDK, no .NET runtime — just OS deps) ───
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 
-# Patch base OS packages to trim CVEs (same rationale as the full image), and add the ALSA runtime so
-# `audio-scope live` (device capture) works on a Linux host — see the live-capture section in docker.md for the
-# `--device /dev/snd` invocation. The package-name and unversioned-symlink details are explained in ./Dockerfile;
-# both bases need the same treatment. `libasound2-plugins` is deliberately left out (ffmpeg/librsvg bloat).
+# Patch the base OS packages to the latest available at build time, trimming CVEs. Rebuild with `docker build --pull`
+# to also refresh the base image itself and re-fetch fresh patches (a plain rebuild reuses this cached layer).
+#
+# libasound2 is the ALSA runtime the AudioScope demo needs for `audio-scope live` (device capture) on a Linux host —
+# see the live-capture section in docker.md for the `--device /dev/snd` invocation. Two non-obvious details:
+#   * the package is `libasound2t64` on Ubuntu noble / Debian trixie (the 64-bit time_t transition) and `libasound2`
+#     on older Debian, so try both rather than pinning the wrong one;
+#   * NAudio.Alsa's P/Invoke is `DllImport("libasound")`, and .NET's probe wants an UNVERSIONED `libasound.so`. The
+#     runtime package ships only `libasound.so.2`; the bare symlink normally lives in `libasound2-dev`. Rather than
+#     pull the dev package (headers we never compile against), resolve the real path from ldconfig — which keeps this
+#     arch-agnostic, so it holds for the arm64 image too — and link it ourselves.
+# NOT installed: `libasound2-plugins`. It provides the ALSA `pulse` plugin (needed only to route through a host
+# PulseAudio/PipeWire socket) but drags in ffmpeg and librsvg — a large, CVE-heavy addition for an optional path.
+# docker.md documents the one-line opt-in.
 RUN apt-get update \
     && apt-get -y upgrade \
     && (apt-get install -y --no-install-recommends libasound2t64 \
@@ -119,17 +178,21 @@ ENV LANG=C.UTF-8 \
 WORKDIR /app
 COPY --from=build /app/examples/ ./examples/
 COPY --from=build /app/agent/ ./agent/
+COPY --from=build /app/ide/ ./ide/
 COPY --from=build /app/audioscope/ ./audioscope/
 COPY --from=build /app/sandbox/ ./sandbox/
+COPY --from=build /app/wolf3d/ ./wolf3d/
 # The AudioScope demo resolves its default --path relative to the working directory, which examples-aot.sh pins to
 # /app — so the track has to land at /app/media, not next to the binary.
 COPY --from=build /app/media/ ./media/
 # Likewise the sandbox's models: it looks for `models` in the working directory, which is /app.
 COPY --from=build /app/models/ ./models/
 COPY examples-aot.sh ./
-# Jumbee.Console's own licence and the notices for everything this image redistributes -- see the same lines in
-# ./Dockerfile for why they must ship inside the image. NativeAOT compiles the library and the demos' packages INTO
-# the binaries, so they are no less present here for being invisible.
+# Jumbee.Console's own licence, and the notices for everything this image redistributes: vendored source, embedded
+# data, and the demos' NuGet packages. Some of those licences (the IJG's, Apache 2.0's) attach their terms to the
+# distribution itself -- as MIT does to "all copies" -- so both have to ship inside the image, not only sit in the
+# repository it was built from. NativeAOT compiles the library and the packages INTO the binaries, so they are no less
+# present here for being invisible.
 COPY LICENSE ./
 COPY THIRD-PARTY-NOTICES.TXT ./
 

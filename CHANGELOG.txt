@@ -34,7 +34,7 @@ CHANGED
     every cell it believes unchanged is displayed one row off and never rewritten, smearing stale content
     across the whole screen. Nothing here needs wrapping - every discontiguous cell is positioned with an
     explicit CUP and no run crosses a row boundary.
-
+    
 FIXED
 
   * Input was dead on a legacy Windows console. Such a console refuses VT mode on both handles; rendering
@@ -77,6 +77,7 @@ FIXED
     surfaced as an error; it surfaced as one throw per clipped point, per frame - a waveform just touching the
     top of its box pays that on every sample that touches it. Negative coordinates are now rejected before the
     division, as the deeper overshoots always were.
+  * Updated ConsolePlot and Spectre.Console dependencies which contained a vulnerable package.
 
 EXAMPLES
 
@@ -107,7 +108,8 @@ EXAMPLES
     renders as noise worse than the shading it replaces, so it falls back to the material's flat colour. Maps
     are reduced and quantised once at load, so a texture costs nothing per frame beyond its sampling. Damaged
     image files fail the load with the file named rather than drawing wrongly: the PNG decoder is guarded
-    against a truncation that would otherwise hang it, and JPEG decoding treats every warning as an error.
+    against a truncation that would otherwise hang it, and JPEG decoding treats every warning as an error. A new slider allpws you
+    to set the number of Texel color levels.
 
   * The AudioScope demo gained --play, which plays the file through the default output device and scopes the
     samples on their way there, so the picture and the sound are the same audio at the same moment. File input
@@ -122,6 +124,27 @@ EXAMPLES
   * THIRD-PARTY-NOTICES.TXT lists the demos' NuGet dependencies as well as the vendored code, and both Docker
     images ship it alongside LICENSE. The images carry every model file the 3D sandbox can read, with their
     materials and texture maps.
+
+  * One Docker image now, and every app in it is a NativeAOT binary. allisterb/jumbee-console IS the NativeAOT
+    image - published under that name and as allisterb/jumbee-console-aot, one image under two names - so every
+    documented docker run command keeps working, IDE demo included. It gained the IDE demo and the Wolf3D
+    walkthrough, which were never AOT-compiled before (both trim with no warnings; the IDE's terminal pane was
+    proven under AOT in a Linux container). There is no .NET runtime in it, so it is about 490 MB against the
+    old JIT image's 680 MB, and every app starts at once. Mount Wolf3D's game data at /app/wolf3d/GameData, or
+    anywhere and pass the path. The old JIT image's Dockerfile has been removed.
+
+  * The image is multi-arch: linux/amd64 and linux/arm64, so Apple Silicon Macs run native arm64 binaries
+    instead of emulating amd64. The arm64 build is cross-compiled rather than built under emulation, and
+    build-docker verifies it by running it under QEMU.
+
+  * The IDE demo's Build, Run and Clean check for a .NET SDK first, and where there is none - the Docker image
+    carries no .NET at all - offer to install one, running apt-get install dotnet-sdk-10.0 in the IDE's own
+    terminal pane. They used to type a dotnet command into the pane that could only fail: the published image
+    had already dropped the SDK, so the Build menu had been broken there.
+
+  * Wolf3D crashed under NativeAOT when started without a data folder: it located its GameData folder through
+    Assembly.Location, which is empty under NativeAOT, and threw before drawing anything. It uses
+    AppContext.BaseDirectory now, and trims with no warnings.
 
   * build.cmd and examples.cmd take a target (browser, agent-harness, ide, audio-scope, 3dsandbox, wolf3d,
     core, examples, all), and --verify runs each demo's headless smoke check - 47 example screens plus five

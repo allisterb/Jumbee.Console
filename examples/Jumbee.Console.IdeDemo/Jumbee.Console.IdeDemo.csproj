@@ -7,11 +7,18 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Jumbee.Console.IdeDemo</AssemblyName>
     <RootNamespace>Jumbee.Console.IdeDemo</RootNamespace>
+    <!-- PublishAot is per-project, not inherited: a plain `dotnet publish` on a project without it yields a
+         framework-dependent apphost stub that crashes silently in an SDK-less image. See Dockerfile.aot. Trims clean
+         (0 IL warnings), and its terminal pane was proven under AOT in a Linux container: a real shell, and a build
+         run from the Build menu. -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <!-- The bundled sample project is DATA, not part of this app's compilation: exclude its sources from the compile
        glob and ship the whole folder as content copied next to the output, so the running IDE can open it and the
-       user can `dotnet build`/`dotnet run` it (the SDK is present locally and in the Docker image). -->
+       user can `dotnet build`/`dotnet run` it. That needs a .NET SDK, which the Docker image does not carry: the Build
+       menu offers to install one when none is found. -->
   <ItemGroup>
     <Compile Remove="SampleProject\**\*.cs" />
     <Content Include="SampleProject\**\*" CopyToOutputDirectory="PreserveNewest" />

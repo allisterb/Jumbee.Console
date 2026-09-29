@@ -1,11 +1,14 @@
 namespace Jumbee.Console.IdeDemo;
 
+using System.Diagnostics;
+
 using Jumbee.Console;
 
 /// <summary>
 /// A minimal VS Code–style IDE composed from Jumbee.Console controls: a file explorer (<see cref="Tree"/>), a tabbed
 /// C# editor (<see cref="MultiTabCodeEditor"/>), and an embedded <see cref="TerminalEmulator"/> launched in the
 /// project directory so <c>dotnet build</c>/<c>dotnet run</c> resolve there. C#-file focused; not a catalog example.
+/// The Build menu needs a .NET SDK; where there is none (the Docker image), it offers to install one.
 /// </summary>
 internal sealed class IdeApp
 {
@@ -90,8 +93,8 @@ internal sealed class IdeApp
             new MenuItem("Exit", UI.Stop) { Shortcut = "Ctrl+Q" })
         .Add("Build",
             new MenuItem("Build", Build) { Shortcut = "Ctrl+B" },
-            new MenuItem("Run", () => RunInTerminal("dotnet run")),
-            new MenuItem("Clean", () => RunInTerminal("dotnet clean")))
+            new MenuItem("Run", () => RunDotnet("run")),
+            new MenuItem("Clean", () => RunDotnet("clean")))
         .Add("View",
             new MenuItem("Focus Explorer", FocusExplorer) { Shortcut = "Ctrl+E" },
             new MenuItem("Focus Editor", FocusEditor) { Shortcut = "Ctrl+L" },
@@ -231,7 +234,76 @@ internal sealed class IdeApp
 
     // ── Terminal / build ────────────────────────────────────────────────────────────────────────────────────────
 
-    private void Build() => RunInTerminal("dotnet build");
+    private void Build() => RunDotnet("build");
+
+    // Build, Run and Clean all need a .NET SDK, which the demo's Docker image deliberately leaves out: the image is
+    // native binaries with no .NET at all, and the SDK would more than double it for one menu. So check first --
+    // every time, since the user may have just installed it from the terminal pane -- and when there is none, offer
+    // to install it rather than typing a command into the pane that can only fail.
+    private void RunDotnet(string verb)
+    {
+        if (SdkInstalled())
+        {
+            RunInTerminal($"dotnet {verb}");
+            return;
+        }
+
+        var why = $"'dotnet {verb}' needs the .NET SDK, which is not installed here.";
+        if (InstallCommand() is { } install)
+            Dialog.Confirm("No .NET SDK",
+                $"{why} Install it now? This runs, in the terminal below:\n\n{install}\n\n" +
+                "It is about 150 MB. Choose Build again when it finishes.",
+                yes => { if (yes) RunInTerminal(install); });
+        else
+            Dialog.Message("No .NET SDK", $"{why} Install it from https://dotnet.microsoft.com/download, then try again.");
+    }
+
+    // Whether any SDK is installed: `dotnet --list-sdks` prints one line per SDK, and nothing at all where only the
+    // runtime is present. No dotnet on the PATH at all throws, which is the same answer. Both streams are captured so
+    // nothing reaches the IDE's own screen. Synchronous on the UI thread: it takes a fraction of a second, once per
+    // click.
+    private static bool SdkInstalled()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            });
+            if (process is null) return false;
+            var errors = process.StandardError.ReadToEndAsync();
+            var sdks = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            _ = errors.Result;
+            return process.ExitCode == 0 && sdks.Trim().Length > 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // The install command to offer, or null where we cannot be sure one works. Only Ubuntu: its own archive carries
+    // dotnet-sdk-10.0 (checked on 24.04, amd64 and arm64), which the sample project needs; other apt distributions may
+    // not, and a suggested command that fails is worse than a link. The demo's Docker image runs as root, so sudo is
+    // added only for anyone else.
+    private static string? InstallCommand()
+    {
+        if (!OperatingSystem.IsLinux()) return null;
+        try
+        {
+            if (!File.ReadAllLines("/etc/os-release").Any(l => l is "ID=ubuntu" or "ID=\"ubuntu\"")) return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        var sudo = Environment.UserName == "root" ? "" : "sudo ";
+        return $"{sudo}apt-get update && {sudo}apt-get install -y dotnet-sdk-10.0";
+    }
 
     private void RunInTerminal(string command)
     {

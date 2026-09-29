@@ -6,7 +6,6 @@ using Wolfenshine.Resources;
 
 using Jumbee.Console;
 using Jumbee.Console.Wolf3DDemo;
-using System.Reflection;
 
 // --- Jumbee.Console Wolfenstein 3D walkthrough -------------------------------------------------------------------
 // A static scene from the original 1992 game, rendered in the terminal: real maps, real wall textures, real
@@ -20,7 +19,9 @@ using System.Reflection;
 //
 // Game data is not distributed with this demo -- see README.md.
 
-var dataDirectory = args.FirstOrDefault(a => !a.StartsWith('-')) ?? Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "GameData");
+// AppContext.BaseDirectory, not the entry assembly's Location: under NativeAOT (and single-file) Location is "", and
+// the default path threw ArgumentNullException before anything was drawn.
+var dataDirectory = args.FirstOrDefault(a => !a.StartsWith('-')) ?? Path.Combine(AppContext.BaseDirectory, "GameData");
 var fps = 30;
 if (args.FirstOrDefault(a => a.StartsWith("--fps=")) is { } f && int.TryParse(f[6..], out var parsed))
     fps = Math.Clamp(parsed, 5, 60);
