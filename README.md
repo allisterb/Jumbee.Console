@@ -29,31 +29,12 @@ Jumbee.Console is a .NET library for advanced TUIs that focuses on performance a
 
 ## Running the examples from Docker
 You can run the example apps from the [Docker image](https://hub.docker.com/r/allisterb/jumbee-console) without needing .NET 10 or anything installed.
-Every app in it is compiled to a native binary with NativeAOT, so there is no .NET runtime in the image at all, and
-it is built for both `amd64` and `arm64`, so it runs natively on Apple Silicon Macs too.
+The image is built for both `amd64` and `arm64`, so it runs natively on Apple Silicon Macs too.
 
 The examples browser:
 
 ```sh
 docker run --rm -it --pull always allisterb/jumbee-console:latest
-```
-
-The agent harness example:
-
-```sh
-docker run --rm -it --pull always allisterb/jumbee-console:latest agent-harness
-```
-
-The IDE example (its Build menu offers to install the .NET SDK in the container the first time you use it):
-
-```sh
-docker run --rm -it --pull always allisterb/jumbee-console:latest ide
-```
-
-The audio scope example:
-
-```sh
-docker run --rm -it --pull always allisterb/jumbee-console:latest audio-scope
 ```
 
 The 3D physics sandbox (add `view` for its model viewer):
@@ -67,6 +48,18 @@ them (the free shareware `.WL1` files will do):
 
 ```sh
 docker run --rm -it --pull always -v /path/to/WL1:/app/wolf3d/GameData allisterb/jumbee-console:latest wolf3d
+```
+
+The audio scope example:
+
+```sh
+docker run --rm -it --pull always allisterb/jumbee-console:latest audio-scope
+```
+
+The agent harness example:
+
+```sh
+docker run --rm -it --pull always allisterb/jumbee-console:latest agent-harness
 ```
 
 See [docker.md](docker.md) for the rest.
