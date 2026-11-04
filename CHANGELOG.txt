@@ -1,3 +1,16 @@
+0.2.1.1 (Jumbee.Console.Snapshot only)
+---------------------------------------
+No code changes; the other two packages stay at 0.2.1.
+
+  * The package README now records a known issue: Jumbee.Console.Snapshot depends on SixLabors.ImageSharp
+    3.1.8 (through SixLabors.ImageSharp.Drawing 2.1.6), which has four high-severity advisories published in
+    October 2026 (GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w, GHSA-v76p-62qx-wwq2) and three
+    moderate ones (GHSA-gwg2-r3hj-4w44, GHSA-rxmq-m78w-7wmc, GHSA-wmxv-xphr-5c9g), so a restore reports NU1903
+    and NU1902 warnings. The vulnerable code is ImageSharp's image decoders (TIFF, BigTIFF, GIF, ICC
+    profiles), its TIFF encoders and its histogram equalization, none of which Snapshot uses - it never reads
+    an image, only creates one and writes it as a PNG. The fixed ImageSharp releases (3.2.0+) require a Six
+    Labors licence key to build, so the update is planned for a later release.
+
 0.2.1
 -----
 ADDED

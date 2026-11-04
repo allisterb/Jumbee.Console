@@ -370,6 +370,11 @@ var afterSearch = ConsoleSnapshot.ToTextAfter(list, 80, 24, [UI.HotKeys.Char('/'
 
 Two things to know when asserting: text snapshots are **glyphs only** — colour and decoration aren't captured, so check colour with `SavePng`/`ToImage` (or render a visible marker and assert on that); and `ToTextAfter` sends the keys to the single control you pass, so to prove an effect that spans panes, target the control that actually changes.
 
+> **Known issue.** Restoring a project that references `Jumbee.Console.Snapshot` reports security warnings (NU1903,
+> NU1902) for SixLabors.ImageSharp 3.1.8, which it uses to draw PNG snapshots. The advisories are in ImageSharp code
+> Snapshot never calls (image decoders, TIFF encoders, histogram equalization), and the update is planned for a later
+> release; see the [package README](package/README.Snapshot.md) for details.
+
 ### Testing a modal dialog
 
 A modal doesn't live in your layout — it attaches to an [`Overlay`](docs/api/Jumbee.Console.Overlay.md). At runtime

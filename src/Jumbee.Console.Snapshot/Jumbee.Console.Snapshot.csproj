@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
-    <NoWarn>NU1902</NoWarn>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyVersion>$(ProjectAssemblyVersion)</AssemblyVersion>
     <FileVersion>$(ProjectAssemblyVersion)</FileVersion>
@@ -16,6 +15,10 @@
        core Jumbee.Console package plus its own NuGet dependencies (SixLabors ImageSharp/Fonts). -->
   <PropertyGroup Label="Packaging">
     <IsPackable>true</IsPackable>
+    <!-- For republishing THIS package alone (e.g. 0.2.1.1, a README-only fix): pack with -p:SnapshotPackageVersion=x.
+         Not with -p:PackageVersion=x, because a global property also reaches the referenced Jumbee.Console project,
+         so the package would depend on a Jumbee.Console x that does not exist. Only this project reads this one. -->
+    <PackageVersion Condition="'$(SnapshotPackageVersion)' != ''">$(SnapshotPackageVersion)</PackageVersion>
     <PackageReadmeFile>README.Snapshot.md</PackageReadmeFile>
     <Description>Headless snapshot testing for Jumbee.Console TUIs: render controls to text or PNG without a real terminal, for unit tests and visual verification.</Description>
   </PropertyGroup>
