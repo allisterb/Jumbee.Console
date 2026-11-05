@@ -18,7 +18,7 @@ using Jumbee.Console.SandboxDemo;
 /// <remarks>
 /// <para>
 /// Headless: a stub <see cref="IConsole"/> that discards cells and an <see cref="IInputSource"/> that never yields,
-/// so the loop runs for real without touching the terminal. Frames are counted through <c>SceneView.Drew</c>,
+/// so the loop runs for real without touching the terminal. Frames are counted through <c>MeshView.Drew</c>,
 /// which is the honest signal — it fires from the view's own feed, so it says the shell is <em>alive</em> rather
 /// than that a method returned.
 /// </para>

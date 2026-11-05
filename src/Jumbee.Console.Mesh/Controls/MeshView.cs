@@ -1,35 +1,57 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Diagnostics;
 using System.Numerics;
 
-using ConsoleGUI.Input;
 using ConsoleGUI.Space;
 
-using Jumbee.Console.Mesh;
-
 /// <summary>
-/// The viewport: pulls the newest physics snapshot and hands it to whichever <see cref="ISceneRenderer"/> is
-/// active, and owns the camera, the selection and the sandbox interactions.
+/// A 3D viewport: draws an <see cref="ISceneSource"/> through whichever <see cref="ISceneRenderer"/> is active, and
+/// owns the orbit camera, the render keys and — over a <see cref="ModelScene"/> — the model keys.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A composite rather than a plain control because the renderer brings its own surface — a <see cref="Canvas"/> for
-/// wireframe, a cell-writing control for solid — and swapping renderers is swapping that child.
+/// <c>new MeshView(ModelLoader.Load("bunny.obj"))</c> is a complete viewer: three renderers, a turntable, a framed
+/// camera. Over any other source it is the drawing half of a scene, and a host adds behaviour through
+/// <see cref="OnSceneKey"/>, <see cref="OnBodyPress"/> and <see cref="OnSceneTick"/>.
 /// </para>
 /// <para>
-/// Everything here runs on the UI thread and reads only the published snapshot, so no interaction ever touches a
-/// live Box3D handle. Changes go the other way, as commands posted to <see cref="PhysicsRunner.Post"/>.
+/// A composite rather than a plain control because each renderer brings its own surface — a <see cref="Canvas"/> for
+/// the wireframe, a cell-writing control for the solid ones — and swapping renderers is swapping that child.
+/// </para>
+/// <para>
+/// <b>Rasterises off the UI thread.</b> A dense model costs tens of milliseconds a frame; spent on the UI thread, that
+/// freezes menus and camera drag for exactly as long. A frame is captured on the UI thread, drawn on a background
+/// job and published back, and requests coalesce, so a slow model costs frame <em>rate</em>, never responsiveness.
 /// </para>
 /// </remarks>
-public sealed class SceneView : CompositeControl
+public class MeshView : CompositeControl
 {
     #region Constructors
-    /// <summary>Creates the viewport over <paramref name="runner"/>, starting with <paramref name="renderer"/>.</summary>
-    public SceneView(ISceneSource source, ISceneRenderer renderer, int fps = 60)
+    /// <summary>A complete viewer for <paramref name="mesh"/>: shaded, wireframe and solid renderers, a turntable,
+    /// and a camera framed on the model.</summary>
+    public MeshView(TriangleMesh mesh) : this(new ModelScene(Single(mesh)), new ShadedRenderer())
     {
-        this.source = source;
-        this.runner = source as PhysicsRunner;
+        AddRenderer(new WireframeRenderer());
+        AddRenderer(new SolidRenderer());
+    }
+
+    /// <summary>Creates a viewer over <paramref name="model"/>, drawn with <paramref name="renderer"/>. Enables the
+    /// model keys and the turntable, and frames the camera on the model whenever it changes.</summary>
+    public MeshView(ModelScene model, ISceneRenderer renderer, int fps = 60) : this((ISceneSource)model, renderer, fps)
+    {
+        Model = model;
+        // Framed on the subject, and re-framed only when the SUBJECT changes (another mesh, or the same one stood
+        // up another way): a transform tweak leaves the camera where the user put it.
+        model.MeshChanged += FrameModel;
+        FrameModel();
+    }
+
+    /// <summary>Creates a viewport over <paramref name="source"/>, starting with <paramref name="renderer"/> and
+    /// redrawing <paramref name="fps"/> times a second.</summary>
+    public MeshView(ISceneSource source, ISceneRenderer renderer, int fps = 60)
+    {
+        Source = source;
         this.renderer = renderer;
         renderers.Add(renderer);
         SetContent(new Boundary(renderer.Surface));
@@ -39,17 +61,14 @@ public sealed class SceneView : CompositeControl
         // synchronization -- it hands a fully-described FrameRequest to the render job and returns.
         feed = Feed(Tick, Math.Max(1, 1000 / Math.Max(1, fps)));
 
-        // THE RASTERISER RUNS HERE, not on the UI thread. A dense model costs tens of milliseconds a frame, and
-        // spending that on the UI thread freezes menus, the sidebar and camera drag for exactly as long -- the app
-        // stops responding rather than merely animating slowly. The job produces off-thread and publishes on the UI
-        // thread; requests coalesce, so falling behind costs frame RATE and never responsiveness. See
-        // Control.Job and ISceneRenderer.DrawsOffThread.
+        // THE RASTERISER RUNS HERE, not on the UI thread -- see the remarks. See also Control.Job and
+        // ISceneRenderer.DrawsOffThread.
         renderJob = Job(
             produce: () =>
             {
                 var request = Volatile.Read(ref pending);
                 if (request is null) return (Rendered?)null;
-                var active = renderer;
+                var active = this.renderer;
                 return new Rendered(active, active.Draw(request), request.Frame);
             },
             apply: result =>
@@ -57,51 +76,83 @@ public sealed class SceneView : CompositeControl
                 if (disposed || result is not { } r) return;
                 // Drop a frame produced by a renderer that has since been swapped out: publishing it would put the
                 // old renderer's pixels into the surface the new one is now showing.
-                if (!ReferenceEquals(r.Renderer, renderer)) return;
+                if (!ReferenceEquals(r.Renderer, this.renderer)) return;
                 r.Renderer.Publish(r.Frame);
                 Published(r.Scene);
             });
     }
     #endregion
 
+    #region Events
+    /// <summary>Raised on the UI thread after each frame is drawn, carrying the scene that was drawn.</summary>
+    public event Action<SceneFrame>? Drew;
+
+    /// <summary>Raised when the active renderer or any of its settings changes — however it was changed.</summary>
+    /// <remarks>An inspector's widgets and the <c>v</c>/<c>e</c>/<c>w</c> keys both go through here, which is what
+    /// keeps a widget and a key agreeing without either knowing about the other.</remarks>
+    public event Action? SettingsChanged;
+
+    /// <summary>Raised when the selection moves, carrying the new body id (or <see langword="null"/>).</summary>
+    public event Action<int?>? SelectionChanged;
+    #endregion
+
     #region Properties
     /// <summary>The orbit rig. UI-thread owned.</summary>
     public OrbitCamera Camera { get; } = new();
 
-    /// <summary>What the spawn and launch keys produce. The sandbox shell hands in settings over the app's
-    /// <see cref="MeshLibrary"/>; a view over a static scene never spawns, so its default library stays empty.</summary>
-    public SpawnSettings Spawn { get; init; } = new(new MeshLibrary());
+    /// <summary>Where the frames come from.</summary>
+    public ISceneSource Source { get; }
+
+    /// <summary>The model scene, when this view was created over one; otherwise <see langword="null"/>.</summary>
+    public ModelScene? Model { get; }
+
+    /// <summary>Whether the model keys (<c>[ ]</c> to step, <c>x X y Y z Z</c> to scale, <c>, . ; '</c> to shear,
+    /// <c>0</c>, <c>a</c>, <c>p</c>) are live. Only meaningful over a <see cref="Model"/>. Defaults to on.</summary>
+    public bool ModelKeys { get; set; } = true;
 
     /// <summary>The renderer currently drawing the scene.</summary>
     public ISceneRenderer Renderer => renderer;
 
+    /// <summary>The renderers <c>v</c> cycles, in order.</summary>
+    public IReadOnlyList<ISceneRenderer> Renderers => renderers;
+
+    /// <summary>The active renderer's screen window, as of its last frame — what a host needs to turn a cell into a
+    /// world ray.</summary>
+    public Viewport Viewport => renderer.Viewport;
+
+    /// <summary>The active renderer's projection, as of its last frame.</summary>
+    public Projection Projection => renderer.Projection;
+
     /// <summary>
-    /// Whether this scene has a selection at all — true for the sandbox, false for the model viewer.
+    /// Whether bodies can be selected — by click, by <c>Tab</c>, or by setting <see cref="Selected"/>. Off by default.
     /// </summary>
     /// <remarks>
-    /// Derived from the source rather than set by the shell, because it is a fact about the scene and not a
-    /// preference: selecting is only meaningful where something can be grabbed, thrown or deleted, and all three go
-    /// through a <see cref="PhysicsRunner"/>. A scene without one has a single subject that is always the subject.
-    /// <para>
-    /// It exists because selecting in the viewer was <b>actively harmful</b>: a selected body is tinted
-    /// <see cref="Palette.Selection"/> (white), which silently overrode the Colour drop-down — and since nothing in
-    /// the viewer's key map clears a selection, the model stayed white for the rest of the session and through every
-    /// model after it.
-    /// </para>
+    /// Turn it on where a selection means something: a scene whose bodies can be grabbed, thrown or deleted. A
+    /// single-model viewer must leave it off. A selected body is tinted <see cref="Palette.Selection"/> (white), which
+    /// silently overrides the model's colour, and a viewer with nothing in its key map that clears a selection kept
+    /// its model white for the rest of the session — and a press on the model selected it instead of orbiting.
+    /// Turning it off clears the selection.
     /// </remarks>
-    public bool SupportsSelection => runner is not null;
+    public bool AllowSelection
+    {
+        get => allowSelection;
+        set
+        {
+            allowSelection = value;
+            if (!value) Selected = null;
+        }
+    }
 
     /// <summary>The selected body's id, or <see langword="null"/>. Selection is by id, not index, so it survives
-    /// bodies being deleted around it. Always <see langword="null"/> when <see cref="SupportsSelection"/> is not
-    /// set.</summary>
+    /// bodies being removed around it. Always <see langword="null"/> unless <see cref="AllowSelection"/> is set.</summary>
     public int? Selected
     {
         get => selected;
         set
         {
-            // Refused here rather than at each caller: the mouse, Tab and the select-the-newest-spawn tick all
-            // write this, and a guard on one of the three is a bug waiting for the next route to be added.
-            if (!SupportsSelection) value = null;
+            // Refused here rather than at each caller: the mouse, Tab and a host all write this, and a guard on one
+            // of them is a bug waiting for the next route to be added.
+            if (!allowSelection) value = null;
             var changed = selected != value;
             selected = value;
             renderer.Selected = value;
@@ -109,23 +160,63 @@ public sealed class SceneView : CompositeControl
         }
     }
 
-    /// <summary>The frame last drawn — what the footer and inspector should report, so their numbers match the
+    /// <summary>The frame last drawn — what a footer or an inspector should report, so their numbers match the
     /// picture rather than running a tick ahead of it.</summary>
     public SceneFrame? Drawn { get; private set; }
 
-    /// <summary>Raised on the UI thread after each frame is drawn, carrying the scene that was drawn.</summary>
-    public event Action<SceneFrame>? Drew;
+    /// <summary>The active silhouette style, or <see langword="null"/> when the current renderer has none.</summary>
+    public SilhouetteStyle? Edges => renderer is ShadedRenderer s ? s.Edges : null;
 
-    /// <summary>Raised when the active renderer or its edge style changes — however it was changed.</summary>
-    /// <remarks>The sidebar's drop-downs and the <c>v</c>/<c>e</c> keys both go through here, which is what keeps
-    /// the widget and the key agreeing without either knowing about the other.</remarks>
-    public event Action? RendererChanged;
+    /// <summary>Whether the shaded renderer wraps its lighting, or <see langword="null"/> under a renderer that has
+    /// no lighting to wrap.</summary>
+    public bool? WrapLighting => renderer is ShadedRenderer s ? s.WrapLighting : null;
 
-    /// <summary>Raised when the selection moves, carrying the new body id (or <see langword="null"/>).</summary>
-    public event Action<int?>? SelectionChanged;
+    /// <summary>The active renderer's shade-ramp resolution, or <see langword="null"/> under the wireframe, which has
+    /// no ramp to quantise.</summary>
+    /// <remarks>Unlike the shaded-only dials, BOTH solid renderers have one, and each keeps its own value across a
+    /// renderer swap — the two defaults differ on purpose (see <see cref="SolidRenderer.DefaultShadeLevels"/>).</remarks>
+    public float? ShadeLevels => renderer is MeshRenderer m ? m.ShadeLevels : null;
 
-    /// <summary>The renderers <c>v</c> cycles, in order — what the sidebar's drop-down lists.</summary>
-    public IReadOnlyList<ISceneRenderer> Renderers => renderers;
+    /// <summary>The shaded renderer's texture-colour ramp, or <see langword="null"/> under any other renderer, which
+    /// does not texture.</summary>
+    public float? TextureLevels => renderer is ShadedRenderer s ? s.TextureLevels : null;
+
+    /// <summary>How the shaded renderer draws a model's materials, or <see langword="null"/> under any other renderer,
+    /// which does not texture.</summary>
+    public TextureMode? Texture => renderer is ShadedRenderer s ? s.Texture : null;
+
+    /// <summary>How hard the shaded renderer darkens creases and contacts, or <see langword="null"/> under a
+    /// renderer that has no such pass.</summary>
+    public float? OcclusionStrength => renderer is ShadedRenderer s ? s.OcclusionStrength : null;
+
+    /// <summary>Whether the active renderer samples twice per column, or <see langword="null"/> under the wireframe,
+    /// which draws no half-block cells to composite.</summary>
+    /// <remarks>Like <see cref="ShadeLevels"/>, BOTH solid renderers have this and each keeps its own setting across
+    /// a renderer swap.</remarks>
+    public bool? QuadrantSampling => renderer is MeshRenderer m ? m.QuadrantSampling : null;
+
+    // The wireframe's mesh-sampling dials read and write the WIREFRAME wherever it is in the renderer list, not "the
+    // active renderer if it happens to be the wireframe" -- which is how the shaded renderer's options work, and it
+    // would be wrong here. Those return null under another renderer so a widget can show a neutral state; but with no
+    // disabled state on Switch/Select/Slider, a null-to-false fallback does not read as "not applicable", it reads as
+    // OFF. The settings genuinely do persist on the wireframe across a swap, so the dials are always live and always
+    // truthful, and MeshDialsApply is what a menu (which does have a disabled state) uses to grey them.
+
+    /// <summary>Whether the mesh dials affect what is on screen right now — false when a renderer that draws every
+    /// triangle is active. They remain settable either way.</summary>
+    public bool MeshDialsApply => renderer is WireframeRenderer;
+
+    /// <summary>Whether the wireframe spreads a mesh's budget over the screen rather than over its triangle list,
+    /// or <see langword="null"/> when there is no wireframe renderer at all.</summary>
+    public bool? Stratify => Wireframe?.Stratify;
+
+    /// <summary>How many triangles of a mesh the wireframe examines per frame, or <see langword="null"/> when there
+    /// is no wireframe renderer at all.</summary>
+    public int? ScanCap => Wireframe?.ScanCap;
+
+    /// <summary>Screen area per drawn mesh triangle — lower draws more — or <see langword="null"/> when there is no
+    /// wireframe renderer at all.</summary>
+    public float? MeshDensity => Wireframe?.SubPixelsPerTriangle;
     #endregion
 
     #region Methods
@@ -137,10 +228,10 @@ public sealed class SceneView : CompositeControl
         next.Selected = selected;
         SetContent(new Boundary(next.Surface));
         Invalidate();
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
 
-    /// <summary>Adds a renderer to the set <c>v</c> cycles through. The first one added is the one in use.</summary>
+    /// <summary>Adds a renderer to the set <c>v</c> cycles through. The first one is the one in use.</summary>
     public void AddRenderer(ISceneRenderer next)
     {
         if (!renderers.Contains(next)) renderers.Add(next);
@@ -172,53 +263,32 @@ public sealed class SceneView : CompositeControl
     {
         if (renderer is not ShadedRenderer shaded || shaded.Edges == style) return;
         shaded.Edges = style;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>The active silhouette style, or <see langword="null"/> when the current renderer has none.</summary>
-    public SilhouetteStyle? Edges => renderer is ShadedRenderer s ? s.Edges : null;
-
-    /// <summary>Whether the shaded renderer wraps its lighting, or <see langword="null"/> under a renderer that has
-    /// no lighting to wrap.</summary>
-    public bool? WrapLighting => renderer is ShadedRenderer s ? s.WrapLighting : null;
 
     /// <summary>Turns half-Lambert lighting on or off. A no-op under a renderer that does not light per pixel.</summary>
     public void SetWrapLighting(bool wrap)
     {
         if (renderer is not ShadedRenderer shaded || shaded.WrapLighting == wrap) return;
         shaded.WrapLighting = wrap;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>The active renderer's shade-ramp resolution, or <see langword="null"/> under the wireframe, which has
-    /// no ramp to quantise.</summary>
-    /// <remarks>Unlike the shaded-only dials above, BOTH solid renderers have one, and each keeps its own value
-    /// across a renderer swap — the two defaults differ on purpose (see <see cref="SolidRenderer.DefaultShadeLevels"/>).</remarks>
-    public float? ShadeLevels => renderer is MeshRenderer m ? m.ShadeLevels : null;
 
     /// <summary>Sets the active renderer's shade-ramp resolution. A no-op under the wireframe.</summary>
     public void SetShadeLevels(float levels)
     {
         if (renderer is not MeshRenderer mesh || mesh.ShadeLevels == levels) return;
         mesh.ShadeLevels = levels;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>The shaded renderer's texture-colour ramp, or <see langword="null"/> under any other renderer, which
-    /// does not texture.</summary>
-    public float? TextureLevels => renderer is ShadedRenderer s ? s.TextureLevels : null;
 
     /// <summary>Sets the shaded renderer's texture-colour ramp. A no-op under any other renderer.</summary>
     public void SetTextureLevels(float levels)
     {
         if (renderer is not ShadedRenderer shaded || shaded.TextureLevels == levels) return;
         shaded.TextureLevels = levels;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>How the shaded renderer draws a model's materials, or <see langword="null"/> under any other renderer,
-    /// which does not texture.</summary>
-    public TextureMode? Texture => renderer is ShadedRenderer s ? s.Texture : null;
 
     /// <summary>Sets how the shaded renderer draws materials: <see cref="TextureMode.None"/>,
     /// <see cref="TextureMode.Auto"/> or <see cref="TextureMode.Image"/>. A no-op under any other renderer.</summary>
@@ -226,12 +296,8 @@ public sealed class SceneView : CompositeControl
     {
         if (renderer is not ShadedRenderer shaded || shaded.Texture == mode) return;
         shaded.Texture = mode;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>How hard the shaded renderer darkens creases and contacts, or <see langword="null"/> under a
-    /// renderer that has no such pass.</summary>
-    public float? OcclusionStrength => renderer is ShadedRenderer s ? s.OcclusionStrength : null;
 
     /// <summary>Sets the contact-darkening strength; 0 disables the pass. See
     /// <see cref="ShadedRenderer.OcclusionStrength"/>.</summary>
@@ -239,15 +305,8 @@ public sealed class SceneView : CompositeControl
     {
         if (renderer is not ShadedRenderer shaded || shaded.OcclusionStrength == strength) return;
         shaded.OcclusionStrength = strength;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-
-    /// <summary>Whether the active renderer samples twice per column, or <see langword="null"/> under the wireframe,
-    /// which draws no half-block cells to composite.</summary>
-    /// <remarks>Like <see cref="ShadeLevels"/> and unlike the shaded-only dials, BOTH solid renderers have this and
-    /// each keeps its own setting across a renderer swap.</remarks>
-    public bool? QuadrantSampling => renderer is MeshRenderer m ? m.QuadrantSampling : null;
 
     /// <summary>Turns quadrant sampling on or off. A no-op under the wireframe. See
     /// <see cref="MeshRenderer.QuadrantSampling"/>.</summary>
@@ -255,139 +314,124 @@ public sealed class SceneView : CompositeControl
     {
         if (renderer is not MeshRenderer mesh || mesh.QuadrantSampling == on) return;
         mesh.QuadrantSampling = on;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    // The wireframe's mesh-sampling dials.
-    //
-    // These read and write the WIREFRAME wherever it is in the renderer list, not "the active renderer if it
-    // happens to be the wireframe" -- which is how the shaded renderer's edge and lighting options work, and it
-    // would be wrong here. Those return null under another renderer so a widget can show a neutral state; but with
-    // no disabled state on Switch/Select/Slider, a null-to-false fallback does not read as "not applicable", it
-    // reads as OFF. Showing a switch off while the setting is on is a lie, and the settings genuinely do persist on
-    // the wireframe instance across a renderer swap. So the dials are always live and always truthful, and
-    // MeshDialsApply is what a MENU (which does have a disabled state) uses to grey them.
-
-    private WireframeRenderer? Wireframe
-    {
-        get
-        {
-            if (renderer is WireframeRenderer active) return active;
-            foreach (var candidate in renderers)
-            {
-                if (candidate is WireframeRenderer w) return w;
-            }
-
-            return null;
-        }
-    }
-
-    /// <summary>Whether the mesh dials affect what is on screen right now — false when a renderer that draws every
-    /// triangle is active. They remain settable either way.</summary>
-    public bool MeshDialsApply => renderer is WireframeRenderer;
-
-    /// <summary>Whether the wireframe spreads a mesh's budget over the screen rather than over its triangle list,
-    /// or <see langword="null"/> when there is no wireframe renderer at all.</summary>
-    public bool? Stratify => Wireframe?.Stratify;
 
     /// <summary>Turns screen stratification on or off. See <see cref="WireframeRenderer.Stratify"/> for the trade.</summary>
     public void SetStratify(bool on)
     {
         if (Wireframe is not { } w || w.Stratify == on) return;
         w.Stratify = on;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>How many triangles of a mesh the wireframe examines per frame, or <see langword="null"/> when there
-    /// is no wireframe renderer at all.</summary>
-    public int? ScanCap => Wireframe?.ScanCap;
 
     /// <summary>Sets the per-frame triangle scan ceiling. See <see cref="WireframeRenderer.ScanCap"/>.</summary>
     public void SetScanCap(int cap)
     {
         if (Wireframe is not { } w || w.ScanCap == cap) return;
         w.ScanCap = cap;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
-
-    /// <summary>Screen area per drawn mesh triangle — lower draws more — or <see langword="null"/> when there is no
-    /// wireframe renderer at all.</summary>
-    public float? MeshDensity => Wireframe?.SubPixelsPerTriangle;
 
     /// <summary>Sets the mesh draw density. See <see cref="WireframeRenderer.SubPixelsPerTriangle"/>.</summary>
     public void SetMeshDensity(float subPixelsPerTriangle)
     {
         if (Wireframe is not { } w || w.SubPixelsPerTriangle == subPixelsPerTriangle) return;
         w.SubPixelsPerTriangle = subPixelsPerTriangle;
-        RendererChanged?.Invoke();
+        SettingsChanged?.Invoke();
     }
 
-    /// <summary>Set when this view is showing a <see cref="ModelScene"/> rather than a simulation: enables the
-    /// model-picking and transform keys, and turns the turntable.</summary>
-    public ModelScene? Model { get; init; }
+    /// <summary>The body under <paramref name="position"/>, in the view's own cells, or <see langword="null"/>.
+    /// Picks against the frame last drawn, so it agrees with the picture.</summary>
+    /// <remarks>Works whether or not <see cref="AllowSelection"/> is set; selecting the result is the caller's call.</remarks>
+    public int? Pick(Position position) => renderer.Pick(position.X, position.Y, Drawn ?? Source.Frame, Camera);
 
-    /// <summary>Drops a body in above the camera target, so it lands in view wherever the camera is pointing.</summary>
-    public void SpawnAtTarget()
-    {
-        var position = Camera.Target + new Vector3(0, Spawn.DropHeight, 0);
-        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.Mesh);
-        runner?.Post(scene => scene.Add(shape, position, scale, key, default, mesh));
-        selectNewestSpawn = true;
-    }
-
-    /// <summary>Fires a body out of the camera along the view direction — the sandbox's blunt instrument.</summary>
-    /// <remarks>
-    /// The muzzle distance is <b>derived from how big the body is</b>, not a constant. Spawning it a fixed 1 unit in
-    /// front of the eye (which is what inertia does) puts it on the lens: a default sphere projects to 141% of the
-    /// viewport height on its first frame, so what you see is a screen-filling shape collapsing to a dot rather than
-    /// an object being thrown. Solving <c>ndcRadius = focal · r / distance</c> for a target on-screen size instead
-    /// keeps the first frame legible, and keeps it legible after <c>+</c>/<c>-</c> changes the spawn size.
-    /// </remarks>
-    public void Launch()
-    {
-        var view = Camera.GetView();
-        var muzzle = MathF.Max(MinMuzzleDistance, renderer.Projection.Focal * Spawn.BoundingRadius / MuzzleNdcRadius);
-        var origin = view.Eye + (view.Forward * muzzle);
-        var velocity = view.Forward * Spawn.LaunchSpeed;
-        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.Mesh);
-        runner?.Post(scene => scene.Add(shape, origin, scale, key, velocity, mesh));
-        selectNewestSpawn = true;
-    }
-
-    /// <summary>Deletes the selected body, if there is one.</summary>
-    public void DeleteSelected()
-    {
-        if (Selected is not { } id) return;
-        Selected = null;
-        runner?.Post(scene => scene.Remove(id));
-    }
-
-    /// <summary>Removes every dynamic body.</summary>
-    public void ClearScene()
-    {
-        Selected = null;
-        runner?.Post(scene => scene.ClearBodies());
-    }
-
-    /// <summary>Moves the selection to the next body, in spawn order, wrapping.</summary>
+    /// <summary>Moves the selection to the next body, in frame order, wrapping. A no-op unless
+    /// <see cref="AllowSelection"/> is set.</summary>
     public void SelectNext(int direction = 1)
     {
-        var snapshot = Drawn ?? source.Frame;
-        if (snapshot.Count == 0)
+        var frame = Drawn ?? Source.Frame;
+        if (frame.Count == 0)
         {
             Selected = null;
             return;
         }
 
-        var current = Selected is { } id ? snapshot.IndexOf(id) : -1;
-        var next = current < 0 ? 0 : (((current + direction) % snapshot.Count) + snapshot.Count) % snapshot.Count;
-        Selected = snapshot.Ids[next];
+        var current = Selected is { } id ? frame.IndexOf(id) : -1;
+        var next = current < 0 ? 0 : (((current + direction) % frame.Count) + frame.Count) % frame.Count;
+        Selected = frame.Ids[next];
+    }
+
+    /// <summary>Aims the camera at the <see cref="Model"/> and sets that as its home, so <c>Home</c> returns to the
+    /// framed shot. Runs on its own whenever the model's subject changes; a no-op with no model.</summary>
+    /// <remarks>
+    /// Framed on the model rather than on the floor: the model STANDS on the ground (see
+    /// <see cref="ModelScene.Elevation"/>), so the camera looks at the height its middle actually sits at — which
+    /// differs per model. The viewport is only real once the tree has laid out, and this first runs before that, so it
+    /// falls back to the aspect of a typical wide terminal and the opening shot is framed rather than arbitrary.
+    /// </remarks>
+    public void FrameModel()
+    {
+        if (Model is not { } model) return;
+        var halfSpan = renderer.Viewport.CellAspect is > 0 and var aspect ? aspect : DefaultCellAspect;
+        Camera.HomeTarget = new Vector3(0, model.Elevation, 0);
+        Camera.HomeDistance = model.FramingDistance(renderer.Projection.Focal, halfSpan);
+        Camera.Reset();
+    }
+
+    /// <summary>Stops the render feed and the render job, and unwires the control. After this the view never draws
+    /// again, whatever is still queued for it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Two steps, because cancelling a feed stops the <em>producer</em> and not the work it has already handed over.
+    /// <see cref="FeedHandle.StopAsync"/> joins the tick in flight; the flag makes any tick already sitting in the
+    /// dispatcher queue a no-op.
+    /// </para>
+    /// <para>
+    /// Both are invisible in an app that disposes on the way out, and exactly visible in one that starts a second UI
+    /// afterwards. The queue is <b>not</b> cleared between a <see cref="UI.Stop"/> and the next <see cref="UI.Start"/>
+    /// — deliberately, since that is how you post work for the next session to pick up — so a feed left running for
+    /// even a few milliseconds after the stop lands its ticks in the <em>next</em> session, where they draw a scene
+    /// nobody is looking at.
+    /// </para>
+    /// </remarks>
+    public override void Dispose()
+    {
+        disposed = true;
+        // Both are joined, and the render job matters more than the feed: a rasterisation in flight is holding a
+        // frame and a mesh, and switching scenes disposes this view while the next one is being built. Letting it
+        // finish is cheaper than making every renderer safe to tear down mid-frame.
+        feed.StopAsync().Wait(FeedJoinMs);
+        renderJob.StopAsync().Wait(FeedJoinMs);
+        base.Dispose();
     }
     #endregion
 
     #region Protected methods
     /// <inheritdoc/>
     protected override bool WantsMouse => true;
+
+    /// <summary>A host's own keys, tried <b>before</b> the built-in ones so a host can reclaim a letter. Return
+    /// <see langword="true"/> to mark the key handled.</summary>
+    protected virtual bool OnSceneKey(ConsoleKeyInfo key) => false;
+
+    /// <summary>
+    /// A press landed on body <paramref name="id"/>, which is now <see cref="Selected"/>. Return
+    /// <see langword="true"/> to take the drag that follows (it then arrives at <see cref="OnBodyDrag"/> and
+    /// <see cref="OnBodyRelease"/>); <see langword="false"/>, the default, lets the drag orbit the camera.
+    /// </summary>
+    /// <remarks>Only called when <see cref="AllowSelection"/> is set.</remarks>
+    protected virtual bool OnBodyPress(int id, Position position) => false;
+
+    /// <summary>The pointer moved during a drag that <see cref="OnBodyPress"/> took.</summary>
+    protected virtual void OnBodyDrag(Position position) { }
+
+    /// <summary>The pointer was released at the end of a drag that <see cref="OnBodyPress"/> took.</summary>
+    protected virtual void OnBodyRelease(Position position) { }
+
+    /// <summary>Called on the UI thread each tick with the frame about to be drawn, after a selection that no longer
+    /// resolves has been dropped and before the frame is captured — so a selection made here shows in this frame.</summary>
+    protected virtual void OnSceneTick(SceneFrame frame) { }
 
     // The viewport is a window onto the scene, not a document, so it is not IScrollable: a frame sizes it to the
     // visible area rather than scrolling it.
@@ -412,68 +456,33 @@ public sealed class SceneView : CompositeControl
         if (inputEventArgs.InputEvent is not { } inputEvent) return false;
 
         var key = inputEvent.Key;
-        // Shift is the fine-adjust modifier throughout: a fifth of the step, on every axis.
-        var scale = (key.Modifiers & ConsoleModifiers.Shift) != 0 ? 0.2f : 1f;
-        var handled = true;
-        switch (key.Key)
-        {
-            case ConsoleKey.LeftArrow: Camera.Orbit(-OrbitStep * scale, 0); break;
-            case ConsoleKey.RightArrow: Camera.Orbit(OrbitStep * scale, 0); break;
-            case ConsoleKey.UpArrow: Camera.Orbit(0, -OrbitStep * scale); break;
-            case ConsoleKey.DownArrow: Camera.Orbit(0, OrbitStep * scale); break;
-            case ConsoleKey.PageUp: Camera.Zoom(1f - (ZoomStep * scale)); break;
-            case ConsoleKey.PageDown: Camera.Zoom(1f + (ZoomStep * scale)); break;
-            case ConsoleKey.Home: Camera.Reset(); break;
-            case ConsoleKey.Delete: DeleteSelected(); break;
-            case ConsoleKey.Escape: Selected = null; break;
-            // Explicitly, not via KeyChar: the decoder gives Shift+Tab (CSI Z) a KeyChar of '\0', so a char-based
-            // branch would silently handle Tab and drop Shift+Tab.
-            case ConsoleKey.Tab: SelectNext((key.Modifiers & ConsoleModifiers.Shift) != 0 ? -1 : +1); break;
-            default: handled = HandleChar(key.KeyChar); break;
-        }
-
+        var handled = OnSceneKey(key) || HandleKey(key);
         if (handled) inputEvent.Handled = true;
         return handled;
     }
 
-    // Press on a body grabs it; press on empty space orbits the camera. One button, and which you get is decided by
-    // what is under the pointer -- the same rule as every 3D editor.
+    // Press on a body a host takes (OnBodyPress) hands it the drag; anywhere else the drag orbits the camera. One
+    // button, and which you get is decided by what is under the pointer -- the same rule as every 3D editor.
     /// <inheritdoc/>
     protected override void OnMousePress(Position position)
     {
         lastDrag = position;
         CaptureMouse();
 
-        var snapshot = Drawn ?? source.Frame;
-        // Not merely "the pick is ignored": a scene with nothing to grab must ORBIT here, or a press on the model
-        // is dead — neither selecting nor turning it, which is how this read as "sometimes it rotates and sometimes
-        // it goes white". Which you got depended on whether the pointer landed within the pick radius of the
-        // model's projected CENTRE, so the bunny's ears orbited and its body did not.
-        var hit = SupportsSelection ? renderer.Pick(position.X, position.Y, snapshot, Camera) : null;
-        if (hit is not { } id)
+        // Not merely "the pick is ignored": a scene with nothing to grab must ORBIT here, or a press on the model is
+        // dead -- neither selecting nor turning it. Which you got used to depend on whether the pointer landed within
+        // the pick radius of the model's projected CENTRE, so the bunny's ears orbited and its body did not.
+        if (allowSelection && Pick(position) is { } id)
         {
-            orbiting = true;
-            return;
+            Selected = id;
+            if (OnBodyPress(id, position))
+            {
+                draggingBody = true;
+                return;
+            }
         }
 
-        Selected = id;
-        var index = snapshot.IndexOf(id);
-        if (index < 0) return;
-
-        // Drag in the plane through the body facing the camera, and keep the grab offset, so the body does not
-        // snap its centre to the pointer the moment you touch it.
-        var view = Camera.GetView();
-        grabPlanePoint = snapshot.Positions[index];
-        grabPlaneNormal = view.Forward;
-        grabOffset = renderer.Viewport.TryRay(position.X, position.Y, view, renderer.Projection, out var o, out var d)
-            && Projection.TryPlaneHit(o, d, grabPlanePoint, grabPlaneNormal, out var contact)
-                ? grabPlanePoint - contact
-                : Vector3.Zero;
-
-        grabbed = id;
-        throwSamples.Clear();
-        RecordThrowSample(grabPlanePoint);
-        runner?.Post(scene => scene.BeginGrab(id));
+        orbiting = true;
     }
 
     /// <inheritdoc/>
@@ -481,11 +490,9 @@ public sealed class SceneView : CompositeControl
     {
         ReleaseMouse();
         orbiting = false;
-        if (grabbed is not { } id) return;
-
-        grabbed = null;
-        var velocity = ThrowVelocity();
-        runner?.Post(scene => scene.ReleaseGrab(velocity));
+        if (!draggingBody) return;
+        draggingBody = false;
+        OnBodyRelease(position);
     }
 
     /// <inheritdoc/>
@@ -500,43 +507,7 @@ public sealed class SceneView : CompositeControl
             return;
         }
 
-        if (grabbed is not { } id) return;
-        lastDrag = position;
-
-        var view = Camera.GetView();
-        if (!renderer.Viewport.TryRay(position.X, position.Y, view, renderer.Projection, out var o, out var d)) return;
-        if (!Projection.TryPlaneHit(o, d, grabPlanePoint, grabPlaneNormal, out var contact)) return;
-
-        var target = contact + grabOffset;
-        RecordThrowSample(target);
-        runner?.Post(scene => scene.DragTo(id, target));
-    }
-
-    /// <summary>Stops the render feed and unwires the control. After this the view never draws again, whatever is
-    /// still queued for it.</summary>
-    /// <remarks>
-    /// <para>
-    /// Two steps, because cancelling a feed stops the <em>producer</em> and not the work it has already handed over.
-    /// <see cref="FeedHandle.StopAsync"/> joins the tick in flight; the flag makes any tick already sitting in the
-    /// dispatcher queue a no-op.
-    /// </para>
-    /// <para>
-    /// Both are invisible in an app that disposes on the way out, and exactly visible in one that starts a second UI
-    /// afterwards. The queue is <b>not</b> cleared between a <see cref="UI.Stop"/> and the next <see cref="UI.Start"/>
-    /// — deliberately, since that is how you post work for the next session to pick up (the demo sets its initial
-    /// focus that way) — so a feed left running for even a few milliseconds after the stop lands its ticks in the
-    /// <em>next</em> session, where they draw a scene nobody is looking at.
-    /// </para>
-    /// </remarks>
-    public override void Dispose()
-    {
-        disposed = true;
-        // Both are joined, and the render job matters more than the feed: a rasterisation in flight is holding a
-        // snapshot and a mesh, and switching scenes disposes this view while the next one is being built. Letting
-        // it finish is cheaper than making every renderer safe to tear down mid-frame.
-        feed.StopAsync().Wait(FeedJoinMs);
-        renderJob.StopAsync().Wait(FeedJoinMs);
-        base.Dispose();
+        if (draggingBody) OnBodyDrag(position);
     }
 
     /// <inheritdoc/>
@@ -545,33 +516,94 @@ public sealed class SceneView : CompositeControl
         Camera.Zoom(delta < 0 ? 1f - ZoomStep : 1f + ZoomStep);
 
     /// <inheritdoc/>
-    protected override HelpInfo? GetHelpInfo() => new HelpInfo("3D viewport")
-        .WithKey("Arrows", "Orbit the camera (hold Shift for fine steps; the sidebar's Camera pad does it by mouse)")
-        .WithKey("PgUp/PgDn", "Zoom in / out")
-        .WithKey("Home", "Reset the camera")
-        .WithKey("Drag", "On a body: grab and throw it. On empty space: orbit. Wheel zooms")
-        .WithKey("Click", "Select the body under the pointer")
-        .WithKey("Tab / Esc", "Select the next body / clear the selection")
-        .WithKey("b", "Cycle the spawn shape: box, sphere, mesh")
-        .WithKey("m", "Switch to the next loaded mesh")
-        .WithKey("n", "Drop one in above the camera target")
-        .WithKey("f", "Fire one out of the camera")
-        .WithKey("Del / x", "Delete the selected body")
-        .WithKey("c", "Clear every body")
-        .WithKey("v", "Cycle renderer: wireframe (braille edges), solid (flat-shaded), shaded (point light + edges + AO)")
-        .WithKey("e", "Shaded only: cycle silhouettes — off, ink outline, edge glyphs")
-        .WithKey("w", "Shaded only: half-Lambert lighting — rescues the unlit side, costs contrast on the lit one")
-        .WithKey("u", "Show or hide the sidebar")
-        .WithKey("+ / -", "Grow / shrink what gets spawned")
-        .WithKey("] / [", "Raise / lower the launch speed");
+    protected override HelpInfo? GetHelpInfo()
+    {
+        var help = new HelpInfo("3D viewport")
+            .WithKey("Arrows", "Orbit the camera (hold Shift for fine steps)")
+            .WithKey("PgUp/PgDn", "Zoom in / out")
+            .WithKey("Home", "Reset the camera")
+            .WithKey("Drag", allowSelection
+                ? "On a body: select it. On empty space: orbit. Wheel zooms"
+                : "Orbit the camera. Wheel zooms");
+        if (allowSelection)
+        {
+            help.WithKey("Click", "Select the body under the pointer")
+                .WithKey("Tab / Esc", "Select the next body / clear the selection");
+        }
+
+        help.WithKey("v", "Cycle renderer: wireframe (braille edges), solid (flat-shaded), shaded (point light + edges + AO)")
+            .WithKey("e", "Shaded only: cycle silhouettes — off, ink outline, edge glyphs")
+            .WithKey("w", "Shaded only: half-Lambert lighting — rescues the unlit side, costs contrast on the lit one");
+        if (Model is not null && ModelKeys)
+        {
+            help.WithKey("[ / ]", "Previous / next model")
+                .WithKey("x X  y Y  z Z", "Shrink / stretch along X, Y or Z")
+                .WithKey(", .  ; '", "Shear X / Z by height")
+                .WithKey("0", "Reset the model's scale and shear")
+                .WithKey("a", "Toggle the model's up axis between Y and Z")
+                .WithKey("p", "Pause / resume the turntable");
+        }
+
+        return help;
+    }
     #endregion
 
     #region Private methods
-    // The viewer's own keys, checked first so they can retarget characters the sandbox uses for things that do not
-    // exist here (nothing to delete, no launch speed to set).
+    private WireframeRenderer? Wireframe
+    {
+        get
+        {
+            if (renderer is WireframeRenderer active) return active;
+            foreach (var candidate in renderers)
+            {
+                if (candidate is WireframeRenderer w) return w;
+            }
+
+            return null;
+        }
+    }
+
+    private static MeshLibrary Single(TriangleMesh mesh)
+    {
+        var library = new MeshLibrary();
+        library.Add(mesh, "model");
+        return library;
+    }
+
+    private bool HandleKey(ConsoleKeyInfo key)
+    {
+        // Shift is the fine-adjust modifier throughout: a fifth of the step, on every axis.
+        var scale = (key.Modifiers & ConsoleModifiers.Shift) != 0 ? 0.2f : 1f;
+        switch (key.Key)
+        {
+            case ConsoleKey.LeftArrow: Camera.Orbit(-OrbitStep * scale, 0); return true;
+            case ConsoleKey.RightArrow: Camera.Orbit(OrbitStep * scale, 0); return true;
+            case ConsoleKey.UpArrow: Camera.Orbit(0, -OrbitStep * scale); return true;
+            case ConsoleKey.DownArrow: Camera.Orbit(0, OrbitStep * scale); return true;
+            case ConsoleKey.PageUp: Camera.Zoom(1f - (ZoomStep * scale)); return true;
+            case ConsoleKey.PageDown: Camera.Zoom(1f + (ZoomStep * scale)); return true;
+            case ConsoleKey.Home: Camera.Reset(); return true;
+            // Only with a selection to move: otherwise Tab is focus navigation and Esc is the app's, and taking them
+            // would trap focus in the viewport for nothing.
+            case ConsoleKey.Escape when allowSelection: Selected = null; return true;
+            // Explicitly, not via KeyChar: the decoder gives Shift+Tab (CSI Z) a KeyChar of '\0', so a char-based
+            // branch would silently handle Tab and drop Shift+Tab.
+            case ConsoleKey.Tab when allowSelection: SelectNext((key.Modifiers & ConsoleModifiers.Shift) != 0 ? -1 : +1); return true;
+        }
+
+        if (HandleModelChar(key.KeyChar)) return true;
+        switch (key.KeyChar)
+        {
+            case 'v': NextRenderer(); return true;
+            case 'e': NextEdgeStyle(); return true;
+            case 'w': SetWrapLighting(!(WrapLighting ?? false)); return true;
+            default: return false;
+        }
+    }
+
     private bool HandleModelChar(char c)
     {
-        if (Model is not { } model) return false;
+        if (Model is not { } model || !ModelKeys) return false;
         switch (c)
         {
             case '[': model.Step(-1); return true;
@@ -593,74 +625,6 @@ public sealed class SceneView : CompositeControl
         }
     }
 
-    private bool HandleChar(char c)
-    {
-        if (HandleModelChar(c)) return true;
-        switch (c)
-        {
-            case 'b': Spawn.ToggleShape(); return true;
-            case 'n': SpawnAtTarget(); return true;
-            case 'f': Launch(); return true;
-            case 'x': DeleteSelected(); return true;
-            case 'c': ClearScene(); return true;
-            case 'v': NextRenderer(); return true;
-            case 'e': NextEdgeStyle(); return true;
-            case 'w': SetWrapLighting(!(WrapLighting ?? false)); return true;
-            case 'm': Spawn.NextMesh(); return true;
-            case '+' or '=': Spawn.StepScale(+1); return true;
-            case '-' or '_': Spawn.StepScale(-1); return true;
-            case ']': Spawn.StepLaunchSpeed(+1); return true;
-            case '[': Spawn.StepLaunchSpeed(-1); return true;
-            default: return false;
-        }
-    }
-
-    // Throw velocity is measured from where the grab point actually went, not from the pointer delta.
-    private void RecordThrowSample(Vector3 point)
-    {
-        throwSamples.Enqueue((clock.Elapsed, point));
-        while (throwSamples.Count > ThrowSampleCount) throwSamples.Dequeue();
-    }
-
-    /// <summary>
-    /// The velocity a release hands back to the solver: how far the grab point travelled over a fixed window of real
-    /// time ending at the release.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A window of <em>time</em>, not of pointer events, is the whole point. A terminal reports the pointer in whole
-    /// cells and in bursts, so two adjacent events can be several world units and a couple of milliseconds apart;
-    /// dividing one by the other implies a speed nothing on screen ever had, which is what made a short flick fire
-    /// the body off the edge of the world.
-    /// </para>
-    /// <para>
-    /// Three guards, one per gesture that used to fling. A release <em>after</em> the pointer stopped drops the body,
-    /// because samples arrive only on movement and the last delta would otherwise still be sitting there waiting to
-    /// be believed. A gesture shorter than <see cref="MinThrowSeconds"/> is divided by that floor anyway, so it is
-    /// bounded by how far it went rather than extrapolated from how briefly it took. And the result is capped, both
-    /// because the solver deals badly with a body that crosses the world in one step and because a hand toss is not
-    /// the cannon that <c>f</c> fires.
-    /// </para>
-    /// </remarks>
-    private Vector3 ThrowVelocity()
-    {
-        if (throwSamples.Count < 2) return Vector3.Zero;
-
-        var samples = throwSamples.ToArray();
-        var (t1, p1) = samples[^1];
-        if (clock.Elapsed - t1 > ThrowStaleAfter) return Vector3.Zero;
-
-        // Walk back to the oldest sample still inside the window, but always take at least one step: if the pointer
-        // was reporting more slowly than the window, the honest reading is that slow speed, not no throw at all.
-        var first = samples.Length - 2;
-        while (first > 0 && t1 - samples[first - 1].At <= ThrowWindow) first--;
-        var (t0, p0) = samples[first];
-
-        var velocity = (p1 - p0) / MathF.Max((float)(t1 - t0).TotalSeconds, MinThrowSeconds);
-        var speed = velocity.Length();
-        return speed > MaxThrowSpeed ? velocity * (MaxThrowSpeed / speed) : velocity;
-    }
-
     private void Tick()
     {
         if (disposed) return;
@@ -671,33 +635,23 @@ public sealed class SceneView : CompositeControl
         Model?.Advance((now - lastTick).TotalSeconds);
         lastTick = now;
 
-        var snapshot = source.Frame;
+        var frame = Source.Frame;
 
-        // Selection is by id, so a body deleted by anything other than us (a scene clear, a preset reload) just
-        // stops resolving -- drop it rather than leave a highlight pointing at nothing.
-        if (selected is { } id && snapshot.IndexOf(id) < 0) Selected = null;
+        // Selection is by id, so a body removed by anything other than us (a scene clear, a preset reload) just stops
+        // resolving -- drop it rather than leave a highlight pointing at nothing.
+        if (selected is { } id && frame.IndexOf(id) < 0) Selected = null;
+        OnSceneTick(frame);
 
-        // Select whatever the last spawn produced, once the physics thread has actually created it. Ids only come
-        // back through the snapshot -- the command that made it ran over there -- so this waits for a tick carrying
-        // a higher id than we had. Without it, pressing f gives no feedback beyond a shape appearing.
-        if (selectNewestSpawn && snapshot.Count > 0 && snapshot.Ids[^1] > highestSeenId)
-        {
-            Selected = snapshot.Ids[^1];
-            selectNewestSpawn = false;
-        }
-
-        if (snapshot.Count > 0) highestSeenId = Math.Max(highestSeenId, snapshot.Ids[^1]);
-
-        // Capture everything the rasteriser needs WHILE ON THE UI THREAD: the snapshot (already immutable once
+        // Capture everything the rasteriser needs WHILE ON THE UI THREAD: the frame (already immutable once
         // published), the camera resolved to a value, and the laid-out viewport size. After this line the frame is
         // fully described and nothing it reads can move.
         var active = renderer;
-        var request = new FrameRequest(snapshot, Camera.GetView(), active.Surface.ActualWidth, active.Surface.ActualHeight);
+        var request = new FrameRequest(frame, Camera.GetView(), active.Surface.ActualWidth, active.Surface.ActualHeight);
 
         if (!active.DrawsOffThread)
         {
             active.Publish(active.Draw(request));
-            Published(snapshot);
+            Published(frame);
             return;
         }
 
@@ -709,10 +663,10 @@ public sealed class SceneView : CompositeControl
     }
 
     // Runs on the UI thread, either inline above or from the render job's apply.
-    private void Published(SceneFrame snapshot)
+    private void Published(SceneFrame frame)
     {
-        Drawn = snapshot;
-        Drew?.Invoke(snapshot);
+        Drawn = frame;
+        Drew?.Invoke(frame);
     }
     #endregion
 
@@ -720,28 +674,14 @@ public sealed class SceneView : CompositeControl
     private const float OrbitStep = 0.08f;
     private const float ZoomStep = 0.1f;
     private const float DragPerCell = 0.02f;
-    // The ceiling on a thrown body, in world units per second. A hand toss, deliberately well under the cannon that
-    // f fires (SpawnSettings.MaxSpeed is 80): at 15 a body still crosses the visible scene in about a second.
-    private const float MaxThrowSpeed = 15f;
-    private const float MinThrowSeconds = 0.04f;
-    private const int ThrowSampleCount = 16;
 
-    // Long enough to average out the terminal's burstiness, short enough to measure the flick rather than the drag
-    // that preceded it. Stale is the pause before a release that should drop the body instead of throwing it.
-    private static readonly TimeSpan ThrowWindow = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan ThrowStaleAfter = TimeSpan.FromMilliseconds(160);
-
-    // The on-screen radius a launched body should have on its first frame, in NDC. The viewport's Y half-span is the
-    // cell aspect (~0.6 on a wide terminal), so 0.2 is about a third of the half-height -- clearly an object, not a
-    // wall. See the remarks on Launch for why this is derived rather than a fixed muzzle distance.
-    private const float MuzzleNdcRadius = 0.2f;
-    private const float MinMuzzleDistance = 2f;
+    // The NDC half-span of a viewport on a wide terminal, used only before the first layout. See FrameModel.
+    private const double DefaultCellAspect = 0.6;
 
     // Bound on joining the render feed at Dispose. Generous: a tick is sub-millisecond, and the wait exists to avoid
     // hanging a teardown on a wedged one, not to time a normal frame.
     private const int FeedJoinMs = 500;
 
-    private readonly ISceneSource source;
     private readonly FeedHandle feed;
 
     // The off-thread rasteriser and the frame it should draw next. `pending` is written by the UI thread and read by
@@ -749,25 +689,16 @@ public sealed class SceneView : CompositeControl
     private readonly JobHandle renderJob;
     private FrameRequest? pending;
 
-    // The simulation, when the source IS one. Null for a static scene (the model viewer), where spawning, grabbing
-    // and deleting have nothing to act on and quietly do nothing.
-    private readonly PhysicsRunner? runner;
     private readonly List<ISceneRenderer> renderers = [];
     private readonly Stopwatch clock = Stopwatch.StartNew();
     private TimeSpan lastTick;
-    private readonly Queue<(TimeSpan At, Vector3 Point)> throwSamples = new();
 
     private ISceneRenderer renderer;
+    private bool allowSelection;
     private int? selected;
-    private int nextColorKey = 100;
-    private bool selectNewestSpawn;
-    private int highestSeenId;
     private bool orbiting;
+    private bool draggingBody;
     private volatile bool disposed;
-    private int? grabbed;
-    private Vector3 grabPlanePoint;
-    private Vector3 grabPlaneNormal;
-    private Vector3 grabOffset;
     private Position lastDrag;
     #endregion
 

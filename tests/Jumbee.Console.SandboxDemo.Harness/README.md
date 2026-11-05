@@ -90,7 +90,7 @@ its models with `ObjLoader` directly and so never has materials.
 - **The only mode that runs the UI LOOP.** Everything else renders through `ConsoleSnapshot` with no loop at all, so
   `--switch` is where anything lifecycle-shaped shows up: a second `UI.Start` after a `Stop`, session state that
   outlives the session that made it, a background feed still posting after its control is gone. It counts frames
-  through `SceneView.Drew` rather than asserting a method returned, because the question is whether a shell is
+  through `MeshView.Drew` rather than asserting a method returned, because the question is whether a shell is
   *alive*. Note it runs with `isAnsiTerminal: false` — the ANSI renderer writes to stdout through
   `ConsoleManager.AnsiOutput` and never consults the `IConsole`, so a stub console silences nothing.
 - **The real shell, not a rebuild of it.** `--shell` drives `SandboxShell`, the same assembly `Program.cs` uses —

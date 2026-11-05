@@ -18,7 +18,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
 {
     #region Constructors
     /// <summary>Builds the viewer sidebar over <paramref name="view"/> and the <paramref name="model"/> it shows.</summary>
-    public ModelSidebarPanel(SceneView view, ModelScene model)
+    public ModelSidebarPanel(MeshView view, ModelScene model)
     {
         this.view = view;
         this.model = model;
@@ -69,7 +69,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         // other would be the odd choice.
         camera = new CameraPad(view.Camera, () => UI.SetFocus(view));
 
-        view.RendererChanged += Report;
+        view.SettingsChanged += Report;
 
         // A blank row under every interactive control, as in SidebarPanel and for the same reason; the model's two
         // readout lines stay flush.
@@ -267,7 +267,7 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     private const int LabelColumn = LabelWidth + 1;
     private const float DefaultSpin = 0.35f;
 
-    private readonly SceneView view;
+    private readonly MeshView view;
     private readonly ModelScene model;
 
     private readonly TextLabel name = Line("", HeadingColor);

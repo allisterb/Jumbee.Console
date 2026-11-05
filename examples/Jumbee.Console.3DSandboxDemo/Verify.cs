@@ -64,7 +64,7 @@ internal static class Verify
 
     #region Private methods
     // One shell, every renderer. Each is asked for a frame and then judged on what landed in the buffer.
-    private static void Check(string scene, ILayout root, SceneView view, SceneFrame snapshot,
+    private static void Check(string scene, ILayout root, MeshView view, SceneFrame snapshot,
         List<string> failures, List<string> report)
     {
         var drawn = new List<string>();

@@ -32,9 +32,9 @@ public static class SandboxShell
         });
 
         // The three reach the screen by genuinely different routes (a Canvas versus half-block cells with a private
-        // z-buffer), which is why each brings its own surface and SceneView swaps the child rather than the drawing
+        // z-buffer), which is why each brings its own surface and MeshView swaps the child rather than the drawing
         // code. The two solid ones share their rasteriser through MeshRenderer and differ only in shading.
-        var view = new SceneView(runner, new ShadedRenderer() { WrapLighting = true }) { Spawn = new(library) };
+        var view = new SandboxView(runner, new ShadedRenderer() { WrapLighting = true }, library);
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
 
@@ -81,7 +81,7 @@ public static class SandboxShell
             () => switchTo(ShellType.ModelViewer));
         var root = Compose(menu, footer, sidebar, view);
 
-        // App-level keys are global hotkeys; everything that acts on the SCENE lives in SceneView instead, so it
+        // App-level keys are global hotkeys; everything that acts on the SCENE lives in SandboxView instead, so it
         // only fires while the viewport has focus and travels with the control. Every one of these also has a menu
         // entry — the keys are the fast path, not the only path.
         UI.RegisterHotKey(UI.HotKeys.Char(' '), () => runner.Paused = !runner.Paused);
@@ -91,6 +91,8 @@ public static class SandboxShell
         UI.RegisterHotKey(UI.HotKeys.Char('o'), loadModel);
         UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
+
+        view.OnHelp += SidebarHelp;
 
         return new Sandbox(root, runner, view, sidebar, parameters, menu);
     }
@@ -102,7 +104,9 @@ public static class SandboxShell
                                      Action<ShellType>? onSwitch = null)
     {
         var model = new ModelScene(library, startIndex);
-        var view = new SceneView(model, new ShadedRenderer()) { Model = model };
+        // A MeshView over a ModelScene is a complete viewer: the model keys, the turntable, and a camera framed on
+        // the model and re-framed whenever the model changes.
+        var view = new MeshView(model, new ShadedRenderer());
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
 
@@ -130,22 +134,7 @@ public static class SandboxShell
         UI.RegisterHotKey(UI.HotKeys.Char('o'), openModels);
         UI.RegisterHotKey(UI.HotKeys.Char('q'), UI.Stop);
         UI.RegisterHotKey(UI.HotKeys.Ctrl(ConsoleKey.C), UI.Stop);
-
-        // Framed on the model rather than on the floor. The model STANDS on the ground rather than being centred on
-        // the origin (see ModelScene.Elevation), so the camera looks at the height its middle actually sits at —
-        // which differs per model, since a tall one is lifted further than a flat one.
-        void AimAtModel()
-        {
-            // The viewport is only real once the tree has laid out, and this runs before the first one — fall back
-            // to the aspect of a typical wide terminal so the opening shot is framed rather than arbitrary.
-            var halfSpan = view.Renderer.Viewport.CellAspect is > 0 and var aspect ? aspect : DefaultCellAspect;
-            view.Camera.HomeTarget = new System.Numerics.Vector3(0, model.Elevation, 0);
-            view.Camera.HomeDistance = model.FramingDistance(view.Renderer.Projection.Focal, halfSpan);
-            view.Camera.Reset();
-        }
-
-        model.MeshChanged += AimAtModel;
-        AimAtModel();
+        view.OnHelp += SidebarHelp;
 
         return new Viewer(root, model, view, sidebar, menu);
     }
@@ -162,7 +151,7 @@ public static class SandboxShell
     #region Private methods
     // Disposing a Control cancels its background feeds and unsubscribes it from UI.Paint / UI.ThemeChanged, both of
     // which are STATIC and both of which every Control subscribes to in its constructor. That costs nothing in an app
-    // that builds one tree and exits, and it is the whole game in one that builds a second: without it SceneView's
+    // that builds one tree and exits, and it is the whole game in one that builds a second: without it MeshView's
     // 60 Hz feed keeps rendering a scene nobody is looking at, into the next session's dispatcher, once per switch.
     //
     // Only the pieces the shell records hold are reachable here. The leaves (labels, sliders, sections) stay
@@ -173,13 +162,13 @@ public static class SandboxShell
         foreach (var part in parts) part.Dispose();
     }
 
-    // The NDC half-span of a viewport on a wide terminal, used only before the first layout. See AimAtModel.
-    private const double DefaultCellAspect = 0.6;
+    // The shell's own key, added to the viewport's help: the sidebar is the shell's, so the view cannot know it.
+    private static void SidebarHelp(HelpInfo help) => help.WithKey("u", "Show or hide the sidebar");
 
     // Nested DockPanels, never a Grid at the root: the menu takes its row, the footer its two lines, the sidebar its
     // fixed column, and the viewport fills whatever is left — at every terminal size, with no split positions to
     // recompute.
-    private static ILayout Compose(MenuBar menu, SceneFooter footer, Control sidebar, SceneView view) =>
+    private static ILayout Compose(MenuBar menu, SceneFooter footer, Control sidebar, MeshView view) =>
         new DockPanel(DockedControlPlacement.Top, menu,
             new DockPanel(DockedControlPlacement.Bottom, footer,
                 new DockPanel(DockedControlPlacement.Right, sidebar, view)));
@@ -208,7 +197,7 @@ public static class SandboxShell
     /// <param name="Sidebar">The right-hand panel.</param>
     /// <param name="Parameters">The world settings the sidebar tunes.</param>
     /// <param name="Menu">The application menu.</param>
-    public readonly record struct Sandbox(ILayout Root, PhysicsRunner Runner, SceneView View, SidebarPanel Sidebar,
+    public readonly record struct Sandbox(ILayout Root, PhysicsRunner Runner, SandboxView View, SidebarPanel Sidebar,
                                           SandboxParameters Parameters, MenuBar Menu) : IDisposable
     {
         /// <summary>Stops the physics thread and unwires the controls. Call it once the UI has stopped, and always
@@ -226,7 +215,7 @@ public static class SandboxShell
     /// <param name="View">The viewport, and the control to focus first.</param>
     /// <param name="Sidebar">The right-hand panel.</param>
     /// <param name="Menu">The application menu.</param>
-    public readonly record struct Viewer(ILayout Root, ModelScene Model, SceneView View, ModelSidebarPanel Sidebar,
+    public readonly record struct Viewer(ILayout Root, ModelScene Model, MeshView View, ModelSidebarPanel Sidebar,
                                          MenuBar Menu) : IDisposable
     {
         /// <summary>Unwires the controls. Call it once the UI has stopped — see <see cref="Teardown"/>.</summary>

@@ -18,7 +18,7 @@ public sealed record FrameRequest(SceneFrame Frame, CameraView View, int Cells, 
 /// <summary>
 /// Draws a <see cref="SceneFrame"/> from a camera. The two implementations reach the screen by different routes — the
 /// wireframe through a <see cref="Canvas"/> and its braille sub-cells, the solid one by writing half-block cells
-/// itself — so each brings its own <see cref="Surface"/> and <c>SceneView</c> swaps between them.
+/// itself — so each brings its own <see cref="Surface"/> and <see cref="MeshView"/> swaps between them.
 /// </summary>
 public interface ISceneRenderer
 {
@@ -47,7 +47,7 @@ public interface ISceneRenderer
     /// Opt-in rather than assumed, because it is a claim about the renderer's <em>surface</em>: only one whose
     /// buffers are handed over by value (as <see cref="HalfBlockSurface"/>'s frames are) can be filled while the UI
     /// thread paints. A renderer drawing straight into a shared control returns <see langword="false"/> and
-    /// <c>SceneView</c> draws it inline — correct, and no worse than it was.
+    /// <see cref="MeshView"/> draws it inline — correct, and no worse than it was.
     /// </remarks>
     bool DrawsOffThread => false;
 

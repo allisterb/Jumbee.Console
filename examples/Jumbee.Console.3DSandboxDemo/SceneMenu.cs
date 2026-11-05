@@ -16,7 +16,7 @@ public static class SceneMenu
 {
     #region Methods
     /// <summary>The sandbox menu: scene, render, spawn, camera and help.</summary>
-    public static MenuBar ForSandbox(SceneView view, PhysicsRunner runner, SandboxParameters parameters,
+    public static MenuBar ForSandbox(SandboxView view, PhysicsRunner runner, SandboxParameters parameters,
                                      Action reset, Action toggleSidebar, Action loadMesh, Action? switchScene = null)
     {
         var bar = new MenuBar();
@@ -95,7 +95,7 @@ public static class SceneMenu
     }
 
     /// <summary>The model viewer's menu: no simulation to pause, and the transforms the sandbox does not have.</summary>
-    public static MenuBar ForViewer(SceneView view, ModelScene model, Action toggleSidebar, Action openModels,
+    public static MenuBar ForViewer(MeshView view, ModelScene model, Action toggleSidebar, Action openModels,
                                     Action? switchScene = null)
     {
         var bar = new MenuBar();
@@ -163,14 +163,14 @@ public static class SceneMenu
     #region Private methods
     // Greyed out under the wireframe rather than under the non-shaded renderers: both solid renderers composite
     // through the half-block surface, so both have it — the same gating the Shades dial uses.
-    private static MenuItem QuadrantItem(SceneView view) =>
+    private static MenuItem QuadrantItem(MeshView view) =>
         new MenuItem("Quadrant glyphs", () => view.SetQuadrantSampling(!(view.QuadrantSampling ?? false)))
         {
             Checked = view.QuadrantSampling ?? false,
             Enabled = view.QuadrantSampling is not null,
         };
 
-    private static IEnumerable<MenuItem> EdgeItems(SceneView view) =>
+    private static IEnumerable<MenuItem> EdgeItems(MeshView view) =>
         new[] { SilhouetteStyle.None, SilhouetteStyle.Line, SilhouetteStyle.Glyph }.Select(style =>
             new MenuItem("Edges: " + style.ToString().ToLowerInvariant(), () => view.SetEdgeStyle(style))
             {
@@ -181,7 +181,7 @@ public static class SceneMenu
     // The wireframe's mesh-sampling dials, greyed out under the renderers that draw every triangle -- same rule as
     // the edge styles. The density slider has no menu form: a continuous value does not belong in a menu, and the
     // sidebar owns it.
-    private static IEnumerable<MenuItem> MeshDetailItems(SceneView view) =>
+    private static IEnumerable<MenuItem> MeshDetailItems(MeshView view) =>
     [
         new MenuItem("Mesh: even over screen", () => view.SetStratify(!(view.Stratify ?? false)))
         {

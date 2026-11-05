@@ -152,7 +152,7 @@ internal static class ShellChecks
             Check("dragging the model orbits the camera", dragged && Math.Abs(v.View.Camera.Theta - theta) > 1e-3,
                 $"theta {theta:F3} -> {v.View.Camera.Theta:F3}");
             Check("and never selects it — there is nothing here to select",
-                v.View.Selected is null && !v.View.SupportsSelection,
+                v.View.Selected is null && !v.View.AllowSelection,
                 $"selected={v.View.Selected?.ToString() ?? "none"}");
 
             v.Model.SetScaleAxis(1, 2.4f);

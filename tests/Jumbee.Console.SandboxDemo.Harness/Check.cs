@@ -50,6 +50,9 @@ if (args.Contains("--switch")) return Render3d.SwitchChecks.Run(W, H);
 // Also a UI-loop mode: the loader reports to a running UI, and stands down without one.
 if (args.Contains("--loading")) return Render3d.LoadChecks.Run(W, H, args);
 
+// --- Every key in each viewport's F1 help does what its line says ----------------------------------------------
+if (args.Contains("--keys")) return Render3d.KeyChecks.Run(W, H, args);
+
 // --- Edge smoothing: the same frame at several strengths, so the softening can be judged rather than asserted ----
 if (args.Contains("--aa"))
 {
@@ -67,7 +70,7 @@ if (args.Contains("--aa"))
     });
 
     var aaShaded = new ShadedRenderer { WrapLighting = true };
-    var aaView = new SceneView(aaRunner, aaShaded);
+    var aaView = new MeshView(aaRunner, aaShaded);
     aaView.Camera.Distance = 11f;   // close enough that the sphere's outline spans most of the frame's height
     _ = new ControlFrame(aaView, borderStyle: BorderStyle.Rounded);
     var aaRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(aaView), aaView);
@@ -201,7 +204,7 @@ if (args.Contains("--texture"))
         s.AddMeshBody(library[texMeshId], new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
     });
 
-    var texView = new SceneView(texRunner, new ShadedRenderer());
+    var texView = new MeshView(texRunner, new ShadedRenderer());
     texView.Camera.Distance = 9f;
     _ = new ControlFrame(texView, borderStyle: BorderStyle.Rounded);
     var texRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(texView), texView);
@@ -407,7 +410,7 @@ var runner = new PhysicsRunner(scene =>
 });
 
 ISceneRenderer renderer = new SolidRenderer();   // Pick is a default interface method: reachable only through the interface
-var view = new SceneView(runner, renderer) { Spawn = new(library) };
+var view = new SandboxView(runner, renderer, library);
 var footer = new SceneFooter(view);
 view.Drew += s => footer.Scene = s;
 _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
@@ -637,7 +640,7 @@ runner.Post(s =>
 
 var final = Settle(120);
 view.Selected = final.Ids[3];
-footer.Scene = final;   // in the app this arrives via SceneView.Drew
+footer.Scene = final;   // in the app this arrives via MeshView.Drew
 renderer.Draw(final, view.Camera);
 var text = ConsoleSnapshot.ToText(root, W, H);
 var ink = text.Count(c => c is not (' ' or '\n' or '\r'));
@@ -1471,7 +1474,7 @@ Check("non-uniform scale stretches one axis only", stretched.Y > upright.Y * 1.5
 // And it renders: a viewer over the same renderers must fill the viewport with the model.
 scene3.ResetTransform();
 var viewerRenderer = new ShadedRenderer();
-var viewer = new SceneView(scene3, viewerRenderer) { Model = scene3 };
+var viewer = new MeshView(scene3, viewerRenderer);
 var viewerFooter = new SceneFooter(viewer);
 _ = new ControlFrame(viewer, borderStyle: BorderStyle.Rounded);
 var viewerRoot = new DockPanel(DockedControlPlacement.Bottom, viewerFooter, viewer);
@@ -1748,11 +1751,10 @@ if (args.Contains("--png"))
         var outDirV = args.FirstOrDefault(a => a.Contains("out="))?.Split(Char.Parse("="))[1] ?? ".";
         var vopt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
         var vm = new ModelScene(library);
-        var vv = new SceneView(vm, new ShadedRenderer()) { Model = vm };
+        var vv = new MeshView(vm, new ShadedRenderer());
         var vf = new SceneFooter(vv);
         _ = new ControlFrame(vv, borderStyle: BorderStyle.Rounded);
         var vr = new DockPanel(DockedControlPlacement.Bottom, vf, vv);
-        vv.Camera.Distance = 16f; vv.Camera.Target = Vector3.Zero;
         vm.SpinRate = 0f;
         void VShot(ISceneRenderer r, string name)
         {
@@ -1764,6 +1766,8 @@ if (args.Contains("--png"))
             Console.WriteLine("  wrote " + name + ".png");
         }
         vm.Step(+1);   // the teapot
+        // After the step: the view re-frames on a subject change, and these shots use a fixed camera.
+        vv.Camera.Distance = 16f; vv.Camera.Target = Vector3.Zero;
         VShot(new ShadedRenderer(), "v1-teapot-shaded");
         VShot(new SolidRenderer(), "v2-teapot-solid");
         VShot(new WireframeRenderer(), "v3-teapot-wire");
@@ -2017,15 +2021,15 @@ Check("and a good share of them do with it", quadHalves > quadEdge.Count(b => b 
 solid.QuadrantSampling = false;
 
 // --- the selection tint -------------------------------------------------------------------------------------
-// The sandbox is the scene that HAS a selection (SceneView.SupportsSelection, which the model viewer does not), and
+// The sandbox is the scene that HAS a selection (MeshView.AllowSelection, which the model viewer leaves off), and
 // what a selection does is repaint the body in Palette.Selection. Asserted on the cells rather than on the flag,
 // because the flag was never the problem: the viewer bug was that a body could be tintedPixels white in a scene whose
 // only colour control was the Colour drop-down, and nothing there could clear it.
 //
-// This is also the guard on the OTHER direction of that fix: gating selection on having a physics runner must not
-// have taken selection away from the scene that wants it.
+// This is also the guard on the OTHER direction of that fix: gating selection behind AllowSelection must not have
+// taken selection away from the scene that wants it.
 Console.WriteLine("\nselection tint:");
-Check("the sandbox supports selection", view.SupportsSelection);
+Check("the sandbox supports selection", view.AllowSelection);
 
 view.Selected = null;
 solid.Draw(solidScene, view.Camera);

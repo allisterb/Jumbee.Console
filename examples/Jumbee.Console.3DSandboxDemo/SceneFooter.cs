@@ -10,7 +10,7 @@ public sealed class SceneFooter : Control
 {
     #region Constructors
     /// <summary>Creates the footer over <paramref name="view"/>, whose state it reports.</summary>
-    public SceneFooter(SceneView view)
+    public SceneFooter(MeshView view)
     {
         this.view = view;
         Focusable = false;
@@ -19,7 +19,7 @@ public sealed class SceneFooter : Control
     #endregion
 
     #region Properties
-    /// <summary>The frame to report. Set from <see cref="SceneView.Drew"/>, so the numbers describe the frame on
+    /// <summary>The frame to report. Set from <see cref="MeshView.Drew"/>, so the numbers describe the frame on
     /// screen rather than a tick that has not been drawn yet. The sandbox's statistics are read when it is a
     /// <see cref="PhysicsFrame"/>.</summary>
     /// <remarks>
@@ -111,7 +111,7 @@ public sealed class SceneFooter : Control
     #endregion
 
     #region Fields
-    private readonly SceneView view;
+    private readonly MeshView view;
 
     private SceneFrame? scene;
     private bool paused;

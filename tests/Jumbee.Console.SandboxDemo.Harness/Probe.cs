@@ -117,7 +117,7 @@ public static class LaunchProbe
         const float Speed = 20f;
         const float Dt = 1f / 60f;
 
-        // Mirrors SceneView.Launch: the muzzle distance is derived from the body's size.
+        // Mirrors SandboxView.Launch: the muzzle distance is derived from the body's size.
         var muzzle = MathF.Max(2f, projection.Focal * settings.BoundingRadius / 0.2f);
 
         Console.WriteLine($"camera eye {view.Eye:F2}, target {camera.Target:F2}, distance {camera.Distance:F1}");

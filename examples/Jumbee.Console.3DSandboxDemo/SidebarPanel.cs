@@ -13,13 +13,13 @@ using Jumbee.Console.Mesh;
 /// </para>
 /// <para>
 /// <b>Keys and widgets stay in agreement</b> because neither talks to the other. The state objects
-/// (<see cref="SpawnSettings"/>, <see cref="SandboxParameters"/>, <see cref="SceneView"/>) own the truth and raise a
+/// (<see cref="SpawnSettings"/>, <see cref="SandboxParameters"/>, <see cref="SandboxView"/>) own the truth and raise a
 /// change event; a widget writes to the state, and <see cref="Refresh"/> reads it back. The <see cref="syncing"/>
 /// guard is what stops the round trip from looping: while the panel is pushing state into a widget, that widget's
 /// own change event does nothing.
 /// </para>
 /// <para>
-/// The readouts update from <see cref="SceneView.Drew"/> — the frame that was actually <em>drawn</em>, not the
+/// The readouts update from <see cref="MeshView.Drew"/> — the frame that was actually <em>drawn</em>, not the
 /// newest one — so the numbers always describe the picture beside them.
 /// </para>
 /// </remarks>
@@ -29,7 +29,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     /// <summary>Builds the sidebar over <paramref name="view"/> and its <paramref name="parameters"/>.
     /// <paramref name="resetScene"/> is what the <c>r</c> key and the menu's <c>Reset scene</c> do — repopulating the
     /// world is the shell's job, not the panel's, so it arrives as an action.</summary>
-    public SidebarPanel(SceneView view, SandboxParameters parameters, Action resetScene)
+    public SidebarPanel(SandboxView view, SandboxParameters parameters, Action resetScene)
     {
         this.view = view;
         this.parameters = parameters;
@@ -71,7 +71,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
         // State -> widget. Three sources, one refresh: whatever moved, the whole panel re-reads the state, which is
         // cheaper to reason about than tracking which widget a given change should touch.
-        view.RendererChanged += Refresh;
+        view.SettingsChanged += Refresh;
         view.SelectionChanged += _ => Refresh();
         view.Spawn.Changed += Refresh;
         parameters.Changed += Refresh;
@@ -135,7 +135,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     #endregion
 
     #region Methods
-    /// <summary>Updates the readouts from the frame that was just drawn. Wired to <see cref="SceneView.Drew"/>.</summary>
+    /// <summary>Updates the readouts from the frame that was just drawn. Wired to <see cref="MeshView.Drew"/>.</summary>
     public void Report(PhysicsFrame snapshot, bool paused)
     {
         drawn = snapshot;
@@ -365,7 +365,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     #endregion
 
     #region Fields
-    private readonly SceneView view;
+    private readonly SandboxView view;
     private readonly SandboxParameters parameters;
 
     private readonly TextLabel status = Line("RUN", HeadingColor);
