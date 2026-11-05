@@ -74,7 +74,7 @@ public static class SceneMenu
             new MenuItem("Mesh", view.Spawn.NextMesh)
             {
                 Checked = view.Spawn.Shape == BodyShape.Mesh,
-                Enabled = Meshes.RegisteredCount > 0,
+                Enabled = view.Spawn.Library.Count > 0,
             },
             MenuItem.Separator,
             new MenuItem("Drop one in", view.SpawnAtTarget) { Shortcut = "n" },

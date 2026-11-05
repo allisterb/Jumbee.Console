@@ -161,7 +161,7 @@ public abstract class MeshRenderer : ISceneRenderer
         halfH = surface.PixelHeight / 2f;
         scaleY = (float)(surface.PixelHeight / (2.0 * Viewport.CellAspect));
 
-        var snapshot = request.Snapshot;
+        var snapshot = request.Frame;
         DrawGround();
         for (var i = 0; i < snapshot.Count; i++) DrawBody(snapshot, i);
 
@@ -238,7 +238,7 @@ public abstract class MeshRenderer : ISceneRenderer
         }
     }
 
-    private void DrawBody(SceneSnapshot snapshot, int i)
+    private void DrawBody(SceneFrame snapshot, int i)
     {
         var shape = snapshot.Shapes[i];
         var half = snapshot.HalfExtents[i];
@@ -246,7 +246,7 @@ public abstract class MeshRenderer : ISceneRenderer
         var (mesh, scale) = shape switch
         {
             BodyShape.Sphere => (Meshes.Sphere, new Vector3(half.X)),
-            BodyShape.Mesh => (Meshes.Get(snapshot.MeshIds[i]), new Vector3(half.X / 0.5f)),
+            BodyShape.Mesh when snapshot.Meshes[i] is { } m => (m, new Vector3(half.X / 0.5f)),
             _ => (Meshes.Cube, half),
         };
         var rotation = snapshot.Rotations[i];

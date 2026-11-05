@@ -50,7 +50,7 @@ public static class SolidProbe
 /// <summary>Frame cost of a renderer over the real compositor: scene draw, paint, composite+emit, and ANSI bytes.</summary>
 public static class PerfProbe
 {
-    public static void Measure(string label, ISceneRenderer renderer, OrbitCamera camera, SceneSnapshot snapshot,
+    public static void Measure(string label, ISceneRenderer renderer, OrbitCamera camera, SceneFrame snapshot,
                                Jumbee.Console.ILayout root, int w, int h, bool quiet = false)
     {
         long frameBytes = 0;
@@ -112,7 +112,7 @@ public static class LaunchProbe
         var viewport = new Viewport(viewportWidth, viewportHeight);
         var view = camera.GetView();
 
-        var settings = new SpawnSettings { Shape = BodyShape.Sphere };
+        var settings = new SpawnSettings(new MeshLibrary()) { Shape = BodyShape.Sphere };
         var Radius = settings.BoundingRadius;
         const float Speed = 20f;
         const float Dt = 1f / 60f;

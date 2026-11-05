@@ -28,27 +28,27 @@ using Jumbee.Console.Snapshot;
 internal static class Verify
 {
     #region Methods
-    /// <summary>Runs the check, printing one line. Returns a process exit code.</summary>
-    public static int Run()
+    /// <summary>Runs the check over <paramref name="library"/>, printing one line. Returns a process exit code.</summary>
+    public static int Run(MeshLibrary library)
     {
         var failures = new List<string>();
         var report = new List<string>();
 
         // The sandbox: real physics, settled first so the frame has a resting tower rather than bodies mid-fall at
         // the origin -- a scene that has not moved would pass even if the simulation never started.
-        using (var app = BuildSandbox())
+        using (var app = BuildSandbox(library))
         {
             _ = ConsoleSnapshot.ToText(app.Root, Width, Height);
             Settle(app.Runner, 30);
-            var bodies = app.Runner.Snapshot.Count;
+            var bodies = app.Runner.Frame.Count;
             if (bodies < 11) failures.Add($"sandbox has {bodies} bodies, expected 11");
-            Check("sandbox", app.Root, app.View, app.Runner.Snapshot, failures, report);
+            Check("sandbox", app.Root, app.View, app.Runner.Frame, failures, report);
         }
 
-        using (var app = SandboxShell.BuildViewer(0))
+        using (var app = SandboxShell.BuildViewer(library, 0))
         {
             _ = ConsoleSnapshot.ToText(app.Root, Width, Height);
-            Check("viewer", app.Root, app.View, app.Model.Snapshot, failures, report);
+            Check("viewer", app.Root, app.View, app.Model.Frame, failures, report);
         }
 
         if (failures.Count > 0)
@@ -64,7 +64,7 @@ internal static class Verify
 
     #region Private methods
     // One shell, every renderer. Each is asked for a frame and then judged on what landed in the buffer.
-    private static void Check(string scene, ILayout root, SceneView view, SceneSnapshot snapshot,
+    private static void Check(string scene, ILayout root, SceneView view, SceneFrame snapshot,
         List<string> failures, List<string> report)
     {
         var drawn = new List<string>();
@@ -92,8 +92,8 @@ internal static class Verify
         report.Add($"{scene} ({string.Join(", ", drawn)})");
     }
 
-    private static SandboxShell.Sandbox BuildSandbox() =>
-        SandboxShell.BuildSandbox(scene =>
+    private static SandboxShell.Sandbox BuildSandbox(MeshLibrary library) =>
+        SandboxShell.BuildSandbox(library, scene =>
         {
             for (var i = 0; i < 7; i++)
                 scene.AddBox(new System.Numerics.Vector3(i * 0.06f, 0.5f + (i * 1.02f), 0),
@@ -106,9 +106,9 @@ internal static class Verify
     // than hanging the build that called it.
     private static void Settle(PhysicsRunner runner, int steps)
     {
-        var target = runner.Snapshot.StepCount + steps;
+        var target = runner.Frame.StepCount + steps;
         var spun = 0;
-        while (runner.Snapshot.StepCount < target && spun++ < 600) Thread.Sleep(5);
+        while (runner.Frame.StepCount < target && spun++ < 600) Thread.Sleep(5);
     }
     #endregion
 

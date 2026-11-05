@@ -3,11 +3,12 @@ namespace Jumbee.Console.Mesh;
 using System.Numerics;
 using System.Threading;
 
-/// <summary>Anything <c>SceneView</c> can read a snapshot from — a live simulation, or a static scene.</summary>
+/// <summary>Anything a view can read a <see cref="SceneFrame"/> from — a live simulation, or a static scene.</summary>
 public interface ISceneSource
 {
-    /// <summary>The scene as it stands. Read every frame; must never be null.</summary>
-    SceneSnapshot Snapshot { get; }
+    /// <summary>The scene as it stands. Read every frame, possibly off the UI thread; must never be null, and must
+    /// never be mutated once returned — publish a new frame instead.</summary>
+    SceneFrame Frame { get; }
 }
 
 /// <summary>Which axis a model file treats as up.</summary>
@@ -45,11 +46,13 @@ public enum ModelUpAxis
 public sealed class ModelScene : ISceneSource
 {
     #region Constructors
-    /// <summary>Creates the scene over the registered meshes, opening on <paramref name="startIndex"/>.</summary>
-    public ModelScene(int startIndex = 0)
+    /// <summary>Creates the scene over <paramref name="library"/>, opening on <paramref name="startIndex"/>.</summary>
+    /// <remarks>The library may still be empty, or grow later; <see cref="Reload"/> shows a mesh added since.</remarks>
+    public ModelScene(MeshLibrary library, int startIndex = 0)
     {
-        MeshId = Meshes.RegisteredCount == 0 ? 0 : Math.Clamp(startIndex, 0, Meshes.RegisteredCount - 1);
-        snapshot = new SceneSnapshot(1) { Count = 1 };
+        Library = library;
+        MeshIndex = library.Count == 0 ? 0 : Math.Clamp(startIndex, 0, library.Count - 1);
+        frame = new SceneFrame(1) { Count = 1 };
         upAxis = AuthoredUpAxis();
         Rebuild();
     }
@@ -57,16 +60,19 @@ public sealed class ModelScene : ISceneSource
 
     #region Properties
     /// <inheritdoc/>
-    public SceneSnapshot Snapshot => Volatile.Read(ref snapshot);
+    public SceneFrame Frame => Volatile.Read(ref frame);
 
-    /// <summary>Which registered mesh is on show.</summary>
-    public int MeshId { get; private set; }
+    /// <summary>The meshes the scene steps through.</summary>
+    public MeshLibrary Library { get; }
 
-    /// <summary>The mesh currently shown.</summary>
-    public TriangleMesh Mesh => Meshes.Get(MeshId);
+    /// <summary>Which of <see cref="Library"/>'s meshes is on show.</summary>
+    public int MeshIndex { get; private set; }
+
+    /// <summary>The mesh currently shown. Throws when <see cref="Library"/> is empty.</summary>
+    public TriangleMesh Mesh => Library[MeshIndex];
 
     /// <summary>Display name of the mesh currently shown.</summary>
-    public string Name => Meshes.RegisteredCount > 0 ? Meshes.NameOf(MeshId) : "none";
+    public string Name => Library.Count > 0 ? Library.NameOf(MeshIndex) : "none";
 
     /// <summary>Per-axis scale applied before the shear.</summary>
     public Vector3 Scale { get; private set; } = Vector3.One;
@@ -126,17 +132,18 @@ public sealed class ModelScene : ISceneSource
     /// while the viewer is running.</summary>
     public void Reload(int index)
     {
-        MeshId = Meshes.RegisteredCount == 0 ? 0 : Math.Clamp(index, 0, Meshes.RegisteredCount - 1);
+        MeshIndex = Library.Count == 0 ? 0 : Math.Clamp(index, 0, Library.Count - 1);
         upAxis = AuthoredUpAxis();
         ResetTransform();
         MeshChanged?.Invoke();
     }
 
-    /// <summary>Shows the next (or previous) registered mesh.</summary>
+    /// <summary>Shows the next (or previous) mesh in <see cref="Library"/>.</summary>
     public void Step(int direction)
     {
-        if (Meshes.RegisteredCount == 0) return;
-        MeshId = ((MeshId + direction) % Meshes.RegisteredCount + Meshes.RegisteredCount) % Meshes.RegisteredCount;
+        var count = Library.Count;
+        if (count == 0) return;
+        MeshIndex = ((MeshIndex + direction) % count + count) % count;
         // Per model, not carried over: the previous model's setting — whether guessed or chosen by hand — says
         // nothing about this one, and each file brings its own answer or the Y-up default.
         upAxis = AuthoredUpAxis();
@@ -198,7 +205,7 @@ public sealed class ModelScene : ISceneSource
     {
         get
         {
-            var e = Meshes.Get(MeshId).Extents;
+            var e = Library.Count == 0 ? Vector3.Zero : Mesh.Extents;
             if (upAxis == ModelUpAxis.Z) e = new Vector3(e.X, e.Z, e.Y);
             return e * Scale * ViewScale;
         }
@@ -210,7 +217,7 @@ public sealed class ModelScene : ISceneSource
     // What the file suggests, or Y-up. The suggestion is only ever a starting point — it lands on a switch the
     // user can see and flip.
     private ModelUpAxis AuthoredUpAxis() =>
-        Meshes.RegisteredCount == 0 ? ModelUpAxis.Y : Meshes.Get(MeshId).AuthoredUpAxis ?? ModelUpAxis.Y;
+        Library.Count == 0 ? ModelUpAxis.Y : Mesh.AuthoredUpAxis ?? ModelUpAxis.Y;
 
     private void SetScale(Vector3 scale)
     {
@@ -264,20 +271,20 @@ public sealed class ModelScene : ISceneSource
     #endregion
 
     #region Private methods
-    // One body, rebuilt whenever anything changes. The full affine map goes into SceneSnapshot.LocalTransforms,
+    // One body, rebuilt whenever anything changes. The full affine map goes into SceneFrame.LocalTransforms,
     // which the rasteriser uses in place of the scale-then-rotate path -- a quaternion cannot express a shear.
     private void Rebuild()
     {
         // BUILT FRESH AND PUBLISHED WHOLE, never mutated where it stands -- the same contract PhysicsRunner keeps,
-        // and for the same reason now that it matters here too: the rasteriser reads a snapshot from a background
+        // and for the same reason now that it matters here too: the rasteriser reads a frame from a background
         // thread, so editing the one it is holding would tear the pose it is halfway through drawing. One body's
         // worth of arrays per turntable step is nothing next to the frame it feeds.
-        var next = new SceneSnapshot(1);
+        var next = new SceneFrame(1);
 
-        if (Meshes.RegisteredCount == 0)
+        if (Library.Count == 0)
         {
             next.Count = 0;
-            Volatile.Write(ref snapshot, next);
+            Volatile.Write(ref frame, next);
             return;
         }
 
@@ -300,22 +307,21 @@ public sealed class ModelScene : ISceneSource
         // y = 0, so a centred model is buried to the waist. Lifting by its underside is the whole fix, and it is a
         // constant per pose: only the vertical scale moves it, because the spin is about Y and the shear displaces
         // X and Z by height without touching Y.
-        var low = Meshes.Get(MeshId).Min;
+        var mesh = Mesh;
+        var low = mesh.Min;
         Elevation = -(upAxis == ModelUpAxis.Z ? low.Z : low.Y) * Scale.Y * ViewScale;
 
         next.Count = 1;
         next.Ids[0] = 1;
         next.Shapes[0] = BodyShape.Mesh;
-        next.MeshIds[0] = MeshId;
+        next.Meshes[0] = mesh;
         next.Positions[0] = new Vector3(0, Elevation, 0);
         next.Rotations[0] = Quaternion.Identity;
         next.HalfExtents[0] = new Vector3(ViewRadius);
         next.ColorKeys[0] = colorKey;
-        next.Awake[0] = true;
-        next.AwakeCount = 1;
         (next.LocalTransforms ??= new Matrix4x4[1])[0] = transform * Matrix4x4.CreateScale(ViewScale);
 
-        Volatile.Write(ref snapshot, next);
+        Volatile.Write(ref frame, next);
     }
     #endregion
 
@@ -339,8 +345,8 @@ public sealed class ModelScene : ISceneSource
     public const float MaxShear = 1.5f;
 
     // Replaced wholesale by Rebuild rather than edited in place -- see the note there. Read via Volatile so the
-    // rasterising thread sees a fully-built snapshot or the previous one, never a half-assigned reference.
-    private SceneSnapshot snapshot;
+    // rasterising thread sees a fully-built frame or the previous one, never a half-assigned reference.
+    private SceneFrame frame;
     private float spin;
     private ModelUpAxis upAxis = ModelUpAxis.Y;
     private int colorKey = 1;   // Mint, the colour the viewer has always opened in

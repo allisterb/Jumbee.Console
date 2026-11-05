@@ -21,7 +21,8 @@ internal static class ShellChecks
             if (!ok) failures++;
         }
 
-        Meshes.Register(Meshes.TorusKnot(), "knot");
+        var library = new MeshLibrary();
+        library.Add(Meshes.TorusKnot(), "knot");
         var models = RepoPaths.At("reference", "projects", "voxcii-main", "models");
         // Both directories: the reference OBJs, and the repo's own media/models, which is where the STL samples
         // live. Registering them here is what puts an STL through the real viewer -- the loader checks in Check.cs
@@ -35,15 +36,15 @@ internal static class ShellChecks
                 {
                     if (f.Contains("dragon")) continue;   // 250k triangles, and ~600 ms of parse, for no extra coverage
                     var name = Path.GetFileNameWithoutExtension(f);
-                    if (Meshes.RegisteredCount > 0 && Enumerable.Range(0, Meshes.RegisteredCount).Any(i => Meshes.NameOf(i) == name))
+                    if (library.IndexOf(name) >= 0)
                         continue;   // the two directories overlap; first one wins
-                    Meshes.Register(ModelLoader.Load(f), name);
+                    library.Add(ModelLoader.Load(f), name);
                 }
             }
         }
         else if (File.Exists(Path.Combine(models, "teapot.obj")))
         {
-            Meshes.Register(ObjLoader.Load(Path.Combine(models, "teapot.obj")), "teapot");
+            library.Add(ObjLoader.Load(Path.Combine(models, "teapot.obj")), "teapot");
         }
 
         if (args.Contains("viewer"))
@@ -52,12 +53,11 @@ internal static class ShellChecks
             // and adding the media/models directory to the scan above silently moved the subject of every check
             // below from the teapot to a thin aeroplane — which then failed a coverage threshold calibrated on the
             // teapot, for a reason that had nothing to do with what was being tested.
-            var subject = Enumerable.Range(0, Meshes.RegisteredCount).FirstOrDefault(
-                i => Meshes.NameOf(i) == "teapot", Meshes.RegisteredCount - 1);
-            var v = SandboxShell.BuildViewer(subject);
+            var subject = library.IndexOf("teapot") is >= 0 and var teapot ? teapot : library.Count - 1;
+            var v = SandboxShell.BuildViewer(library, subject);
             v.Model.SpinRate = 0f;
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
-            v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+            v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
             v.Sidebar.Report();
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
 
@@ -68,17 +68,17 @@ internal static class ShellChecks
                 var d = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
                 var o = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
                 var plane = RepoPaths.At("reference", "projects", "3d-engine-on-terminal-main", "assets", "plane.obj");
-                if (File.Exists(plane)) Meshes.Register(ObjLoader.Load(plane), "plane");
+                if (File.Exists(plane)) library.Add(ObjLoader.Load(plane), "plane");
 
-                for (var i = 0; i < Meshes.RegisteredCount; i++)
+                for (var i = 0; i < library.Count; i++)
                 {
                     v.Model.Reload(i);
                     Console.WriteLine($"  {v.Model.Name,-8} authored up-axis " +
-                                      $"{Meshes.Get(v.Model.MeshId).AuthoredUpAxis?.ToString() ?? "(none)",-6} " +
+                                      $"{v.Model.Mesh.AuthoredUpAxis?.ToString() ?? "(none)",-6} " +
                                       $"-> using {v.Model.UpAxis}");
 
                     _ = ConsoleSnapshot.ToText(v.Root, width, height);
-                    v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                    v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
                     v.Sidebar.Report();
                     _ = ConsoleSnapshot.ToText(v.Root, width, height);
                     ConsoleSnapshot.SavePng(v.Root, width, height, Path.Combine(d, $"frame-{v.Model.Name}.png"), o);
@@ -136,7 +136,7 @@ internal static class ShellChecks
 
             void DrawViewer()
             {
-                v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
                 _ = ConsoleSnapshot.ToText(v.Root, width, height);
             }
 
@@ -166,7 +166,7 @@ internal static class ShellChecks
             {
                 var dir = args.FirstOrDefault(a => a.Contains("out="))?.Split('=')[1] ?? ".";
                 var opt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
-                v.View.Renderer.Draw(v.Model.Snapshot, v.View.Camera);
+                v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
                 ConsoleSnapshot.SavePng(v.Root, width, height, Path.Combine(dir, "m3-viewer.png"), opt);
                 Console.WriteLine("  wrote m3-viewer.png");
             }
@@ -175,7 +175,7 @@ internal static class ShellChecks
             return failures == 0 ? 0 : 1;
         }
 
-        var app = SandboxShell.BuildSandbox(Populate);
+        var app = SandboxShell.BuildSandbox(library, Populate);
         var root = app.Root;
         var view = app.View;
 
@@ -186,8 +186,8 @@ internal static class ShellChecks
 
         void Draw()
         {
-            view.Renderer.Draw(app.Runner.Snapshot, view.Camera);
-            app.Sidebar.Report(app.Runner.Snapshot, app.Runner.Paused);
+            view.Renderer.Draw(app.Runner.Frame, view.Camera);
+            app.Sidebar.Report(app.Runner.Frame, app.Runner.Paused);
             _ = ConsoleSnapshot.ToText(root, width, height);
         }
 
@@ -237,12 +237,12 @@ internal static class ShellChecks
         Draw();
         Check("gravity 0 reaches the slider", SliderReads(root, width, height, "Gravity", 0f));
 
-        var settledY = app.Runner.Snapshot.Positions[0].Y;
+        var settledY = app.Runner.Frame.Positions[0].Y;
         app.Parameters.Gravity = 25f;
         Settle(app.Runner, 90);
         Check("and gravity really reaches the solver",
-            app.Runner.Snapshot.Count > 0,
-            $"y {settledY:F2} -> {app.Runner.Snapshot.Positions[0].Y:F2} at g=25");
+            app.Runner.Frame.Count > 0,
+            $"y {settledY:F2} -> {app.Runner.Frame.Positions[0].Y:F2} at g=25");
 
         app.Parameters.TimeScale = 0.25f;
         Check("time scale reaches the runner", Math.Abs(app.Runner.TimeScale - 0.25) < 1e-6, $"{app.Runner.TimeScale:F2}");
@@ -411,16 +411,16 @@ internal static class ShellChecks
         {
             ConsoleSnapshot.Click(btnBuffer, btnRows[sceneButtons].IndexOf("Clear", StringComparison.Ordinal), sceneButtons);
             Settle(app.Runner, 6);
-            Check("clicking Clear empties the scene, as c does", app.Runner.Snapshot.Count == 0,
-                $"{app.Runner.Snapshot.Count} bodies");
+            Check("clicking Clear empties the scene, as c does", app.Runner.Frame.Count == 0,
+                $"{app.Runner.Frame.Count} bodies");
 
             Draw();
             btnBuffer = ConsoleSnapshot.Render(root, width, height);
             btnRows = ConsoleSnapshot.ToLines(btnBuffer);
             ConsoleSnapshot.Click(btnBuffer, btnRows[sceneButtons].IndexOf("Reset", StringComparison.Ordinal), sceneButtons);
             Settle(app.Runner, 6);
-            Check("and clicking Reset rebuilds it, as r does", app.Runner.Snapshot.Count == 11,
-                $"{app.Runner.Snapshot.Count} bodies");
+            Check("and clicking Reset rebuilds it, as r does", app.Runner.Frame.Count == 11,
+                $"{app.Runner.Frame.Count} bodies");
         }
 
         // The World section's Reset is a second button reading "Reset" -- located by section rather than by label,
@@ -495,15 +495,15 @@ internal static class ShellChecks
             foreach (var r in view.Renderers)
             {
                 view.SetRenderer(r);
-                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Snapshot, root, width, height, quiet: true);
+                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Frame, root, width, height, quiet: true);
             }
 
-            Console.WriteLine($"\nframe cost at {width}x{height} WITH the M3 shell, {app.Runner.Snapshot.Count} bodies, " +
+            Console.WriteLine($"\nframe cost at {width}x{height} WITH the M3 shell, {app.Runner.Frame.Count} bodies, " +
                               "orbiting camera (median of 120):");
             foreach (var r in view.Renderers)
             {
                 view.SetRenderer(r);
-                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Snapshot, root, width, height);
+                Probe.PerfProbe.Measure(r.Name, r, view.Camera, app.Runner.Frame, root, width, height);
             }
 
             app.Runner.Dispose();
@@ -550,9 +550,9 @@ internal static class ShellChecks
 
     private static void Settle(PhysicsRunner runner, int steps)
     {
-        var target = runner.Snapshot.StepCount + steps;
+        var target = runner.Frame.StepCount + steps;
         var spun = 0;
-        while (runner.Snapshot.StepCount < target && spun++ < 600) Thread.Sleep(5);
+        while (runner.Frame.StepCount < target && spun++ < 600) Thread.Sleep(5);
     }
 
     private static void Populate(PhysicsScene scene)

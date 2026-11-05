@@ -106,7 +106,7 @@ public sealed class WireframeRenderer : ISceneRenderer
     /// the three by an order of magnitude -- the triangle budget sees to that -- so it has least to gain.</remarks>
     public object? Draw(in FrameRequest request)
     {
-        var snapshot = request.Snapshot;
+        var snapshot = request.Frame;
         var viewport = new Viewport(request.Cells, request.Rows);
         Viewport = viewport;
         if (!viewport.IsValid) return null;
@@ -138,8 +138,8 @@ public sealed class WireframeRenderer : ISceneRenderer
                 case BodyShape.Sphere:
                     DrawSphere(view, snapshot.Positions[b], snapshot.HalfExtents[b].X, color);
                     break;
-                case BodyShape.Mesh:
-                    DrawMesh(view, Meshes.Get(snapshot.MeshIds[b]), snapshot.Positions[b],
+                case BodyShape.Mesh when snapshot.Meshes[b] is { } mesh:
+                    DrawMesh(view, mesh, snapshot.Positions[b],
                         snapshot.LocalTransforms is { } t
                             ? t[b]
                             : Matrix4x4.CreateScale(snapshot.HalfExtents[b].X / 0.5f)

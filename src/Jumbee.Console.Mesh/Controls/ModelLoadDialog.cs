@@ -3,12 +3,12 @@ namespace Jumbee.Console.Mesh;
 using System.Threading;
 
 /// <summary>What a background folder load produced.</summary>
-/// <param name="StartId">The registry id to open on — the file that was named, if it loaded, else the first model
-/// that did — or -1 when nothing loaded.</param>
-/// <param name="Loaded">How many models were registered.</param>
+/// <param name="StartIndex">The library index to open on — the file that was named, if it loaded, else the first
+/// model that did — or -1 when nothing loaded.</param>
+/// <param name="Loaded">How many models were added to the library.</param>
 /// <param name="Failures">Each file that could not be loaded, with the reason.</param>
 /// <param name="Stopped">Whether the load was stopped before the end.</param>
-public readonly record struct ModelLoadResult(int StartId, int Loaded, (string File, string Reason)[] Failures, bool Stopped);
+public readonly record struct ModelLoadResult(int StartIndex, int Loaded, (string File, string Reason)[] Failures, bool Stopped);
 
 /// <summary>
 /// Loads a folder of models on a background thread behind a modal progress dialog, so the app is up and drawing while
@@ -22,12 +22,12 @@ public readonly record struct ModelLoadResult(int StartId, int Loaded, (string F
 /// the folder it is, and the viewer keeps rendering, dimmed, underneath.
 /// </para>
 /// <para>
-/// <b>Registered in one batch at the end, on the UI thread.</b> The loader thread only parses: it never touches the
-/// registry, so ids stay in folder order and the only writer is the UI thread (see <see cref="Meshes.Register"/>).
+/// <b>Added in one batch at the end, on the UI thread.</b> The loader thread only parses: it never touches the
+/// library, so indices stay in folder order and the only writer is the UI thread (see <see cref="MeshLibrary"/>).
 /// </para>
 /// <para>
 /// <b>Escape stops, and keeps what loaded.</b> It takes effect between files — a parse in progress cannot be
-/// interrupted — so the models already parsed are registered a moment after the modal closes.
+/// interrupted — so the models already parsed are added a moment after the modal closes.
 /// </para>
 /// <para>
 /// <b>A file that fails is skipped and reported, not fatal.</b> When loading ran before the UI, the first bad file
@@ -72,11 +72,11 @@ public sealed class ModelLoadDialog : CompositeControl
 
     #region Methods
     /// <summary>
-    /// Loads every file in <paramref name="set"/> behind the modal, registers what loaded, and hands the outcome to
-    /// <paramref name="done"/> on the UI thread.
+    /// Loads every file in <paramref name="set"/> behind the modal, adds what loaded to <paramref name="into"/>, and
+    /// hands the outcome to <paramref name="done"/> on the UI thread.
     /// </summary>
     /// <remarks>Call on the UI thread, once <see cref="UI.Start"/> is running: the modal needs its overlay.</remarks>
-    public static void Load(ModelSet set, Action<ModelLoadResult> done)
+    public static void Load(ModelSet set, MeshLibrary into, Action<ModelLoadResult> done)
     {
         if (set.Files.Length == 0 || IsLoading) return;
         Volatile.Write(ref loading, true);
@@ -90,13 +90,13 @@ public sealed class ModelLoadDialog : CompositeControl
 
         // A dedicated thread rather than the pool: this runs for seconds, and a pool thread held that long is one the
         // rasteriser's job may be waiting for.
-        new Thread(() => panel.Run(dialog, done)) { IsBackground = true, Name = "Model loader" }.Start();
+        new Thread(() => panel.Run(dialog, into, done)) { IsBackground = true, Name = "Model loader" }.Start();
     }
     #endregion
 
     #region Private methods
     // The loader thread: parse each file, report progress, and hand everything back in one go.
-    private void Run(Dialog dialog, Action<ModelLoadResult> done)
+    private void Run(Dialog dialog, MeshLibrary into, Action<ModelLoadResult> done)
     {
         var loaded = new List<(string Path, TriangleMesh Mesh)>(files.Length);
         var failures = new List<(string File, string Reason)>();
@@ -126,7 +126,7 @@ public sealed class ModelLoadDialog : CompositeControl
 
         if (!UI.IsRunning) { Volatile.Write(ref loading, false); return; }
         var stopped = stop;
-        UI.Invoke(() => Finish(dialog, loaded, failures, stopped, done));
+        UI.Invoke(() => Finish(dialog, into, loaded, failures, stopped, done));
     }
 
     private void Report(int index, string path)
@@ -135,22 +135,22 @@ public sealed class ModelLoadDialog : CompositeControl
         progress.Description = $"{index + 1}/{files.Length}  {Path.GetFileName(path)}";
     }
 
-    private void Finish(Dialog dialog, List<(string Path, TriangleMesh Mesh)> loaded, List<(string File, string Reason)> failures,
+    private void Finish(Dialog dialog, MeshLibrary into, List<(string Path, TriangleMesh Mesh)> loaded, List<(string File, string Reason)> failures,
                         bool stopped, Action<ModelLoadResult> done)
     {
         progress.Value = files.Length;
         progress.Stop();
         dialog.Close(DialogResult.Ok);
 
-        var startId = -1;
+        var start = -1;
         foreach (var (path, mesh) in loaded)
         {
-            var id = Meshes.Register(mesh, Path.GetFileNameWithoutExtension(path));
-            if (startId < 0 || string.Equals(path, named, StringComparison.OrdinalIgnoreCase)) startId = id;
+            var index = into.Add(mesh, Path.GetFileNameWithoutExtension(path));
+            if (start < 0 || string.Equals(path, named, StringComparison.OrdinalIgnoreCase)) start = index;
         }
 
         Volatile.Write(ref loading, false);
-        done(new ModelLoadResult(startId, loaded.Count, [.. failures], stopped));
+        done(new ModelLoadResult(start, loaded.Count, [.. failures], stopped));
     }
 
     private static TextLabel Label(string text) =>

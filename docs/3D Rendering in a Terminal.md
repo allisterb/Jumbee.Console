@@ -435,7 +435,7 @@ public interface ISceneRenderer
     Control Surface { get; }        // the control it draws into
     Projection Projection { get; }
     Viewport Viewport { get; }
-    void Draw(SceneSnapshot snapshot, OrbitCamera camera);
+    void Draw(SceneFrame frame, OrbitCamera camera);
 }
 ```
 
@@ -806,7 +806,7 @@ thread and are never touched from outside it. So how does the renderer, on the U
 ```csharp
 private void Publish(PhysicsScene scene, double stepMs)
 {
-    var next = new SceneSnapshot(bodies.Count) { Count = bodies.Count };
+    var next = new PhysicsFrame(bodies.Count) { Count = bodies.Count };
     for (var i = 0; i < bodies.Count; i++)
     {
         next.Positions[i]  = bodies[i].Handle.Position;
@@ -814,11 +814,11 @@ private void Publish(PhysicsScene scene, double stepMs)
         next.Velocities[i] = bodies[i].Handle.LinearVelocity;
         // ...
     }
-    Volatile.Write(ref snapshot, next);
+    Volatile.Write(ref frame, next);
 }
 ```
 
-The UI thread reads `Snapshot` whenever it likes and always gets a whole, self-consistent tick — never a half-updated
+The UI thread reads `Frame` whenever it likes and always gets a whole, self-consistent tick — never a half-updated
 one. There is **no lock anywhere**.
 
 Mutations travel the other way, as commands queued and drained at the top of a step:
@@ -841,7 +841,7 @@ nothing today and it is the layout SIMD would need later; retrofitting that is t
 
 ### Selection is by id, not index
 
-`SceneSnapshot.Ids` carries a stable per-body id assigned at spawn. Deleting a body shifts every index after it, so
+`SceneFrame.Ids` carries a stable per-body id assigned at spawn. Deleting a body shifts every index after it, so
 an index-keyed selection would silently retarget to a different object. This is the kind of bug that survives
 testing and confuses users, and the fix costs one array.
 
@@ -988,8 +988,9 @@ The renderer, camera and model loaders are in the
 | `Mesh/Rendering/SolidRenderer.cs` / `ShadedRenderer.cs` | the two shading models, and nothing else |
 | `Mesh/Rendering/WireframeRenderer.cs` | projection to lines on a braille `Canvas` |
 | `Mesh/Scene/Meshes.cs` / `Mesh/Loaders/ObjLoader.cs` | primitives, a generated torus knot, and a Wavefront OBJ reader |
-| `Mesh/Scene/SceneSnapshot.cs` | the immutable parallel-array tick handed to the renderer |
-| demo: `PhysicsRunner.cs` | the physics thread, the fixed-step loop, snapshot publication |
+| `Mesh/Scene/SceneFrame.cs` | the immutable parallel-array frame handed to the renderer; it holds the meshes it draws |
+| `Mesh/Scene/MeshLibrary.cs` | the app-owned list of named meshes a viewer steps through and a picker lists |
+| demo: `PhysicsRunner.cs`, `PhysicsFrame.cs` | the physics thread, the fixed-step loop, and the frame it publishes, with the physics-only columns |
 
 Every measurement quoted here, plus the reasoning behind each decision and the bugs met on the way, is recorded
 milestone by milestone in [`docs/internal/agent/3D Sandbox Plan.md`](internal/agent/3D%20Sandbox%20Plan.md).

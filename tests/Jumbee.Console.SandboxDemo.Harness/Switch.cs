@@ -39,14 +39,15 @@ internal static class SwitchChecks
             if (!ok) failures++;
         }
 
-        Meshes.Register(Meshes.TorusKnot(), "knot");
+        var library = new MeshLibrary();
+        library.Add(Meshes.TorusKnot(), "knot");
 
         // --- session 1: the sandbox -------------------------------------------------------------------------------
         Console.WriteLine("session 1 (sandbox):");
         var stale = 0;
         SandboxShell.ShellType? pending = null;
 
-        var sandbox = SandboxShell.BuildSandbox(Populate, null, to => { pending = to; UI.Stop(); });
+        var sandbox = SandboxShell.BuildSandbox(library, Populate, null, to => { pending = to; UI.Stop(); });
         var sandboxFrames = 0;
         sandbox.View.Drew += _ => sandboxFrames++;
 
@@ -71,7 +72,7 @@ internal static class SwitchChecks
 
         // --- session 2: the model viewer --------------------------------------------------------------------------
         Console.WriteLine("\nsession 2 (model viewer), same process:");
-        var viewer = SandboxShell.BuildViewer(0, null, to => { pending = to; UI.Stop(); });
+        var viewer = SandboxShell.BuildViewer(library, 0, null, to => { pending = to; UI.Stop(); });
         var viewerFrames = 0;
         viewer.View.Drew += _ => viewerFrames++;
 
@@ -94,14 +95,14 @@ internal static class SwitchChecks
         var viewerAtDispose = viewerFrames;
 
         Console.WriteLine("\nsession 3 (back to the sandbox):");
-        var again = SandboxShell.BuildSandbox(Populate, null, to => { pending = to; UI.Stop(); });
+        var again = SandboxShell.BuildSandbox(library, Populate, null, to => { pending = to; UI.Stop(); });
         var againFrames = 0;
         again.View.Drew += _ => againFrames++;
         var run3 = Start(again.Root, width, height);
         WaitForFrames(() => againFrames, 5);
         Check("a third session runs", againFrames >= 5, $"{againFrames} frames");
-        Check("the physics thread of the third is live", again.Runner.Snapshot.Count == 11,
-            $"{again.Runner.Snapshot.Count} bodies");
+        Check("the physics thread of the third is live", again.Runner.Frame.Count == 11,
+            $"{again.Runner.Frame.Count} bodies");
         Check("and neither earlier shell is still painting", sandboxFrames == framesAtDispose && viewerFrames == viewerAtDispose,
             $"sandbox {sandboxFrames}/{framesAtDispose}, viewer {viewerFrames}/{viewerAtDispose}");
 

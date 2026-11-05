@@ -2,7 +2,7 @@ namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 
-/// <summary>The collision shape a body is drawn as.</summary>
+/// <summary>The shape a body is drawn as.</summary>
 public enum BodyShape : byte
 {
     /// <summary>An oriented box, drawn as 12 projected edges.</summary>
@@ -14,51 +14,44 @@ public enum BodyShape : byte
     /// <summary>A capsule, drawn as its two end spheres joined by the segment between them.</summary>
     Capsule,
 
-    /// <summary>
-    /// A loaded or generated triangle mesh, identified by <see cref="SceneSnapshot.MeshIds"/>.
-    /// </summary>
-    /// <remarks>
-    /// It is drawn as the real mesh but <b>collides as its convex hull</b>: <c>Body.AddMesh</c> requires a static
-    /// body, so a triangle mesh cannot be a dynamic rigid body in Box3D at all. That is the usual arrangement in
-    /// games, and it means concavities — a teapot's handle and spout, the hole through a torus — are solid to the
-    /// solver even though you can see through them.
-    /// </remarks>
+    /// <summary>A triangle mesh, the one in <see cref="SceneFrame.Meshes"/>. Drawn as a box when that is
+    /// <see langword="null"/>.</summary>
     Mesh,
 }
 
 /// <summary>
-/// One tick of physics state, frozen: everything the renderer and the inspector need, and nothing that has to be
-/// read back off a live <c>Body</c> while the physics thread is mid-step.
+/// One frame of a scene, frozen: every body the renderers draw, and nothing that has to be read back off a live
+/// object while its owner is changing it.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Parallel arrays, not an array of structs.</b> It costs nothing today and it is the layout a vectorised
-/// rasteriser would need later; retrofitting it is the expensive part. A snapshot is written once by the physics
-/// thread, published whole, and then only read — so it needs no locking and the renderer can hold one across as
-/// many frames as it likes.
+/// <b>Built fresh, published whole, never mutated after publishing.</b> A renderer may read a frame on a background
+/// thread and hold it across as many draws as it likes, so a source must hand over a new frame rather than edit the
+/// one it last published. That is what lets it cross threads with no lock.
 /// </para>
 /// <para>
-/// Extents cannot be read back from Box3D (<c>Shape.Bounds</c> is a world AABB, which for a rotated box is not the
-/// same thing), so <see cref="HalfExtents"/> carries what the body was spawned with. For a
-/// <see cref="BodyShape.Sphere"/> only X is meaningful and holds the radius; for a
-/// <see cref="BodyShape.Capsule"/>, X is the radius and Y the half-length of the segment.
+/// <b>Parallel arrays, not an array of structs</b>: the layout a vectorised rasteriser would need, and the expensive
+/// part to retrofit. For a <see cref="BodyShape.Sphere"/> only <see cref="HalfExtents"/>.X is meaningful and holds the
+/// radius; for a <see cref="BodyShape.Capsule"/>, X is the radius and Y the half-length of the segment; for a
+/// <see cref="BodyShape.Mesh"/>, X is the radius the mesh's unit half-extent of 0.5 is scaled to.
+/// </para>
+/// <para>
+/// Not sealed: a host can derive a frame that carries its own columns — a physics scene's velocities, say — and they
+/// stay consistent with the render columns because both are published as one object.
 /// </para>
 /// </remarks>
-public sealed class SceneSnapshot
+public class SceneFrame
 {
     #region Constructors
-    /// <summary>Allocates a snapshot sized for <paramref name="capacity"/> bodies.</summary>
-    public SceneSnapshot(int capacity)
+    /// <summary>Allocates a frame sized for <paramref name="capacity"/> bodies.</summary>
+    public SceneFrame(int capacity)
     {
         Ids = new int[capacity];
         Positions = new Vector3[capacity];
         Rotations = new Quaternion[capacity];
         HalfExtents = new Vector3[capacity];
-        Velocities = new Vector3[capacity];
-        Masses = new float[capacity];
-        MeshIds = new int[capacity];
+        Meshes = new TriangleMesh?[capacity];
         Shapes = new BodyShape[capacity];
-        Awake = new bool[capacity];
         ColorKeys = new int[capacity];
     }
     #endregion
@@ -66,23 +59,11 @@ public sealed class SceneSnapshot
     #region Properties
     /// <summary>How many entries of each array are live.</summary>
     public int Count { get; set; }
-
-    /// <summary>Simulated time in seconds — steps taken times the fixed step, not wall clock.</summary>
-    public double SimTime { get; set; }
-
-    /// <summary>Fixed steps taken since the world was created.</summary>
-    public long StepCount { get; set; }
-
-    /// <summary>How many bodies the engine still considers awake.</summary>
-    public int AwakeCount { get; set; }
-
-    /// <summary>Wall-clock milliseconds the last batch of steps cost, for the HUD.</summary>
-    public double StepMilliseconds { get; set; }
     #endregion
 
     #region Methods
     /// <summary>Finds the entry for <paramref name="id"/>, or -1 if that body is gone. Selection is by id, so this
-    /// is how the UI resolves it against whichever snapshot it happens to be holding.</summary>
+    /// is how the UI resolves it against whichever frame it happens to be holding.</summary>
     public int IndexOf(int id)
     {
         for (var i = 0; i < Count; i++)
@@ -95,8 +76,8 @@ public sealed class SceneSnapshot
     #endregion
 
     #region Fields
-    /// <summary>Stable per-body identifiers, assigned at spawn. Selection and every posted scene command key off
-    /// these rather than an array index, which shifts when a body is deleted.</summary>
+    /// <summary>Stable per-body identifiers. Selection keys off these rather than an array index, which shifts when a
+    /// body is removed.</summary>
     public readonly int[] Ids;
 
     /// <summary>Body centres in world space.</summary>
@@ -105,35 +86,26 @@ public sealed class SceneSnapshot
     /// <summary>Body orientations.</summary>
     public readonly Quaternion[] Rotations;
 
-    /// <summary>Per-shape extents — see the remarks on <see cref="SceneSnapshot"/> for what each component means.</summary>
+    /// <summary>Per-shape extents — see the remarks on <see cref="SceneFrame"/> for what each component means.</summary>
     public readonly Vector3[] HalfExtents;
 
-    /// <summary>Linear velocities, for the velocity colour mode and the inspector.</summary>
-    public readonly Vector3[] Velocities;
-
-    /// <summary>Body masses, for the inspector.</summary>
-    public readonly float[] Masses;
-
-    /// <summary>For a <see cref="BodyShape.Mesh"/> body, its id in the <see cref="Meshes"/> registry; ignored
-    /// otherwise. An id rather than a reference so the snapshot stays a plain value type across the thread boundary.</summary>
-    public readonly int[] MeshIds;
+    /// <summary>For a <see cref="BodyShape.Mesh"/> body, the mesh it is drawn as; ignored otherwise.</summary>
+    /// <remarks>A reference, not an id into a shared list: a frame holds what it draws, so nothing a renderer reads
+    /// can change under it, and a mesh nothing refers to any more can be collected.</remarks>
+    public readonly TriangleMesh?[] Meshes;
 
     /// <summary>Which shape each body is drawn as.</summary>
     public readonly BodyShape[] Shapes;
 
-    /// <summary>Whether the engine still considers each body awake.</summary>
-    public readonly bool[] Awake;
-
-    /// <summary>An index into the renderer's palette, assigned at spawn so a body keeps its colour.</summary>
+    /// <summary>An index into the renderer's palette, so a body keeps its colour from frame to frame.</summary>
     public readonly int[] ColorKeys;
 
     /// <summary>
     /// Optional full affine transform per body, replacing the position/rotation/scale path when present.
     /// </summary>
     /// <remarks>
-    /// Null for the physics scene, which has no use for it: Box3D bodies are a position and a rotation, and no
-    /// collision shape can be sheared. It exists for <see cref="ModelScene"/>, where shear and non-uniform scale are
-    /// the point and there is no solver to disagree with them. A quaternion cannot express either.
+    /// For shear and non-uniform scale, which a quaternion cannot express. <see cref="ModelScene"/> sets it; a
+    /// physics scene leaves it null, since no rigid body can be sheared.
     /// </remarks>
     public Matrix4x4[]? LocalTransforms;
     #endregion

@@ -19,18 +19,18 @@ public sealed class SceneFooter : Control
     #endregion
 
     #region Properties
-    /// <summary>The snapshot to report. Set from <see cref="SceneView.Drew"/>, so the numbers describe the frame on
-    /// screen rather than a tick that has not been drawn yet.</summary>
+    /// <summary>The frame to report. Set from <see cref="SceneView.Drew"/>, so the numbers describe the frame on
+    /// screen rather than a tick that has not been drawn yet. The sandbox's statistics are read when it is a
+    /// <see cref="PhysicsFrame"/>.</summary>
     /// <remarks>
-    /// Repaints on every assignment rather than only when the reference changes. The simulation publishes a fresh
-    /// snapshot per tick, so a reference check would have been equivalent there — but <see cref="ModelScene"/>
-    /// mutates one instance in place, so the reference never changes and the footer froze on the first frame it
-    /// drew. It sat there naming the model you started with while the sidebar showed the one you had switched to.
+    /// Repaints on every assignment rather than only when the reference changes: a model held still publishes no
+    /// new frame, but the line also reports view state — the renderer, the model's name — that changes without
+    /// one. A reference check once froze the footer naming the model you started with.
     /// </remarks>
-    public SceneSnapshot? Snapshot
+    public SceneFrame? Scene
     {
-        get => snapshot;
-        set { snapshot = value; Invalidate(); }
+        get => scene;
+        set { scene = value; Invalidate(); }
     }
 
     /// <summary>Whether the simulation is paused.</summary>
@@ -51,7 +51,7 @@ public sealed class SceneFooter : Control
             return;
         }
 
-        var s = snapshot;
+        var s = scene as PhysicsFrame;
 
         // Line 1 is the run state and the selection. The sidebar carries the same numbers in more detail, but the
         // sidebar can be hidden (`u`) and this cannot, so it stays the one readout that is always on screen -- which
@@ -91,7 +91,7 @@ public sealed class SceneFooter : Control
         WriteRow(1, Keys, new Color(140, 146, 160), new Color(22, 24, 30));
     }
 
-    private string Selection(SceneSnapshot? s)
+    private string Selection(PhysicsFrame? s)
     {
         if (view.Selected is not { } id || s is null) return "no selection";
         var i = s.IndexOf(id);
@@ -113,7 +113,7 @@ public sealed class SceneFooter : Control
     #region Fields
     private readonly SceneView view;
 
-    private SceneSnapshot? snapshot;
+    private SceneFrame? scene;
     private bool paused;
     #endregion
 }

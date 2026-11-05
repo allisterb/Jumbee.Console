@@ -7,6 +7,11 @@ using Jumbee.Console.Mesh;
 /// keys the widgets — see <c>SidebarPanel</c>, which is the only subscriber that matters.</remarks>
 public sealed class SpawnSettings
 {
+    #region Constructors
+    /// <summary>Creates the settings over <paramref name="library"/>, the meshes a mesh spawn picks from.</summary>
+    public SpawnSettings(MeshLibrary library) => Library = library;
+    #endregion
+
     #region Events
     /// <summary>Raised on the UI thread whenever any setting changes.</summary>
     public event Action? Changed;
@@ -43,12 +48,20 @@ public sealed class SpawnSettings
     /// camera a launched body has to start (see <see cref="SceneView.Launch"/>).</summary>
     public float BoundingRadius => Shape == BodyShape.Sphere ? 0.5f * Scale : 0.5f * Scale * 1.7320508f;
 
-    /// <summary>Which registered mesh a <see cref="BodyShape.Mesh"/> spawn uses, or -1 when none is loaded.</summary>
-    public int MeshId
+    /// <summary>The meshes a <see cref="BodyShape.Mesh"/> spawn picks from.</summary>
+    public MeshLibrary Library { get; }
+
+    /// <summary>Which of <see cref="Library"/>'s meshes a <see cref="BodyShape.Mesh"/> spawn uses, or -1 when
+    /// none is chosen.</summary>
+    public int MeshIndex
     {
-        get => meshId;
-        set { if (meshId != value) { meshId = value; Changed?.Invoke(); } }
+        get => meshIndex;
+        set { if (meshIndex != value) { meshIndex = value; Changed?.Invoke(); } }
     }
+
+    /// <summary>The mesh a <see cref="BodyShape.Mesh"/> spawn uses, or <see langword="null"/> when none is
+    /// chosen. Resolved when the spawn is posted, and the reference is what travels to the physics thread.</summary>
+    public TriangleMesh? Mesh => meshIndex >= 0 && meshIndex < Library.Count ? Library[meshIndex] : null;
 
     /// <summary>The size range the sliders and the <c>+</c>/<c>-</c> keys share.</summary>
     public const float MinScale = 0.4f;
@@ -63,25 +76,25 @@ public sealed class SpawnSettings
     public string ShapeName => Shape switch
     {
         BodyShape.Sphere => "sphere",
-        BodyShape.Mesh when MeshId >= 0 => Meshes.NameOf(MeshId),
+        BodyShape.Mesh when Mesh is not null => Library.NameOf(meshIndex),
         _ => "box",
     };
     #endregion
 
     #region Methods
-    /// <summary>Cycles box → sphere → mesh, skipping mesh entirely when nothing has been registered.</summary>
+    /// <summary>Cycles box → sphere → mesh, skipping mesh entirely when the library is empty.</summary>
     public void ToggleShape() => Shape = Shape switch
     {
         BodyShape.Box => BodyShape.Sphere,
-        BodyShape.Sphere when Meshes.RegisteredCount > 0 => BodyShape.Mesh,
+        BodyShape.Sphere when Library.Count > 0 => BodyShape.Mesh,
         _ => BodyShape.Box,
     };
 
-    /// <summary>Steps to the next registered mesh, switching the spawn shape to it.</summary>
+    /// <summary>Steps to the next mesh in <see cref="Library"/>, switching the spawn shape to it.</summary>
     public void NextMesh()
     {
-        if (Meshes.RegisteredCount == 0) return;
-        MeshId = (MeshId + 1) % Meshes.RegisteredCount;
+        if (Library.Count == 0) return;
+        MeshIndex = (MeshIndex + 1) % Library.Count;
         Shape = BodyShape.Mesh;
     }
 
@@ -96,6 +109,6 @@ public sealed class SpawnSettings
     private BodyShape shape = BodyShape.Box;
     private float scale = 1f;
     private float launchSpeed = 20f;
-    private int meshId = -1;
+    private int meshIndex = -1;
     #endregion
 }

@@ -50,7 +50,7 @@ public sealed class SceneView : CompositeControl
                 var request = Volatile.Read(ref pending);
                 if (request is null) return (Rendered?)null;
                 var active = renderer;
-                return new Rendered(active, active.Draw(request), request.Snapshot);
+                return new Rendered(active, active.Draw(request), request.Frame);
             },
             apply: result =>
             {
@@ -59,7 +59,7 @@ public sealed class SceneView : CompositeControl
                 // old renderer's pixels into the surface the new one is now showing.
                 if (!ReferenceEquals(r.Renderer, renderer)) return;
                 r.Renderer.Publish(r.Frame);
-                Published(r.Snapshot);
+                Published(r.Scene);
             });
     }
     #endregion
@@ -68,8 +68,9 @@ public sealed class SceneView : CompositeControl
     /// <summary>The orbit rig. UI-thread owned.</summary>
     public OrbitCamera Camera { get; } = new();
 
-    /// <summary>What the spawn and launch keys produce.</summary>
-    public SpawnSettings Spawn { get; } = new();
+    /// <summary>What the spawn and launch keys produce. The sandbox shell hands in settings over the app's
+    /// <see cref="MeshLibrary"/>; a view over a static scene never spawns, so its default library stays empty.</summary>
+    public SpawnSettings Spawn { get; init; } = new(new MeshLibrary());
 
     /// <summary>The renderer currently drawing the scene.</summary>
     public ISceneRenderer Renderer => renderer;
@@ -108,12 +109,12 @@ public sealed class SceneView : CompositeControl
         }
     }
 
-    /// <summary>The snapshot last drawn — what the footer and inspector should report, so their numbers match the
+    /// <summary>The frame last drawn — what the footer and inspector should report, so their numbers match the
     /// picture rather than running a tick ahead of it.</summary>
-    public SceneSnapshot? Drawn { get; private set; }
+    public SceneFrame? Drawn { get; private set; }
 
-    /// <summary>Raised on the UI thread after each frame is drawn, carrying the snapshot that was drawn.</summary>
-    public event Action<SceneSnapshot>? Drew;
+    /// <summary>Raised on the UI thread after each frame is drawn, carrying the scene that was drawn.</summary>
+    public event Action<SceneFrame>? Drew;
 
     /// <summary>Raised when the active renderer or its edge style changes — however it was changed.</summary>
     /// <remarks>The sidebar's drop-downs and the <c>v</c>/<c>e</c> keys both go through here, which is what keeps
@@ -329,7 +330,7 @@ public sealed class SceneView : CompositeControl
     public void SpawnAtTarget()
     {
         var position = Camera.Target + new Vector3(0, Spawn.DropHeight, 0);
-        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
+        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.Mesh);
         runner?.Post(scene => scene.Add(shape, position, scale, key, default, mesh));
         selectNewestSpawn = true;
     }
@@ -348,7 +349,7 @@ public sealed class SceneView : CompositeControl
         var muzzle = MathF.Max(MinMuzzleDistance, renderer.Projection.Focal * Spawn.BoundingRadius / MuzzleNdcRadius);
         var origin = view.Eye + (view.Forward * muzzle);
         var velocity = view.Forward * Spawn.LaunchSpeed;
-        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.MeshId);
+        var (shape, scale, key, mesh) = (Spawn.Shape, Spawn.Scale, nextColorKey++, Spawn.Mesh);
         runner?.Post(scene => scene.Add(shape, origin, scale, key, velocity, mesh));
         selectNewestSpawn = true;
     }
@@ -371,7 +372,7 @@ public sealed class SceneView : CompositeControl
     /// <summary>Moves the selection to the next body, in spawn order, wrapping.</summary>
     public void SelectNext(int direction = 1)
     {
-        var snapshot = Drawn ?? source.Snapshot;
+        var snapshot = Drawn ?? source.Frame;
         if (snapshot.Count == 0)
         {
             Selected = null;
@@ -443,7 +444,7 @@ public sealed class SceneView : CompositeControl
         lastDrag = position;
         CaptureMouse();
 
-        var snapshot = Drawn ?? source.Snapshot;
+        var snapshot = Drawn ?? source.Frame;
         // Not merely "the pick is ignored": a scene with nothing to grab must ORBIT here, or a press on the model
         // is dead — neither selecting nor turning it, which is how this read as "sometimes it rotates and sometimes
         // it goes white". Which you got depended on whether the pointer landed within the pick radius of the
@@ -670,7 +671,7 @@ public sealed class SceneView : CompositeControl
         Model?.Advance((now - lastTick).TotalSeconds);
         lastTick = now;
 
-        var snapshot = source.Snapshot;
+        var snapshot = source.Frame;
 
         // Selection is by id, so a body deleted by anything other than us (a scene clear, a preset reload) just
         // stops resolving -- drop it rather than leave a highlight pointing at nothing.
@@ -708,7 +709,7 @@ public sealed class SceneView : CompositeControl
     }
 
     // Runs on the UI thread, either inline above or from the render job's apply.
-    private void Published(SceneSnapshot snapshot)
+    private void Published(SceneFrame snapshot)
     {
         Drawn = snapshot;
         Drew?.Invoke(snapshot);
@@ -774,7 +775,7 @@ public sealed class SceneView : CompositeControl
     /// <param name="Renderer">Which renderer produced this — checked before publishing, in case <c>v</c> swapped
     /// renderers while the frame was in flight.</param>
     /// <param name="Frame">The renderer's opaque frame, or <see langword="null"/> if it drew inline.</param>
-    /// <param name="Snapshot">The scene the frame shows, for the <see cref="Drew"/> listeners.</param>
-    private readonly record struct Rendered(ISceneRenderer Renderer, object? Frame, SceneSnapshot Snapshot);
+    /// <param name="Scene">The scene the frame shows, for the <see cref="Drew"/> listeners.</param>
+    private readonly record struct Rendered(ISceneRenderer Renderer, object? Frame, SceneFrame Scene);
     #endregion
 }

@@ -29,7 +29,7 @@ internal static class HarnessRenderer
 {
     #region Methods
     /// <summary>Rasterises one frame from <paramref name="camera"/> and installs it, in one call.</summary>
-    public static void Draw(this ISceneRenderer renderer, SceneSnapshot snapshot, OrbitCamera camera) =>
+    public static void Draw(this ISceneRenderer renderer, SceneFrame snapshot, OrbitCamera camera) =>
         renderer.Publish(renderer.Draw(new FrameRequest(
             snapshot, camera.GetView(), renderer.Surface.ActualWidth, renderer.Surface.ActualHeight)));
     #endregion

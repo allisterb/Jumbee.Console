@@ -15,9 +15,10 @@ using Jumbee.Console.Mesh;
 public static class SandboxShell
 {
     #region Methods
-    /// <summary>Builds the sandbox scene over <paramref name="populate"/>, which fills a fresh world.
-    /// <paramref name="onSwitch"/> is invoked with the scene to change to; see <see cref="ShellType"/>.</summary>
-    public static Sandbox BuildSandbox(Action<PhysicsScene> populate, Action? onLoadModel = null,
+    /// <summary>Builds the sandbox scene over <paramref name="populate"/>, which fills a fresh world, spawning
+    /// meshes from <paramref name="library"/>. <paramref name="onSwitch"/> is invoked with the scene to change to;
+    /// see <see cref="ShellType"/>.</summary>
+    public static Sandbox BuildSandbox(MeshLibrary library, Action<PhysicsScene> populate, Action? onLoadModel = null,
                                        Action<ShellType>? onSwitch = null)
     {
         var runner = new PhysicsRunner(scene =>
@@ -33,7 +34,7 @@ public static class SandboxShell
         // The three reach the screen by genuinely different routes (a Canvas versus half-block cells with a private
         // z-buffer), which is why each brings its own surface and SceneView swaps the child rather than the drawing
         // code. The two solid ones share their rasteriser through MeshRenderer and differ only in shading.
-        var view = new SceneView(runner, new ShadedRenderer() { WrapLighting = true });
+        var view = new SceneView(runner, new ShadedRenderer() { WrapLighting = true }) { Spawn = new(library) };
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
 
@@ -63,13 +64,13 @@ public static class SandboxShell
         sidebar.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
         var footer = new SceneFooter(view);
 
-        // The readouts report the snapshot that was actually DRAWN, not the newest one, so their body count and
-        // clock always agree with the picture beside them.
-        view.Drew += snapshot =>
+        // The readouts report the frame that was actually DRAWN, not the newest one, so their body count and
+        // clock always agree with the picture beside them. Every frame here is the runner's, so a PhysicsFrame.
+        view.Drew += frame =>
         {
-            footer.Snapshot = snapshot;
+            footer.Scene = frame;
             footer.Paused = runner.Paused;
-            sidebar.Report(snapshot, runner.Paused);
+            if (frame is PhysicsFrame physics) sidebar.Report(physics, runner.Paused);
         };
 
         _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
@@ -94,11 +95,13 @@ public static class SandboxShell
         return new Sandbox(root, runner, view, sidebar, parameters, menu);
     }
 
-    /// <summary>Builds the model viewer over the mesh at <paramref name="startIndex"/>.
-    /// <paramref name="onSwitch"/> is invoked with the scene to change to; see <see cref="ShellType"/>.</summary>
-    public static Viewer BuildViewer(int startIndex, Action? onOpenModels = null, Action<ShellType>? onSwitch = null)
+    /// <summary>Builds the model viewer over <paramref name="library"/>, opening on the mesh at
+    /// <paramref name="startIndex"/>. <paramref name="onSwitch"/> is invoked with the scene to change to; see
+    /// <see cref="ShellType"/>.</summary>
+    public static Viewer BuildViewer(MeshLibrary library, int startIndex, Action? onOpenModels = null,
+                                     Action<ShellType>? onSwitch = null)
     {
-        var model = new ModelScene(startIndex);
+        var model = new ModelScene(library, startIndex);
         var view = new SceneView(model, new ShadedRenderer()) { Model = model };
         view.AddRenderer(new WireframeRenderer());
         view.AddRenderer(new SolidRenderer());
@@ -111,7 +114,7 @@ public static class SandboxShell
         var footer = new SceneFooter(view);
         view.Drew += s =>
         {
-            footer.Snapshot = s;
+            footer.Scene = s;
             sidebar.Report();
         };
 

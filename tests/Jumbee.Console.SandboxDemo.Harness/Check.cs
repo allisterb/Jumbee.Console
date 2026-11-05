@@ -33,6 +33,8 @@ var sizeArg = Array.Find(args, a => a.Contains('x') && char.IsDigit(a[0]))?.Spli
 var W = sizeArg is null ? 100 : int.Parse(sizeArg[0]);
 var H = sizeArg is null ? 34 : int.Parse(sizeArg[1]);
 var failures = 0;
+// The meshes the checks below spawn and view. Owned here, as an app owns its own.
+var library = new MeshLibrary();
 
 // --- M3: the shell -------------------------------------------------------------------------------------------
 // Drives SandboxShell -- the REAL assembly Program.cs uses, not a rebuild of it -- and checks the claim the
@@ -70,8 +72,8 @@ if (args.Contains("--aa"))
     _ = new ControlFrame(aaView, borderStyle: BorderStyle.Rounded);
     var aaRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(aaView), aaView);
     _ = ConsoleSnapshot.ToText(aaRoot, W, H);
-    var settleTarget = aaRunner.Snapshot.StepCount + 240;
-    while (aaRunner.Snapshot.StepCount < settleTarget) Thread.Sleep(5);
+    var settleTarget = aaRunner.Frame.StepCount + 240;
+    while (aaRunner.Frame.StepCount < settleTarget) Thread.Sleep(5);
 
     var opt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
     var aaSky = ((HalfBlockSurface)aaShaded.Surface).Background;
@@ -80,7 +82,7 @@ if (args.Contains("--aa"))
     // is only real once the tree has been laid out at least once.
     ConsoleBuffer AaFrame(string name)
     {
-        var snap = aaRunner.Snapshot;
+        var snap = aaRunner.Frame;
         aaShaded.Draw(snap, aaView.Camera);
         _ = ConsoleSnapshot.ToText(aaRoot, W, H);
         aaShaded.Draw(snap, aaView.Camera);
@@ -180,7 +182,7 @@ if (args.Contains("--texture"))
                           $"contrast {map.Contrast:F3}  {map.Colours} colours  gate: {(map.Legible ? "TEXTURE" : "flat")}");
     }
 
-    var texMeshId = Meshes.Register(texMesh, texTag);
+    var texMeshId = library.Add(texMesh, texTag);
     var texRunner = new PhysicsRunner(s =>
     {
         s.AddStaticBox(new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60));
@@ -188,15 +190,15 @@ if (args.Contains("--texture"))
         if (texModel is not null)
         {
             // One model, large and central: this run is for looking at, and a seam needs sub-pixels to show in.
-            s.AddMeshBody(texMeshId, new Vector3(0f, 2.5f, 0f), 5f, 3);
+            s.AddMeshBody(library[texMeshId], new Vector3(0f, 2.5f, 0f), 5f, 3);
             return;
         }
 
         // Knots rather than spheres: they are the only generated mesh carrying UVs, and they are also what a real
         // textured model looks like to the rasteriser -- many small triangles at every angle to the camera. Two of
         // them, close in, so the textured surface is a large share of the frame rather than a detail in it.
-        s.AddMeshBody(texMeshId, new Vector3(-1.9f, 1.7f, 0f), 3.2f, 3);
-        s.AddMeshBody(texMeshId, new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
+        s.AddMeshBody(library[texMeshId], new Vector3(-1.9f, 1.7f, 0f), 3.2f, 3);
+        s.AddMeshBody(library[texMeshId], new Vector3(2.1f, 1.5f, 1.1f), 2.8f, 1);
     });
 
     var texView = new SceneView(texRunner, new ShadedRenderer());
@@ -204,11 +206,11 @@ if (args.Contains("--texture"))
     _ = new ControlFrame(texView, borderStyle: BorderStyle.Rounded);
     var texRoot = new DockPanel(DockedControlPlacement.Bottom, new SceneFooter(texView), texView);
     _ = ConsoleSnapshot.ToText(texRoot, W, H);
-    var texSettle = texRunner.Snapshot.StepCount + 240;
-    while (texRunner.Snapshot.StepCount < texSettle) Thread.Sleep(5);
+    var texSettle = texRunner.Frame.StepCount + 240;
+    while (texRunner.Frame.StepCount < texSettle) Thread.Sleep(5);
     // One settled snapshot for every configuration below. The knots must have stopped moving or each run measures
     // a different scene while looking like a comparison -- the lesson the first bandwidth run in wolf3d taught.
-    var texScene = texRunner.Snapshot;
+    var texScene = texRunner.Frame;
 
     // Distinct fg/bg pairs: the honest proxy for what the emitter will have to spend, since a pair that differs
     // from its neighbour's is a run boundary. Same measure --aa uses, so the two modes' numbers are comparable.
@@ -390,10 +392,10 @@ void Check(string what, bool ok, string? detail = null)
 }
 
 // --- meshes -------------------------------------------------------------------------------------------------------
-// Registered before anything else: the spawn path and the renderers all key off the registry.
-var knotId = Meshes.Register(Meshes.TorusKnot(), "knot");
+// Added first and in this order: the viewer checks below open on index 0 (the knot) and step to 1 (the teapot).
+var knotId = library.Add(Meshes.TorusKnot(), "knot");
 var teapotPath = RepoPaths.At("reference", "projects", "voxcii-main", "models", "teapot.obj");
-var teapotId = File.Exists(teapotPath) ? Meshes.Register(ObjLoader.Load(teapotPath), "teapot") : -1;
+var teapotId = File.Exists(teapotPath) ? library.Add(ObjLoader.Load(teapotPath), "teapot") : -1;
 
 var runner = new PhysicsRunner(scene =>
 {
@@ -405,9 +407,9 @@ var runner = new PhysicsRunner(scene =>
 });
 
 ISceneRenderer renderer = new SolidRenderer();   // Pick is a default interface method: reachable only through the interface
-var view = new SceneView(runner, renderer);
+var view = new SceneView(runner, renderer) { Spawn = new(library) };
 var footer = new SceneFooter(view);
-view.Drew += s => footer.Snapshot = s;
+view.Drew += s => footer.Scene = s;
 _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
 var root = new DockPanel(DockedControlPlacement.Bottom, footer, view);
 
@@ -415,12 +417,12 @@ var root = new DockPanel(DockedControlPlacement.Bottom, footer, view);
 _ = ConsoleSnapshot.ToText(root, W, H);
 
 // Waits for the physics thread to drain posted commands and step past them.
-SceneSnapshot Settle(int steps = 12)
+PhysicsFrame Settle(int steps = 12)
 {
-    var target = runner.Snapshot.StepCount + steps;
+    var target = runner.Frame.StepCount + steps;
     var spun = 0;
-    while (runner.Snapshot.StepCount < target && spun++ < 400) Thread.Sleep(5);
-    var s = runner.Snapshot;
+    while (runner.Frame.StepCount < target && spun++ < 400) Thread.Sleep(5);
+    var s = runner.Frame;
     renderer.Draw(s, view.Camera);
     return s;
 }
@@ -540,14 +542,14 @@ for (var i = 0; i < 20; i++)
     Settle(2);
 }
 
-var dragged = runner.Snapshot;
+var dragged = runner.Frame;
 var draggedPos = dragged.Positions[dragged.IndexOf(grabId)];
 Check("a held body tracks its drag target", Vector3.Distance(draggedPos, to) < 0.5f,
     $"{draggedPos.Y:F2} vs target {to.Y:F2}");
 
 runner.Post(s => s.ReleaseGrab(new Vector3(0, -8f, 0)));
 Settle(2);
-var thrown = runner.Snapshot;
+var thrown = runner.Frame;
 Check("releasing throws it at the given velocity",
     thrown.Velocities[thrown.IndexOf(grabId)].Y < -4f,
     $"vy={thrown.Velocities[thrown.IndexOf(grabId)].Y:F2}");
@@ -567,7 +569,7 @@ for (var i = 0; i < 20; i++)
     Settle(2);
 }
 
-var sunk = runner.Snapshot;
+var sunk = runner.Frame;
 var sunkIndex = sunk.IndexOf(grabId);
 Check("dragging a held body below the floor keeps it on the floor", sunkIndex >= 0 && sunk.Positions[sunkIndex].Y > floorTop - 0.05f,
     sunkIndex < 0 ? "body was lost entirely" : $"y={sunk.Positions[sunkIndex].Y:F2}, floor is y={floorTop:F2}");
@@ -612,7 +614,7 @@ Settle(300);
 
 // --- delete and clear -------------------------------------------------------------------------------------------
 Console.WriteLine("\ndelete / clear:");
-var current = runner.Snapshot;
+var current = runner.Frame;
 before = current.Count;
 view.Selected = current.Ids[2];
 var doomed = current.Ids[2];
@@ -635,7 +637,7 @@ runner.Post(s =>
 
 var final = Settle(120);
 view.Selected = final.Ids[3];
-footer.Snapshot = final;   // in the app this arrives via SceneView.Drew
+footer.Scene = final;   // in the app this arrives via SceneView.Drew
 renderer.Draw(final, view.Camera);
 var text = ConsoleSnapshot.ToText(root, W, H);
 var ink = text.Count(c => c is not (' ' or '\n' or '\r'));
@@ -677,12 +679,12 @@ Check("selecting a body lights cells in the selection colour", selectedCells > u
 
 // --- meshes -------------------------------------------------------------------------------------------------------
 Console.WriteLine("\nmeshes:");
-var knot = Meshes.Get(knotId);
+var knot = library[knotId];
 Check("the torus knot generates", knot.TriangleCount > 500, $"{knot.TriangleCount} triangles, {knot.Vertices.Length} verts");
 
 if (teapotId >= 0)
 {
-    var teapot = Meshes.Get(teapotId);
+    var teapot = library[teapotId];
     Check("the teapot OBJ loads", teapot.TriangleCount > 3000,
         $"{teapot.TriangleCount} triangles, {teapot.Vertices.Length} verts");
 
@@ -701,7 +703,7 @@ else
 // (which is what was here) fails it. Counted as lit sub-pixels rather than as an internal edge count, so it is
 // what a human would see. Bounded above too: MaxTriangles must actually bound the ink.
 {
-    int LitCells(ISceneRenderer r, SceneSnapshot s, OrbitCamera c)
+    int LitCells(ISceneRenderer r, SceneFrame s, OrbitCamera c)
     {
         _ = ConsoleSnapshot.ToText(r.Surface, W, H);
         r.Draw(s, c);
@@ -709,15 +711,14 @@ else
     }
 
     var meshId = teapotId >= 0 ? teapotId : knotId;
-    var one = new SceneSnapshot(1) { Count = 1, AwakeCount = 1 };
+    var one = new SceneFrame(1) { Count = 1 };
     one.Ids[0] = 1;
     one.Shapes[0] = BodyShape.Mesh;
-    one.MeshIds[0] = meshId;
+    one.Meshes[0] = library[meshId];
     one.Positions[0] = new Vector3(0, 5.5f, 0);
     one.Rotations[0] = Quaternion.Identity;
     one.HalfExtents[0] = new Vector3(ModelScene.ViewRadius);
     one.ColorKeys[0] = 1;
-    one.Awake[0] = true;
 
     var wire = new WireframeRenderer();
     var near = new OrbitCamera { Target = new Vector3(0, 5.5f, 0), Distance = 20f };
@@ -750,14 +751,14 @@ else
     const int CW = 240, CH = 80;
     var planePath = RepoPaths.At("media", "models", "plane.obj");
     var subjects = new List<(string Name, int Id)> { (teapotId >= 0 ? "teapot" : "knot", meshId) };
-    if (File.Exists(planePath)) subjects.Add(("plane", Meshes.Register(ObjLoader.Load(planePath), "plane")));
+    if (File.Exists(planePath)) subjects.Add(("plane", library.Add(ObjLoader.Load(planePath), "plane")));
     else Console.WriteLine("  SKIP  plane.obj not found -- the non-uniform-tessellation subject");
 
     foreach (var (subject, id) in subjects)
     {
-    one.MeshIds[0] = id;
+    one.Meshes[0] = library[id];
     var bare = new WireframeRenderer { GridHalfExtent = 0 };   // no floor grid, so the ink IS the body
-    var mesh = Meshes.Get(id);
+    var mesh = library[id];
     var worst = 1.0;
     foreach (var theta in new[] { 0f, MathF.PI / 3, MathF.PI / 2, 2f * MathF.PI / 3, MathF.PI })
     {
@@ -1313,15 +1314,14 @@ finally
 
     int[] Cells(TriangleMesh mesh, TextureMode mode)
     {
-        var snap = new SceneSnapshot(1) { Count = 1, AwakeCount = 1 };
+        var snap = new SceneFrame(1) { Count = 1 };
         snap.Ids[0] = 1;
         snap.Shapes[0] = BodyShape.Mesh;
-        snap.MeshIds[0] = Meshes.Register(mesh, "materials-check");
+        snap.Meshes[0] = mesh;
         snap.Positions[0] = new Vector3(0, 2f, 0);
         snap.Rotations[0] = Quaternion.Identity;
         snap.HalfExtents[0] = new Vector3(2f);
         snap.ColorKeys[0] = 1;
-        snap.Awake[0] = true;
         var shaded = new ShadedRenderer { Texture = mode, Edges = SilhouetteStyle.None, OcclusionStrength = 0f };
         _ = ConsoleSnapshot.ToText(shaded.Surface, 80, 30);
         shaded.Draw(snap, new OrbitCamera { Target = new Vector3(0, 2f, 0), Distance = 7f });
@@ -1366,13 +1366,13 @@ finally
 if (RepoPaths.Optional("media", "models", "capsule.obj") is { } capsuleObj)
 {
     var capsuleMesh = ModelLoader.Load(capsuleObj);
-    using var viewerApp = SandboxShell.BuildViewer(Meshes.Register(capsuleMesh, "capsule-e2e"));
+    using var viewerApp = SandboxShell.BuildViewer(library, library.Add(capsuleMesh, "capsule-e2e"));
     _ = ConsoleSnapshot.ToText(viewerApp.Root, W, H);
     var viewerView = viewerApp.View;
 
     int[] ViewerCells()
     {
-        viewerView.Renderer.Draw(viewerApp.Model.Snapshot, viewerView.Camera);
+        viewerView.Renderer.Draw(viewerApp.Model.Frame, viewerView.Camera);
         return CellColours((HalfBlockSurface)viewerView.Renderer.Surface);
     }
 
@@ -1405,12 +1405,13 @@ else Console.WriteLine("  skip  capsule.obj end to end — media/models not pres
 // A mesh body must be a real dynamic rigid body: it falls, it lands, it sleeps. Spawned well clear of the box
 // tower -- an earlier version dropped it at the origin, straight into the stack, and "it never fell" was the tower
 // holding it up rather than anything wrong with the body.
-var meshSpawn = teapotId >= 0 ? teapotId : knotId;
+var meshSpawn = library[teapotId >= 0 ? teapotId : knotId];
 runner.Post(s => s.AddMeshBody(meshSpawn, new Vector3(6f, 8f, 6f), 1.5f, 42));
 var withMesh = Settle(20);
 var meshIndex = withMesh.Count - 1;
 Check("a mesh body spawns", withMesh.Shapes[meshIndex] == BodyShape.Mesh, withMesh.Shapes[meshIndex].ToString());
-Check("it carries its mesh id", withMesh.MeshIds[meshIndex] == meshSpawn, $"{withMesh.MeshIds[meshIndex]}");
+Check("it carries its mesh", ReferenceEquals(withMesh.Meshes[meshIndex], meshSpawn),
+    withMesh.Meshes[meshIndex] is null ? "none" : $"{withMesh.Meshes[meshIndex]!.TriangleCount} tris");
 Check("it has mass from its hull", withMesh.Masses[meshIndex] > 0, $"{withMesh.Masses[meshIndex]:F1}kg");
 
 var startY = withMesh.Positions[meshIndex].Y;
@@ -1421,33 +1422,49 @@ Check("it falls under gravity", landed.Positions[landedIndex].Y < startY,
 Check("and comes to rest on the floor", landed.Positions[landedIndex].Y > 0f && landed.Positions[landedIndex].Y < 2f,
     $"y={landed.Positions[landedIndex].Y:F2}");
 
+// A model loaded while the sandbox is running must spawn as itself. The library grows AFTER the view was built, as
+// a folder load or the Load model dialog grows it, and the spawn posts the mesh reference itself to the physics
+// thread -- so nothing off the UI thread reads the library, which is the race the old global registry had to be
+// copy-on-write to survive.
+var lateMesh = Meshes.TorusKnot(p: 3, q: 5);
+view.Spawn.MeshIndex = library.Add(lateMesh, "late-knot");
+view.Spawn.Shape = BodyShape.Mesh;
+view.SpawnAtTarget();
+var late = Settle(20);
+var lateBody = late.Count - 1;
+Check("a mesh added after start-up spawns as itself",
+    late.Shapes[lateBody] == BodyShape.Mesh && ReferenceEquals(late.Meshes[lateBody], lateMesh),
+    $"{late.Shapes[lateBody]}, {(ReferenceEquals(late.Meshes[lateBody], lateMesh) ? "the new mesh" : "a different mesh")}");
+Check("and the footer names it", view.Spawn.ShapeName == "late-knot", view.Spawn.ShapeName);
+view.Spawn.Shape = BodyShape.Box;
+
 // --- model viewer -------------------------------------------------------------------------------------------------
 // The `view` scene: no physics, one body, full affine transform. The claim under test is that shear reaches the
-// rasteriser at all -- a quaternion cannot carry it, so it travels via SceneSnapshot.LocalTransforms.
+// rasteriser at all -- a quaternion cannot carry it, so it travels via SceneFrame.LocalTransforms.
 Console.WriteLine("\nmodel viewer:");
-var scene3 = new ModelScene();
-Check("it publishes one body", scene3.Snapshot.Count == 1, $"{scene3.Snapshot.Count}");
-Check("that body is a mesh", scene3.Snapshot.Shapes[0] == BodyShape.Mesh);
-Check("with a local transform", scene3.Snapshot.LocalTransforms is not null);
+var scene3 = new ModelScene(library);
+Check("it publishes one body", scene3.Frame.Count == 1, $"{scene3.Frame.Count}");
+Check("that body is a mesh", scene3.Frame.Shapes[0] == BodyShape.Mesh);
+Check("with a local transform", scene3.Frame.LocalTransforms is not null);
 
 var startName = scene3.Name;
 scene3.Step(+1);
-Check("] steps to the next model", scene3.Name != startName || Meshes.RegisteredCount == 1,
+Check("] steps to the next model", scene3.Name != startName || library.Count == 1,
     $"{startName} -> {scene3.Name}");
 
 // Shear must actually move geometry: transform a point above the origin and check it slides sideways.
 scene3.ResetTransform();
-var upright = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Snapshot.LocalTransforms![0]);
+var upright = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Frame.LocalTransforms![0]);
 scene3.Nudge(0.8f, 0);
-var sheared = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Snapshot.LocalTransforms![0]);
+var sheared = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Frame.LocalTransforms![0]);
 Check("shear displaces a point by its height", Math.Abs(sheared.X - upright.X) > 0.5f,
     $"x {upright.X:F2} -> {sheared.X:F2}");
 Check("and leaves the origin alone",
-    Vector3.Transform(Vector3.Zero, scene3.Snapshot.LocalTransforms![0]).Length() < 1e-4f);
+    Vector3.Transform(Vector3.Zero, scene3.Frame.LocalTransforms![0]).Length() < 1e-4f);
 
 scene3.ResetTransform();
 scene3.ScaleAxis(1, 2f);
-var stretched = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Snapshot.LocalTransforms![0]);
+var stretched = Vector3.Transform(new Vector3(0, 0.5f, 0), scene3.Frame.LocalTransforms![0]);
 Check("non-uniform scale stretches one axis only", stretched.Y > upright.Y * 1.5f,
     $"y {upright.Y:F2} -> {stretched.Y:F2}");
 
@@ -1461,7 +1478,7 @@ var viewerRoot = new DockPanel(DockedControlPlacement.Bottom, viewerFooter, view
 viewer.Camera.Distance = 16f;
 viewer.Camera.Target = Vector3.Zero;
 _ = ConsoleSnapshot.ToText(viewerRoot, W, H);
-viewerRenderer.Draw(scene3.Snapshot, viewer.Camera);
+viewerRenderer.Draw(scene3.Frame, viewer.Camera);
 var viewerText = ConsoleSnapshot.ToText(viewerRoot, W, H);
 Check("the viewer renders the model", viewerText.Count(c => c is not (' ' or '\n' or '\r')) > 500,
     $"{viewerText.Count(c => c is not (' ' or '\n' or '\r'))} glyphs");
@@ -1511,9 +1528,9 @@ Check("and does not load the working directory itself", notCwd.Files.Length == 0
     $"{notCwd.Files.Length} files, error={notCwd.Error ?? "none"}");
 
 // The start index must survive into the scene.
-var startAt = new ModelScene(1);
-Check("ModelScene opens on the requested index", startAt.MeshId == 1, $"{startAt.MeshId} ({startAt.Name})");
-Check("and clamps an out-of-range one", new ModelScene(999).MeshId == Meshes.RegisteredCount - 1);
+var startAt = new ModelScene(library, 1);
+Check("ModelScene opens on the requested index", startAt.MeshIndex == 1, $"{startAt.MeshIndex} ({startAt.Name})");
+Check("and clamps an out-of-range one", new ModelScene(library, 999).MeshIndex == library.Count - 1);
 
 // --- STL ----------------------------------------------------------------------------------------------------------
 // Checked against the FILE rather than against the loader's own opinion: the facet count, the degenerate facets and
@@ -1730,7 +1747,7 @@ if (args.Contains("--png"))
     {
         var outDirV = args.FirstOrDefault(a => a.Contains("out="))?.Split(Char.Parse("="))[1] ?? ".";
         var vopt = new SnapshotImageOptions { FontFamily = "Cascadia Mono", CellWidth = 9, CellHeight = 18 };
-        var vm = new ModelScene();
+        var vm = new ModelScene(library);
         var vv = new SceneView(vm, new ShadedRenderer()) { Model = vm };
         var vf = new SceneFooter(vv);
         _ = new ControlFrame(vv, borderStyle: BorderStyle.Rounded);
@@ -1741,8 +1758,8 @@ if (args.Contains("--png"))
         {
             vv.SetRenderer(r);
             _ = ConsoleSnapshot.ToText(vr, W, H);
-            r.Draw(vm.Snapshot, vv.Camera);
-            vf.Snapshot = vm.Snapshot;
+            r.Draw(vm.Frame, vv.Camera);
+            vf.Scene = vm.Frame;
             ConsoleSnapshot.SavePng(vr, W, H, Path.Combine(outDirV, name + ".png"), vopt);
             Console.WriteLine("  wrote " + name + ".png");
         }
@@ -1765,9 +1782,9 @@ if (args.Contains("--png"))
     {
         view.SetRenderer(r);
         r.Selected = view.Selected;
-        r.Draw(runner.Snapshot, view.Camera);
+        r.Draw(runner.Frame, view.Camera);
         _ = ConsoleSnapshot.ToText(root, W, H);
-        r.Draw(runner.Snapshot, view.Camera);
+        r.Draw(runner.Frame, view.Camera);
         ConsoleSnapshot.SavePng(root, W, H, Path.Combine(outDir, $"{name}.png"), imageOptions);
         Console.WriteLine($"  wrote {name}.png");
     }
@@ -1778,11 +1795,11 @@ if (args.Contains("--png"))
     runner.Post(s =>
     {
         s.ClearBodies();
-        s.AddMeshBody(teapotId >= 0 ? teapotId : knotId, new Vector3(-1.6f, 0.9f, 0), 3.2f, 3);
-        s.AddMeshBody(knotId, new Vector3(2.2f, 1.0f, 1.2f), 3.0f, 1);
+        s.AddMeshBody(library[teapotId >= 0 ? teapotId : knotId], new Vector3(-1.6f, 0.9f, 0), 3.2f, 3);
+        s.AddMeshBody(library[knotId], new Vector3(2.2f, 1.0f, 1.2f), 3.0f, 1);
         s.AddSphere(new Vector3(0.4f, 0.7f, -2.4f), 0.7f, 4);
     });
-    for (var i = 0; i < 60 && runner.Snapshot.Count < 3; i++) Thread.Sleep(20);
+    for (var i = 0; i < 60 && runner.Frame.Count < 3; i++) Thread.Sleep(20);
     Settle(150);
     Shot(new WireframeRenderer(), "1-wireframe");
     Shot(new SolidRenderer(), "2-solid");

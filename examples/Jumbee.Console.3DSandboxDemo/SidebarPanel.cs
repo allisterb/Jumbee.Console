@@ -19,7 +19,7 @@ using Jumbee.Console.Mesh;
 /// own change event does nothing.
 /// </para>
 /// <para>
-/// The readouts update from <see cref="SceneView.Drew"/> — the snapshot that was actually <em>drawn</em>, not the
+/// The readouts update from <see cref="SceneView.Drew"/> — the frame that was actually <em>drawn</em>, not the
 /// newest one — so the numbers always describe the picture beside them.
 /// </para>
 /// </remarks>
@@ -136,7 +136,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
     #region Methods
     /// <summary>Updates the readouts from the frame that was just drawn. Wired to <see cref="SceneView.Drew"/>.</summary>
-    public void Report(SceneSnapshot snapshot, bool paused)
+    public void Report(PhysicsFrame snapshot, bool paused)
     {
         drawn = snapshot;
         var edgeName = view.Edges is { } e and not SilhouetteStyle.None ? "/" + e.ToString().ToLowerInvariant() : "";
@@ -146,7 +146,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         RefreshInspector();
     }
 
-    /// <summary>Rebuilds the mesh drop-down from the registry — after a model has been loaded at runtime.</summary>
+    /// <summary>Rebuilds the mesh drop-down from the spawn library — after a model has been loaded at runtime.</summary>
     public void RefreshMeshes()
     {
         syncing = true;
@@ -198,7 +198,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             // report the wireframe's real settings, and Enabled is what says "not while this renderer is drawing".
             stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
             shape.SelectedIndex = (int)spawn.Shape;
-            mesh.SelectedIndex = spawn.MeshId >= 0 ? spawn.MeshId : 0;
+            mesh.SelectedIndex = spawn.MeshIndex >= 0 ? spawn.MeshIndex : 0;
             size.Value = spawn.Scale;
             speed.Value = spawn.LaunchSpeed;
             gravity.Value = parameters.Gravity;
@@ -228,8 +228,9 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
     private void SelectMesh()
     {
-        if (Meshes.RegisteredCount == 0) return;
-        view.Spawn.MeshId = Math.Clamp(mesh.SelectedIndex, 0, Meshes.RegisteredCount - 1);
+        var count = view.Spawn.Library.Count;
+        if (count == 0) return;
+        view.Spawn.MeshIndex = Math.Clamp(mesh.SelectedIndex, 0, count - 1);
         view.Spawn.Shape = BodyShape.Mesh;
     }
 
@@ -250,11 +251,9 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         return Array.FindIndex(WireframeRenderer.ScanCapChoices, c => c.Value == WireframeRenderer.DefaultScanCap);
     }
 
-    // Read from the registry rather than handed a fixed list: models can be loaded while the app is running, and
+    // Read from the library rather than handed a fixed list: models can be loaded while the app is running, and
     // RefreshMeshes puts the new ones in the drop-down without rebuilding the panel.
-    private static string[] MeshNames() => Meshes.RegisteredCount == 0
-        ? ["(none)"]
-        : [.. Enumerable.Range(0, Meshes.RegisteredCount).Select(Meshes.NameOf)];
+    private string[] MeshNames() => view.Spawn.Library.Count == 0 ? ["(none)"] : view.Spawn.Library.Names();
 
     private void BuildSpawnMeshOptions() => mesh = new Select(MeshNames()) { FitContent = true };
 
@@ -443,7 +442,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     // which this panel did not account for, so its captions sat a cell left of every track.
     private const int LabelWidth = 12;
     private const int LabelColumn = LabelWidth + 1;
-    private SceneSnapshot? drawn;
+    private PhysicsFrame? drawn;
     private Section[] sections = [];
     private bool syncing;
     private bool spaced = true;

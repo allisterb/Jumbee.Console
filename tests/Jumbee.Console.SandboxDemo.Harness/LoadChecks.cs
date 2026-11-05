@@ -52,8 +52,9 @@ internal static class LoadChecks
             File.WriteAllText(Path.Combine(dir, "d-broken.obj"), "this is not a model\n");
             var set = ModelLibrary.Resolve(dir);
 
-            Meshes.Register(Meshes.TorusKnot(), "knot");
-            var viewer = SandboxShell.BuildViewer(0);
+            var library = new MeshLibrary();
+            library.Add(Meshes.TorusKnot(), "knot");
+            var viewer = SandboxShell.BuildViewer(library, 0);
             var frames = 0;
             viewer.View.Drew += _ => frames++;
             var screen = new CaptureConsole(width, height);
@@ -63,9 +64,9 @@ internal static class LoadChecks
 
             // --- a full load ------------------------------------------------------------------------------------
             Console.WriteLine("full load:");
-            var before = Meshes.RegisteredCount;
+            var before = library.Count;
             ModelLoadResult? result = null;
-            UI.Invoke(() => ModelLoadDialog.Load(set, r => result = r));
+            UI.Invoke(() => ModelLoadDialog.Load(set, library, r => result = r));
 
             var shown = WaitUntil(() => screen.Text().Contains("Loading models"), 3000);
             Check("the modal appears over the running viewer", shown);
@@ -80,12 +81,12 @@ internal static class LoadChecks
             Check("the load completes", result is not null);
             if (result is { } r1)
             {
-                Check("every good file is registered, in folder order", r1.Loaded == 3 && Meshes.RegisteredCount == before + 3
-                    && Meshes.NameOf(before) == "a-dragon" && Meshes.NameOf(before + 2) == "c-bee",
+                Check("every good file is added, in folder order", r1.Loaded == 3 && library.Count == before + 3
+                    && library.NameOf(before) == "a-dragon" && library.NameOf(before + 2) == "c-bee",
                     $"{r1.Loaded} loaded");
                 Check("the broken file is reported, not dropped", r1.Failures is [("d-broken.obj", _)],
                     string.Join("; ", r1.Failures.Select(f => $"{f.File}: {f.Reason}")));
-                Check("and the load opens on the first model", r1.StartId == before, $"start {r1.StartId}");
+                Check("and the load opens on the first model", r1.StartIndex == before, $"start {r1.StartIndex}");
                 Check("not marked stopped", !r1.Stopped);
             }
             WaitUntil(() => !screen.Text().Contains("Loading models"), 2000);
@@ -94,9 +95,9 @@ internal static class LoadChecks
 
             // --- Escape mid-load ----------------------------------------------------------------------------------
             Console.WriteLine("\nEscape mid-load:");
-            before = Meshes.RegisteredCount;
+            before = library.Count;
             result = null;
-            UI.Invoke(() => ModelLoadDialog.Load(set, r => result = r));
+            UI.Invoke(() => ModelLoadDialog.Load(set, library, r => result = r));
             WaitUntil(() => screen.Text().Contains("a-dragon.obj"), 3000);
             // Through the root overlay, exactly as a live key arrives.
             UI.Invoke(() => UI.Overlay!.OnInput(new UI.InputEventArgs(
@@ -107,7 +108,7 @@ internal static class LoadChecks
             if (result is { } r2)
             {
                 Check("the load stops at the next file", r2.Stopped && r2.Loaded == 1, $"{r2.Loaded} loaded, stopped={r2.Stopped}");
-                Check("and keeps what it had parsed", Meshes.RegisteredCount == before + 1);
+                Check("and keeps what it had parsed", library.Count == before + 1);
             }
             else Check("the stopped load still reports", false);
 

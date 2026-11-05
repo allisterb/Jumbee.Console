@@ -10,13 +10,13 @@ using Jumbee.Console.Mesh;
 
 /// <summary>
 /// Owns the physics world and steps it on its own thread at a fixed 1/60 s, publishing one
-/// <see cref="SceneSnapshot"/> per tick for the UI thread to render.
+/// <see cref="PhysicsFrame"/> per tick for the UI thread to render.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The snapshot-per-tick pattern from <c>docs/controls/Live Data.md</c>: the world, the body list and every
 /// <c>Body</c> handle belong to this thread and are never touched from outside it. The UI thread reads
-/// <see cref="Snapshot"/> — a reference swap, so it always gets a whole consistent tick — and posts mutations
+/// <see cref="Frame"/> — a reference swap, so it always gets a whole consistent tick — and posts mutations
 /// through <see cref="Post"/>, which are drained at the top of a step rather than applied mid-solve.
 /// </para>
 /// <para>
@@ -35,7 +35,7 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
     public PhysicsRunner(Action<PhysicsScene> build)
     {
         this.build = build;
-        snapshot = new SceneSnapshot(0);
+        frame = new PhysicsFrame(0);
         thread = new Thread(Run) { IsBackground = true, Name = "physics" };
         thread.Start();
     }
@@ -43,7 +43,9 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
 
     #region Properties
     /// <summary>The most recently published tick. Never null, never torn — read it as often as you like.</summary>
-    public SceneSnapshot Snapshot => Volatile.Read(ref snapshot);
+    public PhysicsFrame Frame => Volatile.Read(ref frame);
+
+    SceneFrame ISceneSource.Frame => Frame;
 
     /// <summary>When set, time stops accumulating and only <see cref="StepOnce"/> advances the world.</summary>
     public bool Paused
@@ -138,12 +140,12 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
         }
     }
 
-    // A fresh snapshot per tick. ~200 bodies is ~12 KB, so ~0.7 MB/s of gen-0 at 60 Hz — churn the collector barely
+    // A fresh frame per tick. ~200 bodies is ~12 KB, so ~0.7 MB/s of gen-0 at 60 Hz — churn the collector barely
     // notices, and the alternative (recycling buffers) would hand the renderer an array being overwritten under it.
     private void Publish(PhysicsScene scene, double stepMs)
     {
         var bodies = scene.Bodies;
-        var next = new SceneSnapshot(bodies.Count) { Count = bodies.Count };
+        var next = new PhysicsFrame(bodies.Count) { Count = bodies.Count };
         var awake = 0;
         for (var i = 0; i < bodies.Count; i++)
         {
@@ -155,7 +157,7 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
             next.Masses[i] = b.Handle.Mass;
             next.HalfExtents[i] = b.HalfExtents;
             next.Shapes[i] = b.Shape;
-            next.MeshIds[i] = b.MeshId;
+            next.Meshes[i] = b.Mesh;
             next.ColorKeys[i] = b.ColorKey;
             next.Awake[i] = b.Handle.IsAwake;
             if (next.Awake[i]) awake++;
@@ -165,7 +167,7 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
         next.StepCount = scene.StepCount;
         next.SimTime = scene.StepCount * FixedStep;
         next.StepMilliseconds = stepMs;
-        Volatile.Write(ref snapshot, next);
+        Volatile.Write(ref frame, next);
     }
     #endregion
 
@@ -183,7 +185,7 @@ public sealed class PhysicsRunner : ISceneSource, IDisposable
     private readonly Thread thread;
     private readonly ConcurrentQueue<Action<PhysicsScene>> commands = new();
 
-    private SceneSnapshot snapshot;
+    private PhysicsFrame frame;
     private volatile bool running = true;
     private bool paused;
     private double timeScale = 1.0;
@@ -240,7 +242,7 @@ public sealed class PhysicsScene : IDisposable
     }
 
     /// <summary>
-    /// Spawns a dynamic body shaped like <paramref name="meshId"/>'s mesh, colliding as that mesh's convex hull.
+    /// Spawns a dynamic body shaped like <paramref name="mesh"/>, colliding as its convex hull.
     /// </summary>
     /// <remarks>
     /// A hull, not the triangles, and not by choice: <c>Body.AddMesh</c> requires a <b>static</b> body, so a
@@ -249,9 +251,8 @@ public sealed class PhysicsScene : IDisposable
     /// not catch on anything and nothing drops through a torus's hole. Approximating a concave shape properly means
     /// a compound of several hulls (<c>CompoundBuilder.AddHull</c>), which is a bigger piece of work.
     /// </remarks>
-    public int AddMeshBody(int meshId, Vector3 position, float scale, int colorKey, Vector3 velocity = default)
+    public int AddMeshBody(TriangleMesh mesh, Vector3 position, float scale, int colorKey, Vector3 velocity = default)
     {
-        var mesh = Meshes.Get(meshId);
         var points = new Vector3[mesh.Vertices.Length];
         for (var i = 0; i < points.Length; i++) points[i] = mesh.Vertices[i] * scale;
 
@@ -264,15 +265,16 @@ public sealed class PhysicsScene : IDisposable
         }
 
         var radius = 0.5f * scale;
-        return Track(handle, BodyShape.Mesh, new Vector3(radius), colorKey, velocity, meshId);
+        return Track(handle, BodyShape.Mesh, new Vector3(radius), colorKey, velocity, mesh);
     }
 
-    /// <summary>Spawns whichever shape <paramref name="shape"/> names, sized by <paramref name="scale"/>.</summary>
+    /// <summary>Spawns whichever shape <paramref name="shape"/> names, sized by <paramref name="scale"/>. A
+    /// <see cref="BodyShape.Mesh"/> with no <paramref name="mesh"/> spawns a box.</summary>
     public int Add(BodyShape shape, Vector3 position, float scale, int colorKey, Vector3 velocity = default,
-                   int meshId = -1) => shape switch
+                   TriangleMesh? mesh = null) => shape switch
     {
         BodyShape.Sphere => AddSphere(position, 0.5f * scale, colorKey, velocity),
-        BodyShape.Mesh when meshId >= 0 => AddMeshBody(meshId, position, scale, colorKey, velocity),
+        BodyShape.Mesh when mesh is not null => AddMeshBody(mesh, position, scale, colorKey, velocity),
         _ => AddBox(position, new Vector3(0.5f * scale), colorKey, velocity),
     };
 
@@ -405,7 +407,7 @@ public sealed class PhysicsScene : IDisposable
         }
     }
 
-    private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity, int meshId = -1)
+    private int Track(Body handle, BodyShape shape, Vector3 halfExtents, int colorKey, Vector3 velocity, TriangleMesh? mesh = null)
     {
         var id = ++nextId;
         handle.UserData = (ulong)id;
@@ -413,7 +415,7 @@ public sealed class PhysicsScene : IDisposable
         handle.LinearDamping = damping;
         handle.AngularDamping = damping;
         ApplyMaterial(handle);
-        bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey, meshId));
+        bodies.Add(new SandboxBody(id, handle, shape, halfExtents, colorKey, mesh));
         return id;
     }
 
@@ -469,7 +471,8 @@ public sealed class PhysicsScene : IDisposable
 /// <param name="Id">Stable identifier — what selection and posted commands refer to.</param>
 /// <param name="Handle">The Box3D handle. Valid only on the physics thread.</param>
 /// <param name="Shape">How to draw it.</param>
-/// <param name="HalfExtents">Extents as spawned — see <see cref="SceneSnapshot.HalfExtents"/>.</param>
+/// <param name="HalfExtents">Extents as spawned — see <see cref="SceneFrame.HalfExtents"/>.</param>
 /// <param name="ColorKey">Palette index, fixed at spawn so a body keeps its colour.</param>
-/// <param name="MeshId">Registry id for a <see cref="BodyShape.Mesh"/> body; -1 otherwise.</param>
-public readonly record struct SandboxBody(int Id, Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey, int MeshId = -1);
+/// <param name="Mesh">The mesh a <see cref="BodyShape.Mesh"/> body is drawn as; null otherwise.</param>
+public readonly record struct SandboxBody(int Id, Body Handle, BodyShape Shape, Vector3 HalfExtents, int ColorKey,
+                                          TriangleMesh? Mesh = null);

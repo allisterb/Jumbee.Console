@@ -24,8 +24,8 @@ using Jumbee.Console.Mesh;
 //   shaded    -- per-pixel point light with specular, plus silhouettes and ambient occlusion.
 //
 // Threading (sandbox only) is the pattern from docs/controls/Live Data.md: the physics world, the body list and
-// every Box3D handle belong to the physics thread, which publishes one immutable SceneSnapshot per tick. The UI
-// thread only ever reads the newest snapshot and posts mutations back. There is no lock anywhere.
+// every Box3D handle belong to the physics thread, which publishes one immutable PhysicsFrame per tick. The UI
+// thread only ever reads the newest frame and posts mutations back. There is no lock anywhere.
 
 // The scene the running one asked to become, and which model the viewer should open on when it is next built. Both
 // are read by Run between shells — never while one is running — so neither needs marshalling.
@@ -34,6 +34,9 @@ var viewerStart = 0;
 var scannedModelsFolder = false;
 // A folder the next viewer should load once its UI is up — behind a modal, not before the UI appears.
 ModelSet? pendingFolder = null;
+// Every mesh the app has loaded, in load order: what the viewer steps through and the sandbox spawns from. One for
+// the app's lifetime, so a model loaded in either scene is still there after a switch.
+var library = new MeshLibrary();
 
 // An OPTION on the root, not a positional argument: a positional there would be inherited by the `view` subcommand
 // (so its help lists `<models>` twice) and would make `app foo.obj` versus `app view` ambiguous to parse.
@@ -72,11 +75,11 @@ root.SetAction(async (parse, ct) =>
 {
     // A generated torus knot is always available: it gives the renderers geometry with real curvature and
     // self-occlusion to be compared on, and it means the mesh path works with no third-party asset.
-    Meshes.Register(Meshes.TorusKnot(), "knot");
+    library.Add(Meshes.TorusKnot(), "knot");
     if (!LoadModels(parse.GetValue(sandboxModels))) return 1;
     // Before the UI, and after the models: verifying is instead of running, and the viewer half of the check wants
-    // whatever was loaded to be registered so a --model that fails to parse fails the check too.
-    if (parse.GetValue(verify)) return Verify.Run();
+    // whatever was loaded to be in the library so a --model that fails to parse fails the check too.
+    if (parse.GetValue(verify)) return Verify.Run(library);
     return await Run(ShellType.Sandbox, 0);
 });
 
@@ -111,7 +114,7 @@ Command ViewerCommand(string name)
 
         // The generated knot goes FIRST: it is what the viewer shows while the folder loads, spinning behind the
         // modal, and what it still has to show if the folder turns out to hold nothing that parses.
-        Meshes.Register(Meshes.TorusKnot(), "knot");
+        library.Add(Meshes.TorusKnot(), "knot");
         return await Run(ShellType.ModelViewer, 0);
     });
     return command;
@@ -140,7 +143,7 @@ async Task<int> Run(ShellType shell, int startIndex)
 // Switching INTO the viewer from a sandbox that was launched without the view verb: nothing has looked at the models
 // folder, because only that verb does at startup — so the viewer arrived with just the generated knot even with a
 // folder full of models sitting right there. Look now, once: repeated switches must not re-parse the directory, and
-// models loaded this way stay in the registry, spawnable back in the sandbox. The viewer opens on `fallback` and
+// models loaded this way stay in the library, spawnable back in the sandbox. The viewer opens on `fallback` and
 // moves to the folder's first model when the load behind its modal finishes.
 int OpenModelsFolder(int fallback)
 {
@@ -157,7 +160,7 @@ int OpenModelsFolder(int fallback)
 // Loading is EAGER. Parsing on first display would trade a one-off startup cost for a stall in the middle of
 // cycling, which is the worse place to put it: measured, the four reference models total ~750 ms and the
 // 250k-triangle dragon is 608 ms of that on its own.
-static int LoadModelDirectory(string? path)
+int LoadModelDirectory(string? path)
 {
     var set = ModelLibrary.Resolve(path);
     if (set.Error is { } error)
@@ -166,17 +169,17 @@ static int LoadModelDirectory(string? path)
         return -1;
     }
 
-    // Offset by what is already registered: ModelSet.StartIndex counts within the directory, and after a runtime
-    // reload the registry already holds the previous folder's models (plus the generated knot) ahead of these.
-    var offset = Meshes.RegisteredCount;
+    // Offset by what the library already holds: ModelSet.StartIndex counts within the directory, and after a
+    // runtime reload the library already holds the previous folder's models (plus the generated knot) ahead of these.
+    var offset = library.Count;
     return set.Files.All(LoadModel) ? offset + set.StartIndex : -1;
 }
 
-static bool LoadModel(string path)
+bool LoadModel(string path)
 {
     try
     {
-        Meshes.Register(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+        library.Add(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
         return true;
     }
     // UnauthorizedAccessException is not an IOException: it is what Windows reports for a path that can't be opened
@@ -188,9 +191,9 @@ static bool LoadModel(string path)
     }
 }
 
-// Registers each model, reporting the first failure rather than starting a UI that is missing what was asked for. A
+// Adds each model to the library, reporting the first failure rather than starting a UI that is missing what was asked for. A
 // directory contributes every model in it, by the same rules as the viewer's path argument.
-static bool LoadModels(string[]? paths) =>
+bool LoadModels(string[]? paths) =>
     (paths ?? []).All(p => Directory.Exists(p) ? LoadModelDirectory(p) >= 0 : LoadModel(p));
 
 // The default scene: physics, a floor, and everything you can do to a pile of bodies.
@@ -199,13 +202,13 @@ async Task<int> RunSandbox()
     // The whole shell — viewport, sidebar, menu, footer, keys — is assembled by SandboxShell so the headless
     // harness can drive the real one rather than a rebuild of it.
     SandboxShell.Sandbox app = default;
-    app = SandboxShell.BuildSandbox(Populate, () => LoadMeshDialog(app), RequestSwitch);
+    app = SandboxShell.BuildSandbox(library, Populate, () => LoadMeshDialog(app), RequestSwitch);
     UI.Post(() => UI.SetFocus(app.View));
 
     await UI.Start(app.Root, width: 120, height: 48, fps: 60);
     // Whatever the spawn drop-down was pointing at is what the viewer opens on, so switching to it shows the model
     // you were about to throw rather than an arbitrary one.
-    viewerStart = Math.Max(0, app.View.Spawn.MeshId);
+    viewerStart = Math.Max(0, app.View.Spawn.MeshIndex);
     app.Dispose();
     return 0;
 }
@@ -227,9 +230,9 @@ static void LoadMeshDialog(SandboxShell.Sandbox app) =>
         if (path is null) return;
         try
         {
-            var id = Meshes.Register(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
+            var index = app.View.Spawn.Library.Add(ModelLoader.Load(path), Path.GetFileNameWithoutExtension(path));
             app.Sidebar.RefreshMeshes();
-            app.View.Spawn.MeshId = id;
+            app.View.Spawn.MeshIndex = index;
             app.View.Spawn.Shape = BodyShape.Mesh;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -262,9 +265,9 @@ static void OpenModelsDialog(SandboxShell.Viewer app)
 // Loads a folder behind the progress modal, then shows its first model — or the one the path named. The viewer is
 // live throughout: it keeps turning whatever it was showing until the load hands it something new.
 static void LoadFolder(SandboxShell.Viewer app, ModelSet set) =>
-    ModelLoadDialog.Load(set, result =>
+    ModelLoadDialog.Load(set, app.Model.Library, result =>
     {
-        if (result.StartId >= 0) app.Model.Reload(result.StartId);
+        if (result.StartIndex >= 0) app.Model.Reload(result.StartIndex);
         app.Sidebar.Report();
 
         if (result.Failures.Length > 0)
@@ -280,14 +283,14 @@ static void LoadFolder(SandboxShell.Viewer app, ModelSet set) =>
 // ambient occlusion to land, both of which a model floating in a void loses.
 async Task<int> RunModelViewer(int startIndex)
 {
-    if (Meshes.RegisteredCount == 0)
+    if (library.Count == 0)
     {
         Console.Error.WriteLine("nothing to show.");
         return 1;
     }
 
     SandboxShell.Viewer app = default;
-    app = SandboxShell.BuildViewer(startIndex, () => OpenModelsDialog(app), RequestSwitch);
+    app = SandboxShell.BuildViewer(library, startIndex, () => OpenModelsDialog(app), RequestSwitch);
     UI.Post(() => UI.SetFocus(app.View));
     // Posted, so it runs once Start is up: the modal needs the overlay Start creates.
     if (pendingFolder is { } folder)
@@ -298,7 +301,7 @@ async Task<int> RunModelViewer(int startIndex)
 
     await UI.Start(app.Root, width: 120, height: 48, fps: 60);
     // Come back to the model you left on, if this one is switched away from and later returned to.
-    viewerStart = app.Model.MeshId;
+    viewerStart = app.Model.MeshIndex;
     app.Dispose();
     return 0;
 }
