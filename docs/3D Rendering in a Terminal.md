@@ -991,7 +991,9 @@ The renderer, camera and model loaders are in the
 | `Mesh/Scene/SceneFrame.cs` | the immutable parallel-array frame handed to the renderer; it holds the meshes it draws |
 | `Mesh/Scene/MeshLibrary.cs` | the app-owned list of named meshes a viewer steps through and a picker lists |
 | `Mesh/Controls/MeshView.cs` | the viewport control: the off-thread render loop, the orbit camera and its keys, picking, and the model keys |
+| `Mesh/Controls/MeshInspector.cs` | the sidebar of stock controls bound to a `MeshView`: renderer settings, model, scale, shear, camera |
 | demo: `SandboxView.cs` | a `MeshView` plus spawn, launch, grab-and-throw, delete and clear |
+| demo: `SidebarPanel.cs` | the sandbox's sidebar: its own Scene, Spawn, World and Inspector sections around a folded `MeshInspector` |
 | demo: `PhysicsRunner.cs`, `PhysicsFrame.cs` | the physics thread, the fixed-step loop, and the frame it publishes, with the physics-only columns |
 
 Every measurement quoted here, plus the reasoning behind each decision and the bugs met on the way, is recorded

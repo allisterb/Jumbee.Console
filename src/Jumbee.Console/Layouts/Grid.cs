@@ -47,10 +47,11 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// <exception cref="ArgumentException">The control grid's row/column counts don't match
     /// <paramref name="rowHeights"/>/<paramref name="columnWidths"/>.</exception>
     public Grid(int[] rowHeights, int[] columnWidths, params IFocusable?[][] controls ) : base(new ConsoleGUI.Controls.Grid())
-    {                
+    {
         control.Rows = rowHeights.Select(h => new ConsoleGUI.Controls.Grid.RowDefinition(h)).ToArray();
         control.Columns = columnWidths.Select(w => new ConsoleGUI.Controls.Grid.ColumnDefinition(w)).ToArray();
-        
+        cells = new IFocusable?[rowHeights.Length, columnWidths.Length];
+
         if (controls.Length != rowHeights.Length)
         {
             throw new ArgumentException($"The number of control rows: {controls.Length} must match the number of row heights: {rowHeights.Length}.");
@@ -70,9 +71,9 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
             {
                 // A null cell is simply never given a child: the underlying grid returns an empty character for a
                 // cell it has no drawing context for, so a gap costs nothing rather than costing a blank control.
-                if (controls[r][c] is { } cell) control.AddChild(c, r, cell.FocusableControl);
+                if (controls[r][c] is { } cell) SetChild(r, c, cell);
             }
-        }       
+        }
     }
     #endregion
 
@@ -80,7 +81,9 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     /// <summary>Places <paramref name="child"/> in the cell at the given <paramref name="row"/> and <paramref name="column"/>.</summary>
     public void SetChild(int row, int column, IFocusable child)
     {
-        control.AddChild(column, row, child.FocusableControl);
+        // Routing reads `cells`; the grid binds the render node, so a nested layout's damage isn't dropped.
+        cells[row, column] = child;
+        control.AddChild(column, row, child.RenderNode());
     }
 
     /// <summary>Number of rows in the grid.</summary>
@@ -90,6 +93,12 @@ public class Grid : Layout<ConsoleGUI.Controls.Grid>
     public override int Columns => control.Columns.Length;
 
     /// <summary>Gets the control at the given <paramref name="row"/> and <paramref name="column"/>.</summary>
-    public override IFocusable this[int row, int column] => (IFocusable) control.GetChild(column, row);
-    #endregion   
+    /// <exception cref="InvalidOperationException">The cell is empty.</exception>
+    public override IFocusable this[int row, int column] =>
+        cells[row, column] ?? throw new InvalidOperationException($"Grid cell ({row}, {column}) is empty.");
+    #endregion
+
+    #region Fields
+    private readonly IFocusable?[,] cells;
+    #endregion
 }

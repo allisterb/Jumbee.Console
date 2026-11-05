@@ -21,12 +21,11 @@ public static class ControlExtensions
     /// they're unaffected.
     /// </para>
     /// <para>
-    /// Use this only in layouts that keep their focus/routing children in their own fields (<see cref="SplitPanel"/>,
-    /// <see cref="DockPanel"/>, <see cref="TabPanel"/>), where the bound render node and the routed child are
-    /// decoupled. Layouts that route input <em>through</em> the ConsoleGUI child they bound (<see cref="Grid"/>, the
-    /// stack panels — their <c>this[r,c]</c> casts the container's child back to <see cref="IFocusable"/>) can't use
-    /// this: binding the CControl would make routing return the wrong object. A nested layout inside a Grid/stack is
-    /// uncommon and still works visually via full redraws.
+    /// A layout that binds render nodes must keep its focus/routing children in its own fields (every built-in layout
+    /// does): routing that cast the bound ConsoleGUI child back to <see cref="IFocusable"/> would get the CControl,
+    /// not the layout. Grid and the stack panels once routed that way and bound the wrapper instead, so a control
+    /// inside a layout nested in them never reported damage, and its change reached the screen only when something
+    /// forced a full redraw.
     /// </para>
     /// </remarks>
     internal static ConsoleGUI.IControl RenderNode(this IFocusable focusable) =>

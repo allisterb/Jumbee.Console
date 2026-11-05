@@ -22,6 +22,10 @@ using Jumbee.Console.Mesh;
 /// The readouts update from <see cref="MeshView.Drew"/> — the frame that was actually <em>drawn</em>, not the
 /// newest one — so the numbers always describe the picture beside them.
 /// </para>
+/// <para>
+/// The Render section is the library's <see cref="MeshInspector"/>, folded into one section and following this
+/// panel's spacing; the camera pad is the library's <see cref="CameraPad"/>. Everything else here is the sandbox's.
+/// </para>
 /// </remarks>
 public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 {
@@ -35,21 +39,14 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         this.parameters = parameters;
         Width = Columns;
 
-        renderer = new Select([.. view.Renderers.Select(r => r.Name)]) { SelectedIndex = 0, FitContent = true };
         BuildSpawnMeshOptions();
 
+        // The renderer and its settings, as one folded section. It binds itself to the view, so the keys and its
+        // widgets agree without this panel in the loop.
+        render = new MeshInspector(view, InspectorSections.Render | InspectorSections.ShadedDetail |
+                                         InspectorSections.WireframeDetail) { FoldDetail = true };
+
         // Widget -> state. Each of these is the only place a widget writes, and every one is inert while syncing.
-        renderer.SelectionChanged += (_, _) => Push(() => view.SetRenderer(view.Renderers[renderer.SelectedIndex]));
-        edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
-        wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
-        occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
-        shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
-        texels.ValueChanged += (_, v) => Push(() => view.SetTextureLevels((float)v));
-        quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
-        stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
-        scanCap.SelectionChanged += (_, _) =>
-            Push(() => view.SetScanCap(WireframeRenderer.ScanCapChoices[scanCap.SelectedIndex].Value));
-        density.ValueChanged += (_, v) => Push(() => view.SetMeshDensity(SubPixelsOf((float)v)));
         shape.SelectionChanged += (_, _) => Push(() => view.Spawn.Shape = (BodyShape)shape.SelectedIndex);
         mesh.SelectionChanged += (_, _) => Push(SelectMesh);
         size.ValueChanged += (_, v) => Push(() => view.Spawn.Scale = (float)v);
@@ -71,7 +68,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
         // State -> widget. Three sources, one refresh: whatever moved, the whole panel re-reads the state, which is
         // cheaper to reason about than tracking which widget a given change should touch.
-        view.SettingsChanged += Refresh;
         view.SelectionChanged += _ => Refresh();
         view.Spawn.Changed += Refresh;
         parameters.Changed += Refresh;
@@ -82,8 +78,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     #endregion
 
     #region Properties
-    /// <summary>The width the sidebar occupies when docked.</summary>
-    public const int Columns = 32;
+    /// <summary>The width the sidebar occupies when docked: the inspector's, so its Render section fits.</summary>
+    public const int Columns = MeshInspector.Columns;
 
     /// <summary>The viewport rows the spaced layout needs. Below this the sidebar drops to the compact one; below
     /// what <em>that</em> needs, the enclosing frame scrolls.</summary>
@@ -164,7 +160,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     /// </remarks>
     public int MeasureHeight(int width)
     {
-        var rows = 0;
+        var rows = render.MeasureHeight(width);
         foreach (var section in sections) rows += section.OuterRows;
         return rows;
     }
@@ -176,27 +172,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         try
         {
             var spawn = view.Spawn;
-            renderer.SelectedIndex = IndexOfRenderer();
-            edges.SelectedIndex = (int)(view.Edges ?? SilhouetteStyle.None);
-            wrapLighting.IsChecked = view.WrapLighting ?? false;
-            occlusion.Value = view.OcclusionStrength ?? 0f;
-            // Both belong to the shaded renderer alone, so they grey out under the other two exactly as the mesh
-            // dials do under anything but the wireframe.
-            edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
-            // Both solid renderers have a ramp, so this one greys out under the WIREFRAME instead -- the only
-            // renderer here that draws no shaded surface at all.
-            shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
-            quadrants.IsChecked = view.QuadrantSampling ?? false;
-            shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
-            // Only the shaded renderer draws maps, and only while its texturing is on.
-            texels.Value = view.TextureLevels ?? MeshRenderer.DefaultTextureLevels;
-            texels.Enabled = view.Texture is { } mode && mode != TextureMode.None;
-            stratify.IsChecked = view.Stratify ?? false;
-            scanCap.SelectedIndex = IndexOfScanCap();
-            density.Value = DetailOf(view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
-            // Greyed out under a renderer that draws every triangle, rather than left live-but-inert: they still
-            // report the wireframe's real settings, and Enabled is what says "not while this renderer is drawing".
-            stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
             shape.SelectedIndex = (int)spawn.Shape;
             mesh.SelectedIndex = spawn.MeshIndex >= 0 ? spawn.MeshIndex : 0;
             size.Value = spawn.Scale;
@@ -234,23 +209,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         view.Spawn.Shape = BodyShape.Mesh;
     }
 
-    private int IndexOfRenderer()
-    {
-        for (var i = 0; i < view.Renderers.Count; i++)
-            if (ReferenceEquals(view.Renderers[i], view.Renderer)) return i;
-        return 0;
-    }
-
-    // Falls back to the default's slot rather than 0 when the active renderer has no scan cap, so switching to the
-    // shaded renderer does not park the drop-down on "5k" and then apply that on the way back.
-    private int IndexOfScanCap()
-    {
-        var cap = view.ScanCap ?? WireframeRenderer.DefaultScanCap;
-        for (var i = 0; i < WireframeRenderer.ScanCapChoices.Length; i++)
-            if (WireframeRenderer.ScanCapChoices[i].Value == cap) return i;
-        return Array.FindIndex(WireframeRenderer.ScanCapChoices, c => c.Value == WireframeRenderer.DefaultScanCap);
-    }
-
     // Read from the library rather than handed a fixed list: models can be loaded while the app is running, and
     // RefreshMeshes puts the new ones in the drop-down without rebuilding the panel.
     private string[] MeshNames() => view.Spawn.Library.Count == 0 ? ["(none)"] : view.Spawn.Library.Names();
@@ -276,7 +234,7 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
 
     private static TextLabel Spacer() => Line("", MutedColor);
 
-    // The five panels, either spaced or compact. Every INTERACTIVE control gets a blank row under it in the spaced
+    // The panels, either spaced or compact. Every INTERACTIVE control gets a blank row under it in the spaced
     // form; the readout lines (Scene, and the inspector's two) stay flush either way, because those are one block
     // of text rather than things to aim at. Stacked flush, a column of drop-downs and sliders reads as one
     // undifferentiated slab and it is genuinely hard to tell which track belongs to which label.
@@ -291,14 +249,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             new Section("Scene", spaced
                 ? new VerticalStackPanel(status, counts, clock, Spacer(), Row(clear, reset))
                 : new VerticalStackPanel(status, counts, clock, Row(clear, reset)), 4 + gap),
-            // The wireframe's three mesh-sampling dials live here rather than in a section of their own, and the
-            // reason is purely that a section costs two rows of frame: with them split out, a 40-row terminal
-            // clipped the camera pad off the bottom even in the compact layout.
-            // Detail before Scan, as in the viewer's panel: Detail changes what you see, Scan only caps how much of
-            // a large model is examined and does nothing to a model below that cap.
-            new Section("Render", Stack(spaced, Labelled("Renderer", renderer), Labelled("Edges", edges),
-                quadrants, wrapLighting, occlusion, shade, texels, stratify, density, Labelled("Scan", scanCap)),
-                10 + (9 * gap)),
             new Section("Spawn", Stack(spaced, Labelled("Shape", shape), Labelled("Mesh", mesh), size, speed,
                 Row(drop, fire)), 5 + (4 * gap)),
             new Section("World", Stack(spaced, gravity, friction, bounce, drag, timeScale, Row(resetWorld)),
@@ -313,7 +263,11 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
             new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows),
         ];
 
-        return new VerticalStackPanel([.. sections]);
+        // The render inspector goes second, after Scene. It is folded into ONE section because a section costs two
+        // rows of frame: split out, a 40-row terminal clipped the camera pad off the bottom even when compact.
+        render.Spaced = spaced;
+        render.Height = render.MeasureHeight(Columns);
+        return new VerticalStackPanel([sections[0], render, .. sections[1..]]);
     }
 
     // The items stacked, with a blank row between each when spaced — one fewer spacer than items, so a section
@@ -356,12 +310,6 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
         // a longer label is ellipsized rather than pushing its own track right, so widening one label widens all.
         new Slider(min, max, value, label) { LabelWidth = LabelWidth, ValueFormat = format };
 
-    // Detail is the reciprocal of the renderer's sub-pixels-per-triangle -- see WireframeRenderer.DetailFromSubPixels
-    // for why. It lives there rather than here so this panel and the viewer's agree on what a given number means.
-    private static float DetailOf(float subPixelsPerTriangle) =>
-        WireframeRenderer.DetailFromSubPixels(subPixelsPerTriangle);
-
-    private static float SubPixelsOf(float detail) => WireframeRenderer.SubPixelsFromDetail(detail);
     #endregion
 
     #region Fields
@@ -374,47 +322,8 @@ public sealed class SidebarPanel : CompositeControl, Jumbee.Console.IScrollable
     private readonly Button clear = Action("Clear");
     private readonly Button reset = Action("Reset");
 
-    private readonly Select renderer;
-    private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
-    private readonly Switch wrapLighting = new Switch("Half-Lambert light");
-
-    // The shaded renderer's screen-space ambient occlusion. Named for what it is rather than for the field behind
-    // it (ShadedRenderer.OcclusionStrength): it samples a depth ring per sub-pixel and darkens by how much of that
-    // ring sits nearer than a flat surface would, which is AO, not a contact fudge.
-    private readonly Slider occlusion = Param("Occlusion", 0f, 1f, ShadedRenderer.DefaultOcclusionStrength, "F2");
-
-    // How many brightness bands a curved surface shows. The quality dial that actually moves the picture at this
-    // resolution -- and the renderer's largest performance lever, so it is deliberately not buried in a menu.
-    private readonly Slider shade = Param("Shade Levels", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
-        ShadedRenderer.DefaultShadeLevels, "F0");
-
-    // The texture's own ramp, levels per channel. Shade Levels quantises the lighting and never a texel, so a spawned
-    // model's map bands at this step however fine the shading is.
-    private readonly Slider texels = Param("Texel Levels", MeshRenderer.MinTextureLevels, MeshRenderer.MaxTextureLevels,
-        MeshRenderer.DefaultTextureLevels, "F0");
-
-    // Half-cell horizontal resolution: the surface samples twice per column and composites each 2x2 block into the
-    // best-fitting quadrant glyph. Named for what it draws rather than for what it resembles -- nothing is blended,
-    // so calling it antialiasing described the effect and not the mechanism. Off by default: it costs about half
-    // again as much per frame, and this is a demo that should look cheap until you ask it not to. Both solid
-    // renderers composite through the surface, so it greys out only under the wireframe -- same gating as Shades.
-    //
-    // First of the switches, ahead of Half-Lambert: of everything in this section it moves the picture the most.
-    //
-    // There was a second control here, a Smooth slider blending detected edge sub-pixels -- the one thing here that
-    // WAS antialiasing. It was removed once this one existed: measured, it made the silhouette placement slightly
-    // WORSE while costing 43% more distinct fg/bg pairs, and having two controls where one of them does nothing you
-    // can see is worse than having one.
-    private readonly Switch quadrants = new Switch("Quadrant glyphs");
-    private readonly Switch stratify = new Switch("Even over screen", isOn: true);
-    private readonly Select scanCap =
-        new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };
-
-    // Labelled by what it DOES rather than by its unit: the underlying value is sub-pixels per triangle, so
-    // smaller is denser, and a slider that draws less as you push it right is a small cruelty. Inverted at the
-    // boundary instead -- see the density handlers.
-    private readonly Slider density = Param("Detail", WireframeRenderer.MinDetail, WireframeRenderer.MaxDetail,
-        DetailOf(WireframeRenderer.DefaultSubPixelsPerTriangle), "F1");
+    // The Render section: the library's inspector, folded, following this panel's spacing.
+    private readonly MeshInspector render;
 
     private readonly Select shape = new Select("box", "sphere", "mesh") { FitContent = true };
     private Select mesh = new Select("(none)") { FitContent = true };

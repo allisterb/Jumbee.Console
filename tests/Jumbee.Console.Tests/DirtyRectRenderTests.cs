@@ -91,6 +91,65 @@ public class DirtyRectRenderTests
         Assert.Contains("BBB", ConsoleSnapshot.ToText(session.Screen.Buffer));   // the change actually composited
     }
 
+    // The same drop for the layouts that route input through the child they bind: a Grid or a stack panel holding a
+    // nested layout bound the Layout wrapper, so the nested layout's damage never left it. A sibling outside the
+    // nest changes in the same frame, as in a live app, so the frame has damage either way and a dropped rect shows
+    // only as the change missing from the screen — the full-redraw safety net can't rescue it.
+    [Theory]
+    [InlineData("grid-in-vstack")]
+    [InlineData("grid-in-hstack")]
+    [InlineData("vstack-in-grid")]
+    [InlineData("hstack-in-vstack")]
+    [InlineData("grid-in-grid")]
+    public async Task LayoutNestedInGridOrStack_LocalizesDamage(string shape)
+    {
+        const int w = 60, h = 12;
+        var target = new TextLabel(TextLabelOrientation.Horizontal, "AAA");
+        var sibling = new TextLabel(TextLabelOrientation.Horizontal, "s1");
+        ILayout root = shape switch
+        {
+            "grid-in-vstack" => new VerticalStackPanel(sibling, new Grid([1], [20], [[target]])),
+            "grid-in-hstack" => new HorizontalStackPanel(sibling.WithWidth(10), new Grid([1], [20], [[target]])),
+            "vstack-in-grid" => new Grid([1, 2], [30], [[sibling], [new VerticalStackPanel(target)]]),
+            // A stack child gets the panel's full height, so a fill-width label would tile the screen on its own.
+            "hstack-in-vstack" => new VerticalStackPanel(sibling, new HorizontalStackPanel(target.WithWidth(10))),
+            "grid-in-grid" => new Grid([1, 1], [30], [[sibling], [new Grid([1], [20], [[target]])]]),
+            _ => throw new System.ArgumentException(shape),
+        };
+        using var session = await AnsiConsoleSession.StartAsync(root.CControl, w, h);
+
+        sibling.Text = "s2";
+        target.Text = "BBB";
+        await session.FrameAsync();
+
+        var text = ConsoleSnapshot.ToText(session.Screen.Buffer);
+        Assert.Contains("s2", text);
+        Assert.Contains("BBB", text);   // dropped damage leaves AAA on screen
+        Assert.True(ConsoleManager.LastFrameDirtyCells < (long)w * h, $"expected a partial redraw, got the whole screen ({ConsoleManager.LastFrameDirtyCells})");
+    }
+
+    // The case that found it: a drop-down labelled by a Grid inside a stack (MeshInspector's sidebar shape), its value
+    // changed from code while a sibling repaints. Its new value must reach the screen through the partial path.
+    [Fact]
+    public async Task SelectInGridInStack_ChangedWithSibling_ReachesScreen()
+    {
+        const int w = 40, h = 8;
+        var select = new Select("Alpha", "Bravo", "Charlie") { SelectedIndex = 0 };
+        var sibling = new TextLabel(TextLabelOrientation.Horizontal, "s1");
+        var root = new VerticalStackPanel(sibling, new Grid([1], [8, 20], [[new TextLabel(TextLabelOrientation.Horizontal, "Pick"), select]]));
+        using var session = await AnsiConsoleSession.StartAsync(root.CControl, w, h);
+        Assert.Contains("Alpha", ConsoleSnapshot.ToText(session.Screen.Buffer));
+
+        select.SelectedIndex = 2;
+        sibling.Text = "s2";
+        await session.FrameAsync();
+
+        var text = ConsoleSnapshot.ToText(session.Screen.Buffer);
+        Assert.Contains("s2", text);
+        Assert.Contains("Charlie", text);
+        Assert.True(ConsoleManager.LastFrameDirtyCells < (long)w * h, $"expected a partial redraw, got the whole screen ({ConsoleManager.LastFrameDirtyCells})");
+    }
+
     // A Plot nested deep (Plot -> ControlFrame -> Grid -> CompositeControl) must still localize its damage: a data
     // push re-composites only a partial region, not the whole screen — and never more than the buffer (the reported
     // count is clamped, since overlapping dirty rects would otherwise sum past the screen area).

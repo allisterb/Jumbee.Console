@@ -294,8 +294,139 @@ internal static class KeyChecks
                 $"home distance {one.Camera.HomeDistance:F1}");
         }
 
+        Agreement(library, width, height, Check);
+
         Console.WriteLine(failures == 0 ? "\nALL PASS" : $"\n{failures} FAILURE(S)");
         return failures == 0 ? 0 : 1;
+    }
+
+    // Keys move the inspector: each key that has a widget, typed into a RUNNING UI through its input source -- the
+    // path a terminal's keystrokes take -- and the widget read back off the captured LIVE screen. It has to be a
+    // running UI: over a model the inspector refreshes once per drawn frame (a model has no change event), and
+    // frames are only drawn by the loop, so a headless render would never see the refresh, and a check that called
+    // Refresh by hand would pass with the wiring missing.
+    //
+    // Through the input SOURCE, not root.OnInput: UI.OnInput forces a full redraw for a keystroke, and that is what
+    // a user gets. A full redraw also hides dropped damage, so each shell then makes the renderer change FROM CODE,
+    // with no keystroke, while the viewport keeps repainting. That is how a folder load finishing reaches the
+    // inspector. Damage from a control in a Grid nested in a stack panel (every Labelled drop-down here) used to be
+    // dropped on that path, leaving the Renderer drop-down showing the old name.
+    private static void Agreement(MeshLibrary library, int width, int height, Action<string, bool, string?> check)
+    {
+        Console.WriteLine($"\nkeys move the inspector, live UI loop {width}x{height}:");
+
+        void Live(ILayout root, MeshView view, Action<Func<Func<string[], bool>, string, ConsoleKey, char, bool, bool>,
+            Func<Action, Func<string[], bool>, string, bool>> body)
+        {
+            var screen = new LoadChecks.CaptureConsole(width, height);
+            var keys = new System.Collections.Concurrent.ConcurrentQueue<TerminalInputEvent>();
+            var run = UI.Start(root, width, height, fps: 60, isAnsiTerminal: false, console: screen,
+                               input: new QueueInput(keys), useAlternateScreen: false);
+            var frames = 0;
+            view.Drew += _ => frames++;
+            LoadChecks.WaitUntil(() => frames >= 5, 3000);
+            UI.InvokeAsync(() => UI.SetFocus(view)).Wait(2000);
+
+            // The sidebar's columns of the live screen.
+            string[] Sidebar() => [.. screen.Text().Split('\n').Select(l => l.TrimEnd('\r'))
+                .Select(l => l.Length > width - SidebarPanel.Columns ? l[(width - SidebarPanel.Columns)..] : "")];
+
+            // Press, then wait for the screen to show it.
+            bool Press(Func<string[], bool> shows, string what, ConsoleKey key, char ch, bool shift)
+            {
+                keys.Enqueue(new KeyInputEvent(key, ch, shift ? TerminalModifiers.Shift : TerminalModifiers.None));
+                LoadChecks.WaitUntil(() => keys.IsEmpty, 2000);
+                var ok = LoadChecks.WaitUntil(() => shows(Sidebar()), 2000);
+                // The row the check looked at, for the report: the longest leading run of words in what that names a
+                // row, else its last word (a model name). Section borders are skipped.
+                var words = what.Split(' ');
+                var rows = Sidebar().Where(l => !l.Contains("──")).ToArray();
+                var line = Enumerable.Range(1, words.Length).Reverse().Select(n => string.Join(' ', words[..n]))
+                    .Append(words[^1]).Select(p => rows.FirstOrDefault(l => l.Contains(p))).FirstOrDefault(l => l is not null)?.Trim() ?? "(not on screen)";
+                check($"'{(ch == '\0' ? key.ToString() : ch.ToString())}' and the inspector shows {what}", ok, line);
+                return ok;
+            }
+
+            // Change on the UI thread with no input, then wait for the screen to show it.
+            bool Code(Action change, Func<string[], bool> shows, string what)
+            {
+                UI.InvokeAsync(change).Wait(2000);
+                var ok = LoadChecks.WaitUntil(() => shows(Sidebar()), 2000);
+                check($"from code, and the inspector shows {what}", ok, Row(Sidebar(), what.Split(' ')[0]) ?? "(not on screen)");
+                return ok;
+            }
+
+            try { body(Press, Code); }
+            finally
+            {
+                UI.Stop();
+                run.Wait(2000);
+            }
+        }
+
+        static string? Row(string[] lines, string label) => lines.FirstOrDefault(l => l.Contains(label))?.Trim();
+        static bool Shows(string[] lines, string label, string text) => Row(lines, label)?.Contains(text) == true;
+        static bool Switch(string[] lines, string label, bool on) => Shows(lines, label, on ? "(─●)" : "(●─)");
+
+        // The three render keys, against whichever shell. Drives v round to the shaded renderer first, since the
+        // edge and lighting controls are greyed under the others.
+        void RenderKeys(MeshView view, Func<Func<string[], bool>, string, ConsoleKey, char, bool, bool> press)
+        {
+            for (var i = 0; i < view.Renderers.Count; i++)
+            {
+                var next = view.Renderers[(view.Renderers.ToList().IndexOf(view.Renderer) + 1) % view.Renderers.Count].Name;
+                press(l => Shows(l, "Renderer", next), $"Renderer {next}", ConsoleKey.V, 'v', false);
+            }
+
+            foreach (var style in new[] { "line", "glyph", "none" })
+                press(l => Shows(l, "Edges", style), $"Edges {style}", ConsoleKey.E, 'e', false);
+
+            var wrap = view.WrapLighting ?? false;
+            press(l => Switch(l, "Half-Lambert", !wrap), $"Half-Lambert light {(!wrap ? "on" : "off")}", ConsoleKey.W, 'w', false);
+        }
+
+        // The renderer cycle again, from code.
+        void RenderFromCode(MeshView view, Func<Action, Func<string[], bool>, string, bool> code)
+        {
+            for (var i = 0; i < view.Renderers.Count; i++)
+            {
+                var next = view.Renderers[(view.Renderers.ToList().IndexOf(view.Renderer) + 1) % view.Renderers.Count].Name;
+                code(view.NextRenderer, l => Shows(l, "Renderer", next), $"Renderer {next}");
+            }
+        }
+
+        using (var app = SandboxShell.BuildSandbox(library, Populate))
+        {
+            Console.WriteLine("sandbox:");
+            Live(app.Root, app.View, (press, code) =>
+            {
+                RenderKeys(app.View, press);
+                RenderFromCode(app.View, code);
+            });
+        }
+
+        using (var app = SandboxShell.BuildViewer(library, 0))
+        {
+            Console.WriteLine("viewer:");
+            var model = app.Model;
+            Live(app.Root, app.View, (press, code) =>
+            {
+                RenderKeys(app.View, press);
+                var name = library.NameOf((model.MeshIndex + 1) % library.Count);
+                press(l => l.Any(x => x.Trim().TrimEnd('│', '▇', ' ') == name), $"the model {name}", ConsoleKey.Oem6, ']', false);
+                press(l => Shows(l, "Scale X", "1.15"), "Scale X 1.15", ConsoleKey.X, 'X', true);
+                press(l => Shows(l, "Shear X", "0.08"), "Shear X 0.08", ConsoleKey.OemPeriod, '.', false);
+                press(l => Shows(l, "Scale X", "1.00") && Shows(l, "Shear X", "0.00"), "Scale X 1.00 and Shear X 0.00", ConsoleKey.D0, '0', false);
+                press(l => Switch(l, "Z-up", true), "Z-up file on", ConsoleKey.A, 'a', false);
+                var spinning = model.SpinRate != 0f;
+                press(l => Switch(l, "Turntable", !spinning),
+                    $"Turntable {(spinning ? "off" : "on")}", ConsoleKey.P, 'p', false);
+
+                // The turntable keeps the viewport repainting, so the frame has damage and no full redraw rescues it.
+                if (spinning) press(l => Switch(l, "Turntable", true), "Turntable on", ConsoleKey.P, 'p', false);
+                RenderFromCode(app.View, code);
+            });
+        }
     }
 
     // Every help line must have a check, and every check a help line.
@@ -397,6 +528,17 @@ internal static class KeyChecks
         var w1 = sidebar.Width;
         UI.SendInput(root, UI.HotKeys.Char('u'), routeGlobal: true);
         return (w1 == 1 && sidebar.Width == w0, $"{w0} -> {w1} -> {sidebar.Width} cols");
+    }
+
+    // Keystrokes for a running UI, read by its input loop exactly as a terminal's would be.
+    private sealed class QueueInput(System.Collections.Concurrent.ConcurrentQueue<TerminalInputEvent> queue) : IInputSource
+    {
+        public bool TryRead(out TerminalInputEvent? evt)
+        {
+            var got = queue.TryDequeue(out var e);
+            evt = e;
+            return got;
+        }
     }
 
     private static float Component(Vector3 v, int axis) => axis switch { 0 => v.X, 1 => v.Y, _ => v.Z };

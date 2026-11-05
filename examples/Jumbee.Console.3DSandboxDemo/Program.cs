@@ -268,7 +268,7 @@ static void LoadFolder(SandboxShell.Viewer app, ModelSet set) =>
     ModelLoadDialog.Load(set, app.Model.Library, result =>
     {
         if (result.StartIndex >= 0) app.Model.Reload(result.StartIndex);
-        app.Sidebar.Report();
+        app.Sidebar.Refresh();
 
         if (result.Failures.Length > 0)
         {

@@ -1,124 +1,171 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
-using System.Numerics;
+/// <summary>The sections a <see cref="MeshInspector"/> shows.</summary>
+[Flags]
+public enum InspectorSections
+{
+    /// <summary>No sections.</summary>
+    None = 0,
 
-using Jumbee.Console.Mesh;
+    /// <summary>The model's name and size, its up axis, and previous / next. Needs a <see cref="MeshView.Model"/>.</summary>
+    Model = 1,
+
+    /// <summary>The renderer, plus the model's colour and turntable when there is a model.</summary>
+    Render = 2,
+
+    /// <summary>The shaded renderer's settings: texture (with a model), edges, quadrant glyphs, lighting, occlusion,
+    /// and the shade and texel ramps.</summary>
+    ShadedDetail = 4,
+
+    /// <summary>The wireframe's mesh sampling: stratification, detail and the scan cap.</summary>
+    WireframeDetail = 8,
+
+    /// <summary>Per-axis and uniform scale sliders. Needs a <see cref="MeshView.Model"/>.</summary>
+    Scale = 16,
+
+    /// <summary>Shear sliders. Needs a <see cref="MeshView.Model"/>.</summary>
+    Shear = 32,
+
+    /// <summary>A <see cref="CameraPad"/> for the view's camera.</summary>
+    Camera = 64,
+
+    /// <summary>Every section.</summary>
+    All = Model | Render | ShadedDetail | WireframeDetail | Scale | Shear | Camera,
+}
 
 /// <summary>
-/// The model viewer's sidebar: which asset is showing, its triangle count, and sliders for the per-axis scale and
-/// shear the keyboard drives with <c>xyz</c>/<c>XYZ</c> and <c>,.</c>/<c>;'</c>.
+/// A sidebar of stock controls bound to a <see cref="MeshView"/>: the renderer and its settings, the camera and — over
+/// a <see cref="ModelScene"/> — the model, its scale and its shear.
 /// </summary>
 /// <remarks>
-/// Same two-way arrangement as <see cref="SidebarPanel"/> and for the same reason — see the notes there. The
-/// difference is that <see cref="ModelScene"/> has no change event, so this refreshes from the frame clock instead:
-/// a static scene the keys mutate directly, polled once per drawn frame, is simpler than threading an event through
-/// four transform methods and costs nothing at this size.
+/// <para>
+/// <b>Keys and widgets stay in agreement</b> because neither talks to the other. The view and its model own the truth;
+/// a widget writes to them, and <see cref="Refresh"/> reads every widget back. It runs on
+/// <see cref="MeshView.SettingsChanged"/>, after each widget edit, and — over a model, which raises no event for a
+/// transform key — once per drawn frame. A guard stops the round trip from looping: while the inspector is writing
+/// into a widget, that widget's own change event does nothing.
+/// </para>
+/// <para>
+/// A control that applies to one renderer is greyed out under the others rather than hidden, so the layout never
+/// jumps and the section's title says why. It is <see cref="IScrollable"/>: put it in a borderless frame and it
+/// scrolls when the terminal is too short for it. To embed it among sections of your own, set its
+/// <see cref="Control.Height"/> to <see cref="MeasureHeight"/>.
+/// </para>
 /// </remarks>
-public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScrollable
+public sealed class MeshInspector : CompositeControl, IScrollable
 {
     #region Constructors
-    /// <summary>Builds the viewer sidebar over <paramref name="view"/> and the <paramref name="model"/> it shows.</summary>
-    public ModelSidebarPanel(MeshView view, ModelScene model)
+    /// <summary>Builds an inspector over <paramref name="view"/> showing <paramref name="sections"/>. The model
+    /// sections and controls appear only when the view has a <see cref="MeshView.Model"/>.</summary>
+    public MeshInspector(MeshView view, InspectorSections sections = InspectorSections.All)
     {
         this.view = view;
-        this.model = model;
-        Width = SidebarPanel.Columns;
+        model = view.Model;
+        Sections = sections;
+        Width = Columns;
 
         renderer = new Select([.. view.Renderers.Select(r => r.Name)]) { SelectedIndex = 0, FitContent = true };
         renderer.SelectionChanged += (_, _) => Push(() => view.SetRenderer(view.Renderers[renderer.SelectedIndex]));
         edges.SelectionChanged += (_, _) => Push(() => view.SetEdgeStyle((SilhouetteStyle)edges.SelectedIndex));
         texture.SelectionChanged += (_, _) => Push(() => view.SetTexture(TextureChoices[texture.SelectedIndex]));
-        spin.Changed += (_, on) => Push(() => model.SpinRate = on ? DefaultSpin : 0f);
-        zUp.Changed += (_, on) => Push(() => model.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
-        color.SelectionChanged += (_, _) => Push(() => model.ColorKey = color.SelectedIndex);
-
-        // The shaded renderer's two lighting dials. Wrap was reachable only from the sandbox until now, which was
-        // the wrong way round: the viewer is where you compare renderers on one model, and wrap is the setting that
-        // explains most of why the shaded one looks softer than the flat one.
         wrapLighting.Changed += (_, on) => Push(() => view.SetWrapLighting(on));
         occlusion.ValueChanged += (_, v) => Push(() => view.SetOcclusionStrength((float)v));
         shade.ValueChanged += (_, v) => Push(() => view.SetShadeLevels((float)v));
         texels.ValueChanged += (_, v) => Push(() => view.SetTextureLevels((float)v));
         quadrants.Changed += (_, on) => Push(() => view.SetQuadrantSampling(on));
-
-        // The wireframe's mesh sampling. This panel is where they matter most -- the viewer is the scene that shows
-        // ONE loaded model filling the frame, which is exactly the case the thinning has to get right.
         stratify.Changed += (_, on) => Push(() => view.SetStratify(on));
         scanCap.SelectionChanged += (_, _) =>
             Push(() => view.SetScanCap(WireframeRenderer.ScanCapChoices[scanCap.SelectedIndex].Value));
         density.ValueChanged += (_, v) => Push(() => view.SetMeshDensity(WireframeRenderer.SubPixelsFromDetail((float)v)));
 
-        // The master slider drives all three axes to its own value, so it also pulls apart a non-uniform scale.
-        scaleAll.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(-1, (float)v));
-        scaleX.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(0, (float)v));
-        scaleY.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(1, (float)v));
-        scaleZ.ValueChanged += (_, v) => Push(() => model.SetScaleAxis(2, (float)v));
-        shearX.ValueChanged += (_, v) => Push(() => model.SetShear((float)v, model.Shear.Y));
-        shearZ.ValueChanged += (_, v) => Push(() => model.SetShear(model.Shear.X, (float)v));
+        if (model is { } m)
+        {
+            spin.Changed += (_, on) => Push(() => m.SpinRate = on ? DefaultSpin : 0f);
+            zUp.Changed += (_, on) => Push(() => m.UpAxis = on ? ModelUpAxis.Z : ModelUpAxis.Y);
+            color.SelectionChanged += (_, _) => Push(() => m.ColorKey = color.SelectedIndex);
 
-        previous.Activated += (_, _) => model.Step(-1);
-        next.Activated += (_, _) => model.Step(+1);
+            // The master slider drives all three axes to its own value, so it also pulls apart a non-uniform scale.
+            scaleAll.ValueChanged += (_, v) => Push(() => m.SetScaleAxis(-1, (float)v));
+            scaleX.ValueChanged += (_, v) => Push(() => m.SetScaleAxis(0, (float)v));
+            scaleY.ValueChanged += (_, v) => Push(() => m.SetScaleAxis(1, (float)v));
+            scaleZ.ValueChanged += (_, v) => Push(() => m.SetScaleAxis(2, (float)v));
+            shearX.ValueChanged += (_, v) => Push(() => m.SetShear((float)v, m.Shear.Y));
+            shearZ.ValueChanged += (_, v) => Push(() => m.SetShear(m.Shear.X, (float)v));
 
-        // Each section's Reset undoes that section and nothing else, now that there are two of them — a button that
-        // also cleared the panel below it would be a trap. The whole-transform reset is still Model ▸ Reset transform
-        // and the 0 key.
-        resetScale.Activated += (_, _) => Push(() => model.SetScaleAxis(-1, 1f));
-        resetShear.Activated += (_, _) => Push(() => model.SetShear(0f, 0f));
+            previous.Activated += (_, _) => m.Step(-1);
+            next.Activated += (_, _) => m.Step(+1);
 
-        // The same pad the sandbox sidebar carries — it is the same camera, and having it in one scene and not the
-        // other would be the odd choice.
+            // Each section's Reset undoes that section and nothing else — a button that also cleared the section
+            // below it would be a trap. The whole-transform reset is the view's 0 key.
+            resetScale.Activated += (_, _) => Push(() => m.SetScaleAxis(-1, 1f));
+            resetShear.Activated += (_, _) => Push(() => m.SetShear(0f, 0f));
+        }
+
         camera = new CameraPad(view.Camera, () => UI.SetFocus(view));
 
-        view.SettingsChanged += Report;
+        view.SettingsChanged += Refresh;
+        // A model has no change event, and its keys mutate it directly: polling it once per drawn frame is simpler
+        // than threading an event through every transform method, and costs nothing at this size.
+        if (model is not null) view.Drew += OnDrew;
 
-        // A blank row under every interactive control, as in SidebarPanel and for the same reason; the model's two
-        // readout lines stay flush.
-        sections =
-        [
-            new Section("Model", new VerticalStackPanel(name, geometry, Spacer(), zUp, Spacer(), Row(previous, next)), 6),
-            // Render keeps only what applies to ALL of them; everything that belongs to one renderer is grouped
-            // under that renderer's name below, so a greyed-out control is self-explanatory.
-            new Section("Render", Spaced(Labelled("Renderer", renderer), Labelled("Colour", color), spin), 5),
-            // Edges lived in Render, which put a shaded-only control among the general ones. All three of these are
-            // the shaded renderer's, so they belong together.
-            // Texture first: on a model with materials it changes the picture more than anything else here.
-            new Section("Shaded detail",
-                Spaced(Labelled("Texture", texture), Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade,
-                    texels), 13),
-            // Its own section here, where the sandbox folds these into Render: this panel is IScrollable and
-            // MeasureHeight is summed from the sections, so an extra one scrolls rather than clipping the ones
-            // below it. Named for the renderer it belongs to, because it is greyed out under the other two and a
-            // title saying so is cheaper than working out why.
-            //
-            // Detail sits above Scan because it is the one that changes what you see: Scan only sets a ceiling on
-            // how much of a large model is looked at, and does nothing at all to a model below that ceiling.
-            new Section("Wireframe mesh detail", Spaced(stratify, density, Labelled("Scan", scanCap)), 5),
-            new Section("Scale", Spaced(scaleAll, scaleX, scaleY, scaleZ, Row(resetScale, null)), 9),
-            new Section("Shear", Spaced(shearX, shearZ, Row(resetShear, null)), 5),
-            new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows),
-        ];
-        SetContent(new VerticalStackPanel([.. sections]));
-
-        Report();
+        Rebuild();
+        Refresh();
     }
     #endregion
 
     #region Properties
+    /// <summary>The width the inspector is laid out for: a sidebar docked at this width fits it exactly.</summary>
+    public const int Columns = 32;
+
+    /// <summary>The sections shown.</summary>
+    public InspectorSections Sections { get; }
+
+    /// <summary>Whether every interactive control gets a blank row under it. On by default; turn it off to fit a
+    /// short terminal. Readout lines stay flush either way.</summary>
+    /// <remarks>Stacked flush, a column of drop-downs and sliders reads as one slab, and it is genuinely hard to tell
+    /// which track belongs to which label — so spaced is the default and compact the fallback.</remarks>
+    public bool Spaced
+    {
+        get => spaced;
+        set
+        {
+            if (spaced == value) return;
+            spaced = value;
+            Rebuild();
+        }
+    }
+
+    /// <summary>Whether <see cref="InspectorSections.ShadedDetail"/> and <see cref="InspectorSections.WireframeDetail"/>
+    /// are folded into the Render section rather than given sections of their own. Off by default.</summary>
+    /// <remarks>Each section costs two rows of frame, so folding saves four — the difference between a camera pad on
+    /// screen and one scrolled off it in a 40-row terminal.</remarks>
+    public bool FoldDetail
+    {
+        get => foldDetail;
+        set
+        {
+            if (foldDetail == value) return;
+            foldDetail = value;
+            Rebuild();
+        }
+    }
+
+    /// <summary>Which colour option the swatch drop-down is showing — so a test can assert the widget follows the
+    /// model rather than the other way round.</summary>
+    internal int SelectedColourIndex => color.SelectedIndex;
+
+    // A form of many fields rather than a composite built around one editor, so Tab walks the widgets instead of
+    // being handed to whichever one has focus.
     /// <inheritdoc/>
     protected override bool TabNavigatesChildren => true;
     #endregion
 
     #region Methods
-    /// <summary>Which colour option the swatch drop-down is showing. For tests: asserts the widget follows the
-    /// model rather than the other way round.</summary>
-    internal int SelectedColourIndex => color.SelectedIndex;
-
-    /// <summary>The stacked height of every section, so an enclosing frame scrolls the panel when the terminal is
-    /// too short for it.</summary>
+    /// <summary>The stacked height of every section.</summary>
     /// <remarks>
     /// Summed from the sections rather than written down as a total, because a total goes stale the moment a section
     /// changes size — and under-reporting does not merely clip the tail, it collapses the last sections to zero
-    /// height. Nothing here reports which row the focused control is on: the frame works that out itself.
+    /// height.
     /// </remarks>
     public int MeasureHeight(int width)
     {
@@ -127,67 +174,149 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
         return rows;
     }
 
-    /// <summary>Re-reads the model's state into the widgets. Called once per drawn frame.</summary>
-    public void Report()
+    /// <summary>Re-reads the view's and the model's state into every widget.</summary>
+    public void Refresh()
     {
-        var mesh = model.Mesh;
-        name.Text = model.Name;
-        geometry.Text = $"{mesh.TriangleCount} tris · {mesh.Vertices.Length} verts";
+        if (model is { } m)
+        {
+            var mesh = m.Mesh;
+            name.Text = m.Name;
+            geometry.Text = $"{mesh.TriangleCount} tris · {mesh.Vertices.Length} verts";
+        }
 
         syncing = true;
         try
         {
             renderer.SelectedIndex = IndexOfRenderer();
             edges.SelectedIndex = (int)(view.Edges ?? SilhouetteStyle.None);
-            stratify.IsChecked = view.Stratify ?? false;
-            scanCap.SelectedIndex = IndexOfScanCap();
-            density.Value = WireframeRenderer.DetailFromSubPixels(
-                view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
-            // Greyed out under a renderer that draws every triangle. They keep reporting the wireframe's real
-            // settings; Enabled is what says "not while this renderer is drawing".
-            stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
-            spin.IsChecked = model.SpinRate != 0f;
-            color.SelectedIndex = model.ColorKey;
-
-            // Texture greys out under the renderers that do not texture AND on a model with no materials -- most of
-            // them -- because a control that visibly does nothing reads as broken. Colour greys out the other way:
-            // while materials are being drawn the body colour is not used, and a drop-down that changes nothing is
-            // exactly how the white-model bug presented. Off gives it back.
-            var materialsShown = model.Mesh.Materials is not null && (view.Texture ?? TextureMode.None) != TextureMode.None;
-            texture.SelectedIndex = Math.Max(0, Array.IndexOf(TextureChoices, view.Texture ?? TextureMode.Auto));
-            texture.Enabled = view.Texture is not null && model.Mesh.Materials is not null;
-            color.Enabled = !materialsShown;
             wrapLighting.IsChecked = view.WrapLighting ?? false;
             occlusion.Value = view.OcclusionStrength ?? 0f;
+            // The shaded renderer's alone, so they grey out under the other two.
             edges.Enabled = wrapLighting.Enabled = occlusion.Enabled = view.OcclusionStrength is not null;
+            // Both solid renderers have a ramp, so these grey out under the WIREFRAME instead -- the only renderer
+            // that draws no shaded surface at all.
             shade.Value = view.ShadeLevels ?? ShadedRenderer.DefaultShadeLevels;
             quadrants.IsChecked = view.QuadrantSampling ?? false;
             shade.Enabled = quadrants.Enabled = view.ShadeLevels is not null;
-            // Only where a map can actually be drawn: the texturing renderer, a model with materials, and Texture not
-            // off. Anywhere else it would move and change nothing.
+            stratify.IsChecked = view.Stratify ?? false;
+            scanCap.SelectedIndex = IndexOfScanCap();
+            density.Value = WireframeRenderer.DetailFromSubPixels(view.MeshDensity ?? WireframeRenderer.DefaultSubPixelsPerTriangle);
+            // Greyed out under a renderer that draws every triangle, rather than left live-but-inert: they still
+            // report the wireframe's real settings, and Enabled is what says "not while this renderer is drawing".
+            stratify.Enabled = scanCap.Enabled = density.Enabled = view.MeshDialsApply;
+
+            // Texture greys out under the renderers that do not texture AND on a model with no materials -- most of
+            // them -- because a control that visibly does nothing reads as broken. With no model (a multi-body scene)
+            // there is no one mesh to judge by, so only the renderer decides. Texel Levels follows: only where a map
+            // can actually be drawn.
+            var hasMaterials = model is null || model.Mesh.Materials is not null;
+            texture.SelectedIndex = Math.Max(0, Array.IndexOf(TextureChoices, view.Texture ?? TextureMode.Auto));
+            texture.Enabled = view.Texture is not null && hasMaterials;
             texels.Value = view.TextureLevels ?? MeshRenderer.DefaultTextureLevels;
-            texels.Enabled = texture.Enabled && view.Texture is not TextureMode.None;
-            zUp.IsChecked = model.UpAxis == ModelUpAxis.Z;
-            (scaleX.Value, scaleY.Value, scaleZ.Value) = (model.Scale.X, model.Scale.Y, model.Scale.Z);
-            // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
-            // disagree there is no value it could honestly show, so it keeps the last one it was set to — which is
-            // what the next drag will flatten them all back to.
-            if (model.Scale.X == model.Scale.Y && model.Scale.Y == model.Scale.Z) scaleAll.Value = model.Scale.X;
-            (shearX.Value, shearZ.Value) = (model.Shear.X, model.Shear.Y);
+            texels.Enabled = view.Texture is { } mode && mode != TextureMode.None && hasMaterials;
+
+            if (model is { } mm)
+            {
+                spin.IsChecked = mm.SpinRate != 0f;
+                color.SelectedIndex = mm.ColorKey;
+                // Colour greys out the other way: while materials are drawn the body colour is not used, and a
+                // drop-down that changes nothing is exactly how the white-model bug presented. Off gives it back.
+                color.Enabled = !(mm.Mesh.Materials is not null && (view.Texture ?? TextureMode.None) != TextureMode.None);
+                zUp.IsChecked = mm.UpAxis == ModelUpAxis.Z;
+                (scaleX.Value, scaleY.Value, scaleZ.Value) = (mm.Scale.X, mm.Scale.Y, mm.Scale.Z);
+                // The master only follows a uniform scale (a reset, or the unqualified scale keys). Once the axes
+                // disagree there is no value it could honestly show, so it keeps the last one it was set to — which
+                // is what the next drag will flatten them all back to.
+                if (mm.Scale.X == mm.Scale.Y && mm.Scale.Y == mm.Scale.Z) scaleAll.Value = mm.Scale.X;
+                (shearX.Value, shearZ.Value) = (mm.Shear.X, mm.Shear.Y);
+            }
         }
         finally
         {
             syncing = false;
         }
     }
+
+    /// <inheritdoc/>
+    public override void Dispose()
+    {
+        view.SettingsChanged -= Refresh;
+        view.Drew -= OnDrew;
+        base.Dispose();
+    }
     #endregion
 
     #region Private methods
+    private void OnDrew(SceneFrame frame) => Refresh();
+
+    private bool Has(InspectorSections section) => (Sections & section) != 0;
+
+    // The sections, in a fixed order. Rebuilt whole when the spacing or folding changes: the widgets are fields and
+    // survive, only their frames and spacers are new.
+    private void Rebuild()
+    {
+        var list = new List<Section>();
+        var withModel = model is not null;
+
+        if (withModel && Has(InspectorSections.Model))
+            list.Add(MakeSection("Model", [name, geometry], zUp, Row(previous, next)));
+
+        IFocusable[] render = withModel
+            ? [Labelled("Renderer", renderer), Labelled("Colour", color), spin]
+            : [Labelled("Renderer", renderer)];
+        // Texture first: on a model with materials it changes the picture more than anything else here.
+        IFocusable[] shaded = [.. withModel ? [Labelled("Texture", texture)] : Array.Empty<IFocusable>(),
+            Labelled("Edges", edges), quadrants, wrapLighting, occlusion, shade, texels];
+        // Detail before Scan: Detail changes what you see, Scan only caps how much of a large model is examined and
+        // does nothing to a model below that cap.
+        IFocusable[] wire = [stratify, density, Labelled("Scan", scanCap)];
+
+        if (foldDetail && Has(InspectorSections.Render))
+        {
+            list.Add(MakeSection("Render", [], [.. render,
+                .. Has(InspectorSections.ShadedDetail) ? shaded : [],
+                .. Has(InspectorSections.WireframeDetail) ? wire : []]));
+        }
+        else
+        {
+            if (Has(InspectorSections.Render)) list.Add(MakeSection("Render", [], render));
+            // Named for the renderer each belongs to, because it is greyed out under the others and a title saying so
+            // is cheaper than working out why.
+            if (Has(InspectorSections.ShadedDetail)) list.Add(MakeSection("Shaded detail", [], shaded));
+            if (Has(InspectorSections.WireframeDetail)) list.Add(MakeSection("Wireframe mesh detail", [], wire));
+        }
+
+        if (withModel && Has(InspectorSections.Scale))
+            list.Add(MakeSection("Scale", [], scaleAll, scaleX, scaleY, scaleZ, Row(resetScale, null)));
+        if (withModel && Has(InspectorSections.Shear))
+            list.Add(MakeSection("Shear", [], shearX, shearZ, Row(resetShear, null)));
+        // Never spaced: the pad's buttons are one control, and a gap through the middle of a D-pad reads as two.
+        if (Has(InspectorSections.Camera))
+            list.Add(new Section("Camera", new VerticalStackPanel(camera), CameraPad.Rows));
+
+        sections = [.. list];
+        SetContent(new VerticalStackPanel([.. sections]));
+    }
+
+    // A section of readout lines, stacked flush, then interactive items with a blank row before each when spaced —
+    // so a section never ends on a gap and a block of text is never split.
+    private Section MakeSection(string title, IFocusable[] readouts, params IFocusable[] items)
+    {
+        var rows = new List<IFocusable>(readouts);
+        for (var i = 0; i < items.Length; i++)
+        {
+            if (spaced && rows.Count > 0) rows.Add(Spacer());
+            rows.Add(items[i]);
+        }
+
+        return new Section(title, new VerticalStackPanel([.. rows]), rows.Count);
+    }
+
     private void Push(Action apply)
     {
         if (syncing) return;
         apply();
-        Report();
+        Refresh();
     }
 
     private int IndexOfRenderer()
@@ -219,19 +348,6 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
 
     private static TextLabel Spacer() => Line("", MutedColor);
 
-    // The items with a blank row between each — one fewer spacer than items, so a section never ends on a gap.
-    private static ILayout Spaced(params IFocusable[] items)
-    {
-        var rows = new List<IFocusable>(items.Length * 2);
-        for (var i = 0; i < items.Length; i++)
-        {
-            if (i > 0) rows.Add(Spacer());
-            rows.Add(items[i]);
-        }
-
-        return new VerticalStackPanel([.. rows]);
-    }
-
     // A caption beside a control, in the same column the sliders put theirs.
     //
     // A Grid, NOT a HorizontalStackPanel, and the difference is a trap worth knowing: a stack asks each child in
@@ -239,36 +355,39 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     // (IntrinsicWidth 0 means fill), so it takes the whole row and every later child is laid out at zero width and
     // never appears. Columns of fixed width are a Grid's job.
     private static ILayout Labelled(string caption, Control control) =>
-        new Grid([1], [LabelColumn, SidebarPanel.Columns - 2 - LabelColumn],
-            [[Line(caption, MutedColor), control]]);
+        new Grid([1], [LabelColumn, Columns - 2 - LabelColumn], [[Line(caption, MutedColor), control]]);
 
     // A single button still gets the two-column grid so it keeps the width of a paired one; the second cell is a
     // blank spacer rather than a stretched button.
     private static ILayout Row(Button left, Button? right) =>
-        new Grid([1], [Half, Half], [[left, right ?? (Control)Line("", MutedColor)]]);
+        new Grid([1], [Half, Half], [[left, right ?? (Control)Spacer()]]);
 
     private static Button Action(string text) =>
         new Button(text) { Style = ButtonStyle.Secondary with { MinWidth = Half - 1 } };
 
-
-    // 9 cells, the width of the longest caption ("Scale All"), so nothing is ellipsized and every track starts in
-    // the same column.
-    private static Slider Axis(string label, float min, float max, float value) =>
-        new Slider(min, max, value, label) { LabelWidth = LabelWidth };
+    // LabelWidth cells for every slider, so their tracks line up down the panel. It is EXACT, not a minimum: a longer
+    // label is ellipsized rather than pushing its own track right, so widening one label widens all.
+    private static Slider Param(string label, float min, float max, float value, string format = "F2") =>
+        new Slider(min, max, value, label) { LabelWidth = LabelWidth, ValueFormat = format };
     #endregion
 
     #region Fields
-    private const int Half = SidebarPanel.Columns / 2 - 2;
+    private const int Half = Columns / 2 - 2;
 
     // The label column, shared by the sliders and by Labelled()'s captions so everything lines up down the whole
-    // sidebar. 12 because of "Shade Levels", the longest label here; it was 9 while that read "Shades". The
-    // caption column is one WIDER, for the gutter cell Slider.BuildLabel appends before the track.
+    // sidebar. 12 because of "Shade Levels", the longest label here. The caption column is one WIDER, for the gutter
+    // cell Slider.BuildLabel appends before the track.
     private const int LabelWidth = 12;
     private const int LabelColumn = LabelWidth + 1;
     private const float DefaultSpin = 0.35f;
 
+    private static readonly TextureMode[] TextureChoices = [TextureMode.None, TextureMode.Auto, TextureMode.Image];
+    private static readonly Color HeadingColor = new(200, 205, 215);
+    private static readonly Color MutedColor = new(130, 136, 150);
+    private static readonly Color BorderColor = new(70, 78, 96);
+
     private readonly MeshView view;
-    private readonly ModelScene model;
+    private readonly ModelScene? model;
 
     private readonly TextLabel name = Line("", HeadingColor);
     private readonly TextLabel geometry = Line("", MutedColor);
@@ -279,65 +398,70 @@ public sealed class ModelSidebarPanel : CompositeControl, Jumbee.Console.IScroll
     private readonly Button next = Action("Next ▶");
 
     private readonly Select renderer;
-    private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
-
-    // off / auto / on. Auto is the default: it draws a map only where the gate says it reads as an image, and a
-    // flat material colour where it would read as noise. On draws every map; Off draws no materials at all.
-    private readonly Select texture = new Select("off", "auto", "on") { FitContent = true };
-    private static readonly TextureMode[] TextureChoices = [TextureMode.None, TextureMode.Auto, TextureMode.Image];
     private readonly Switch spin = new Switch("Turntable", isOn: true);
 
     // Renderable options rather than text: the row is a swatch in the colour itself plus its name, which needs two
     // styles on one row — a text option gets one, and the closed control does not parse markup.
     private readonly Select color = new Select([.. Palette.Named.Select(ColorOption)]) { FitContent = true };
 
-    private readonly Switch wrapLighting = new Switch("Half-Lambert light");
-    private readonly Slider occlusion = Axis("Occlusion", 0f, 1f, ShadedRenderer.DefaultOcclusionStrength);
+    // off / auto / on. Auto is the default: it draws a map only where the gate says it reads as an image, and a flat
+    // material colour where it would read as noise. On draws every map; Off draws no materials at all.
+    private readonly Select texture = new Select("off", "auto", "on") { FitContent = true };
+    private readonly Select edges = new Select("none", "line", "glyph") { FitContent = true };
 
-    // The shade-ramp resolution: how many brightness bands a curved surface shows. Greys out under the WIREFRAME
-    // rather than under the non-shaded renderers, since both solid ones have a ramp.
-    private readonly Slider shade = new Slider(MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
-        ShadedRenderer.DefaultShadeLevels, "Shade Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
-
-    // The texture's own ramp: how many levels per channel a map's colours are snapped to. Shade Levels never touches
-    // a texel, so without this a map's gradients band at a fixed step however fine the lighting is.
-    private readonly Slider texels = new Slider(MeshRenderer.MinTextureLevels, MeshRenderer.MaxTextureLevels,
-        MeshRenderer.DefaultTextureLevels, "Texel Levels") { LabelWidth = LabelWidth, ValueFormat = "F0" };
-
-    // Half-cell horizontal resolution on every boundary, silhouette or not: the surface samples twice per column
-    // and each 2x2 block becomes the quadrant glyph that best fits it. See HalfBlockSurface.QuadrantSampling. Named
-    // for the mechanism rather than for the effect -- nothing is blended, so it is not really antialiasing. First
-    // of the switches: it moves the picture more than anything else here. Greys out under the wireframe only, like
-    // Shades.
+    // Half-cell horizontal resolution on every boundary: the surface samples twice per column and each 2x2 block
+    // becomes the quadrant glyph that best fits it. Named for the mechanism rather than the effect -- nothing is
+    // blended, so it is not antialiasing. First of the switches: it moves the picture more than anything else here.
+    //
+    // There was a second control beside it, a Smooth slider blending detected edge sub-pixels -- the one thing that
+    // WAS antialiasing. It went once this existed: measured, it made silhouette placement slightly WORSE while
+    // costing 43% more distinct fg/bg pairs, and two controls where one does nothing you can see is worse than one.
     private readonly Switch quadrants = new Switch("Quadrant glyphs");
+    private readonly Switch wrapLighting = new Switch("Half-Lambert light");
+
+    // Screen-space ambient occlusion: it samples a depth ring per sub-pixel and darkens by how much of that ring sits
+    // nearer than a flat surface would.
+    private readonly Slider occlusion = Param("Occlusion", 0f, 1f, ShadedRenderer.DefaultOcclusionStrength);
+
+    // How many brightness bands a curved surface shows: the quality dial that moves the picture most at this
+    // resolution, and the renderer's largest performance lever.
+    private readonly Slider shade = Param("Shade Levels", MeshRenderer.MinShadeLevels, MeshRenderer.MaxShadeLevels,
+        ShadedRenderer.DefaultShadeLevels, "F0");
+
+    // The texture's own ramp, levels per channel. Shade Levels never touches a texel, so without this a map's
+    // gradients band at a fixed step however fine the lighting is.
+    private readonly Slider texels = Param("Texel Levels", MeshRenderer.MinTextureLevels, MeshRenderer.MaxTextureLevels,
+        MeshRenderer.DefaultTextureLevels, "F0");
 
     private readonly Switch stratify = new Switch("Even over screen", isOn: true);
     private readonly Select scanCap =
         new Select([.. WireframeRenderer.ScanCapChoices.Select(c => c.Label)]) { FitContent = true };
-    private readonly Slider density = Axis("Detail", WireframeRenderer.MinDetail, WireframeRenderer.MaxDetail,
-        WireframeRenderer.DetailFromSubPixels(WireframeRenderer.DefaultSubPixelsPerTriangle));
 
-    private readonly Slider scaleAll = Axis("Scale All", ModelScene.MinScale, ModelScene.MaxScale, 1f);
-    private readonly Slider scaleX = Axis("Scale X", ModelScene.MinScale, ModelScene.MaxScale, 1f);
-    private readonly Slider scaleY = Axis("Scale Y", ModelScene.MinScale, ModelScene.MaxScale, 1f);
-    private readonly Slider scaleZ = Axis("Scale Z", ModelScene.MinScale, ModelScene.MaxScale, 1f);
+    // Labelled by what it DOES rather than by its unit: the renderer's value is sub-pixels per triangle, so smaller is
+    // denser, and a slider that draws less as you push it right is a small cruelty. Inverted at the boundary instead.
+    private readonly Slider density = Param("Detail", WireframeRenderer.MinDetail, WireframeRenderer.MaxDetail,
+        WireframeRenderer.DetailFromSubPixels(WireframeRenderer.DefaultSubPixelsPerTriangle), "F1");
+
+    private readonly Slider scaleAll = Param("Scale All", ModelScene.MinScale, ModelScene.MaxScale, 1f);
+    private readonly Slider scaleX = Param("Scale X", ModelScene.MinScale, ModelScene.MaxScale, 1f);
+    private readonly Slider scaleY = Param("Scale Y", ModelScene.MinScale, ModelScene.MaxScale, 1f);
+    private readonly Slider scaleZ = Param("Scale Z", ModelScene.MinScale, ModelScene.MaxScale, 1f);
     private readonly Button resetScale = Action("Reset");
 
-    private readonly Slider shearX = Axis("Shear X", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
-    private readonly Slider shearZ = Axis("Shear Z", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
+    private readonly Slider shearX = Param("Shear X", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
+    private readonly Slider shearZ = Param("Shear Z", -ModelScene.MaxShear, ModelScene.MaxShear, 0f);
     private readonly Button resetShear = Action("Reset");
 
     private readonly CameraPad camera;
-    private readonly Section[] sections;
-
+    private Section[] sections = [];
+    private bool spaced = true;
+    private bool foldDetail;
     private bool syncing;
-
-    private static readonly Color HeadingColor = new(200, 205, 215);
-    private static readonly Color MutedColor = new(130, 136, 150);
-    private static readonly Color BorderColor = new(70, 78, 96);
     #endregion
 
     #region Child types
+    // One titled block of the stack. A framed VerticalStackPanel is not itself a Control, so each section is a small
+    // composite that can carry the frame and the title.
     private sealed class Section : CompositeControl
     {
         public Section(string title, ILayout content, int rows)

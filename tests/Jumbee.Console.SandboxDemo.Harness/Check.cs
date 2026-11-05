@@ -53,6 +53,9 @@ if (args.Contains("--loading")) return Render3d.LoadChecks.Run(W, H, args);
 // --- Every key in each viewport's F1 help does what its line says ----------------------------------------------
 if (args.Contains("--keys")) return Render3d.KeyChecks.Run(W, H, args);
 
+// --- Sidebar cells to text, for before/after diffs (an instrument, not a check) -----------------------------------
+if (args.Contains("--sidebar-dump")) return Render3d.SidebarDump.Run(args);
+
 // --- Edge smoothing: the same frame at several strengths, so the softening can be judged rather than asserted ----
 if (args.Contains("--aa"))
 {

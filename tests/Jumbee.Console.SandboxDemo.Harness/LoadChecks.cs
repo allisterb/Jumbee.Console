@@ -125,20 +125,20 @@ internal static class LoadChecks
         return failures == 0 ? 0 : 1;
     }
 
-    private static bool WaitUntil(Func<bool> condition, int milliseconds)
+    internal static bool WaitUntil(Func<bool> condition, int milliseconds)
     {
         var sw = Stopwatch.StartNew();
         while (!condition() && sw.ElapsedMilliseconds < milliseconds) Thread.Sleep(10);
         return condition();
     }
 
-    private sealed class NoInput : IInputSource
+    internal sealed class NoInput : IInputSource
     {
         public bool TryRead(out TerminalInputEvent? evt) { evt = null; return false; }
     }
 
     // Keeps what the legacy renderer writes, cell by cell, so the composited screen can be read back as text.
-    private sealed class CaptureConsole(int w, int h) : IConsole
+    internal sealed class CaptureConsole(int w, int h) : IConsole
     {
         public Size Size { get; set; } = new Size(w, h);
         public bool KeyAvailable => false;

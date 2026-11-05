@@ -113,14 +113,12 @@ public static class SandboxShell
         // A borderless frame purely to scroll: the sidebar is taller than a short terminal, and only a frame can
         // window it. No border, because each section already draws its own — the frame contributes just the
         // scrollbar column, and reveals whichever control Tab moves focus to.
-        var sidebar = new ModelSidebarPanel(view, model);
+        // The library's inspector, every section: it binds itself to the view and the model, and refreshes on each
+        // drawn frame, so nothing here has to feed it.
+        var sidebar = new MeshInspector(view);
         sidebar.WithFrame(borderStyle: BorderStyle.None, borderPlacement: BorderPlacement.None);
         var footer = new SceneFooter(view);
-        view.Drew += s =>
-        {
-            footer.Scene = s;
-            sidebar.Report();
-        };
+        view.Drew += s => footer.Scene = s;
 
         _ = new ControlFrame(view, borderStyle: BorderStyle.Rounded);
 
@@ -215,7 +213,7 @@ public static class SandboxShell
     /// <param name="View">The viewport, and the control to focus first.</param>
     /// <param name="Sidebar">The right-hand panel.</param>
     /// <param name="Menu">The application menu.</param>
-    public readonly record struct Viewer(ILayout Root, ModelScene Model, MeshView View, ModelSidebarPanel Sidebar,
+    public readonly record struct Viewer(ILayout Root, ModelScene Model, MeshView View, MeshInspector Sidebar,
                                          MenuBar Menu) : IDisposable
     {
         /// <summary>Unwires the controls. Call it once the UI has stopped — see <see cref="Teardown"/>.</summary>

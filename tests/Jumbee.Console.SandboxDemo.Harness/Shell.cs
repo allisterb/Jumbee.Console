@@ -58,7 +58,7 @@ internal static class ShellChecks
             v.Model.SpinRate = 0f;
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
             v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
-            v.Sidebar.Report();
+            v.Sidebar.Refresh();
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
 
             // Every registered model in its default pose: whether each stands on the ground, and whether the
@@ -79,7 +79,7 @@ internal static class ShellChecks
 
                     _ = ConsoleSnapshot.ToText(v.Root, width, height);
                     v.View.Renderer.Draw(v.Model.Frame, v.View.Camera);
-                    v.Sidebar.Report();
+                    v.Sidebar.Refresh();
                     _ = ConsoleSnapshot.ToText(v.Root, width, height);
                     ConsoleSnapshot.SavePng(v.Root, width, height, Path.Combine(d, $"frame-{v.Model.Name}.png"), o);
                     Console.WriteLine($"  {v.Model.Name,-8} radius {v.Model.BoundingRadius,5:F2}  " +
@@ -157,7 +157,7 @@ internal static class ShellChecks
 
             v.Model.SetScaleAxis(1, 2.4f);
             v.Model.SetShear(0.7f, 0f);
-            v.Sidebar.Report();
+            v.Sidebar.Refresh();
             _ = ConsoleSnapshot.ToText(v.Root, width, height);
             Check("a transform set from code reaches the sliders",
                 SliderReads(v.Root, width, height, "Scale Y", 2.4f) && SliderReads(v.Root, width, height, "Shear X", 0.7f));
