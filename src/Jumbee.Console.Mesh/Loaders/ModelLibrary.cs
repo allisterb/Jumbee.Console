@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 /// <summary>What the viewer's single path argument resolved to.</summary>
 /// <param name="Files">Every readable model in the directory, in name order. Empty when there are none.</param>

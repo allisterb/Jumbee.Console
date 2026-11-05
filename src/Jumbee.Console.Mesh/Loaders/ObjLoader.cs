@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Globalization;
 using System.Numerics;
@@ -35,10 +35,10 @@ public static class ObjLoader
     /// <paramref name="radius"/>.</summary>
     /// <param name="path">The file to read.</param>
     /// <param name="radius">The half-extent the model's largest axis is scaled to.</param>
-    /// <param name="withUvs">Also read texture coordinates into <see cref="Mesh.Uvs"/>. Off by default because it is
+    /// <param name="withUvs">Also read texture coordinates into <see cref="TriangleMesh.Uvs"/>. Off by default because it is
     /// not free — see the remarks on <see cref="Parse"/>.</param>
     /// <exception cref="InvalidDataException">The file holds no usable triangles.</exception>
-    public static Mesh Load(string path, float radius = 0.5f, bool withUvs = false) =>
+    public static TriangleMesh Load(string path, float radius = 0.5f, bool withUvs = false) =>
         Parse(File.ReadLines(path), radius, withUvs);
 
     /// <summary>Parses OBJ text. Split out from <see cref="Load"/> so it can be tested without a file.</summary>
@@ -50,7 +50,7 @@ public static class ObjLoader
     /// more integers, through a loader whose position and face parsing is just as plain. So a caller that will not
     /// texture the model does not ask for them.
     /// </remarks>
-    public static Mesh Parse(IEnumerable<string> lines, float radius = 0.5f, bool withUvs = false)
+    public static TriangleMesh Parse(IEnumerable<string> lines, float radius = 0.5f, bool withUvs = false)
     {
         var vertices = new List<Vector3>();
         var indices = new List<int>();
@@ -162,7 +162,7 @@ public static class ObjLoader
         // Mesh treats a null UvIndices as "Indices addresses both", and every index was bounds-checked against the
         // UVs above. Every other file keeps its own, since there a seam vertex has one position and two UVs.
         var sharedIndices = uvComplete && cleanUv.SequenceEqual(clean);
-        return new Mesh([.. vertices], [.. clean])
+        return new TriangleMesh([.. vertices], [.. clean])
         {
             AuthoredUpAxis = authoredUpAxis,
             Uvs = uvComplete ? [.. uvs] : null,

@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 
@@ -102,7 +102,7 @@ public sealed class WireframeRenderer : ISceneRenderer
     #region Methods
     /// <inheritdoc/>
     /// <remarks>Draws straight into its <see cref="Canvas"/>, which is a shared control rather than a handed-over
-    /// buffer, so this stays on the UI thread (<see cref="DrawsOffThread"/> is left false). It is the cheapest of
+    /// buffer, so this stays on the UI thread (<see cref="ISceneRenderer.DrawsOffThread"/> is left false). It is the cheapest of
     /// the three by an order of magnitude -- the triangle budget sees to that -- so it has least to gain.</remarks>
     public object? Draw(in FrameRequest request)
     {
@@ -219,7 +219,7 @@ public sealed class WireframeRenderer : ISceneRenderer
     //      from all over the surface, and each lands as a floating segment; whole triangles land as surface.
     //   3. Back faces are culled first, so the sample is spread over the half of the model you can actually see and
     //      the silhouette survives. Without it the far side is interleaved with the near one and neither reads.
-    private void DrawMesh(in CameraView view, Mesh mesh, Vector3 center, Matrix4x4 transform, Color color)
+    private void DrawMesh(in CameraView view, TriangleMesh mesh, Vector3 center, Matrix4x4 transform, Color color)
     {
         var vertices = mesh.Vertices;
         EnsureMeshCapacity(vertices.Length);

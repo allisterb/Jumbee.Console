@@ -6,6 +6,8 @@ using Jumbee.Console.SandboxDemo;
 
 using ShellType = Jumbee.Console.SandboxDemo.SandboxShell.ShellType;
 
+using Jumbee.Console.Mesh;
+
 // --- Jumbee.Console 3D sandbox ----------------------------------------------------------------------------------
 // Two scenes over one renderer stack.
 //

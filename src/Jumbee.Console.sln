@@ -149,6 +149,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "wolf3dcheck", "..\tests\Jum
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "render3d", "..\tests\Jumbee.Console.SandboxDemo.Harness\render3d.csproj", "{051CCD3D-0758-46AB-BCEA-3829CFD2F201}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jumbee.Console.Mesh", "Jumbee.Console.Mesh\Jumbee.Console.Mesh.csproj", "{1D92AA47-54AC-41CC-834E-D589FAC3996C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -531,6 +533,18 @@ Global
 		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x64.Build.0 = Release|Any CPU
 		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x86.ActiveCfg = Release|Any CPU
 		{051CCD3D-0758-46AB-BCEA-3829CFD2F201}.Release|x86.Build.0 = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|x64.Build.0 = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Debug|x86.Build.0 = Debug|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|x64.ActiveCfg = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|x64.Build.0 = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|x86.ActiveCfg = Release|Any CPU
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -577,6 +591,7 @@ Global
 		{26D7F366-1FA7-4D07-911D-761D261A4427} = {4F600471-D58C-4C2C-89DF-1166AFF08905}
 		{3900B505-1DEB-4E0D-9640-81867F62CBA9} = {6ED98344-E90A-44C5-8EB8-CBA5F48FF975}
 		{051CCD3D-0758-46AB-BCEA-3829CFD2F201} = {6ED98344-E90A-44C5-8EB8-CBA5F48FF975}
+		{1D92AA47-54AC-41CC-834E-D589FAC3996C} = {8575CE18-ABF9-494C-9232-43E0F1E9BCE7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {65B3BAD7-920D-4EBC-B47B-01164C7E4AF1}

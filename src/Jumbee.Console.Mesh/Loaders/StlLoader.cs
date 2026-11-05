@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Buffers.Binary;
 using System.Globalization;
@@ -40,7 +40,7 @@ public static class StlLoader
     #region Methods
     /// <summary>Loads an STL file, binary or ASCII, centred and scaled like <see cref="ObjLoader.Load"/>.</summary>
     /// <exception cref="InvalidDataException">The file holds no usable triangles.</exception>
-    public static Mesh Load(string path, float radius = 0.5f)
+    public static TriangleMesh Load(string path, float radius = 0.5f)
     {
         using var stream = File.OpenRead(path);
         Span<byte> prefix = stackalloc byte[HeaderBytes + 4];
@@ -70,7 +70,7 @@ public static class StlLoader
         length == HeaderBytes + 4 + ((long)BinaryPrimitives.ReadUInt32LittleEndian(prefix[HeaderBytes..]) * FacetBytes);
 
     /// <summary>Parses the facets of a binary STL, from a stream positioned just past the count.</summary>
-    public static Mesh ParseBinary(Stream stream, uint facets, float radius = 0.5f)
+    public static TriangleMesh ParseBinary(Stream stream, uint facets, float radius = 0.5f)
     {
         var builder = new Builder((int)facets);
         Span<byte> facet = stackalloc byte[FacetBytes];
@@ -84,7 +84,7 @@ public static class StlLoader
     }
 
     /// <summary>Parses ASCII STL text. Split out so it can be tested without a file.</summary>
-    public static Mesh ParseAscii(IEnumerable<string> lines, float radius = 0.5f)
+    public static TriangleMesh ParseAscii(IEnumerable<string> lines, float radius = 0.5f)
     {
         var builder = new Builder(0);
         var normal = Vector3.Zero;
@@ -167,13 +167,13 @@ public static class StlLoader
             indices.Add(Index(c));
         }
 
-        public Mesh Build(float radius)
+        public TriangleMesh Build(float radius)
         {
             if (indices.Count < 3)
                 throw new InvalidDataException("no usable geometry in the STL (needs at least one facet)");
 
             ObjLoader.Normalise(vertices, radius);
-            return new Mesh([.. vertices], [.. indices]) { AuthoredUpAxis = ModelUpAxis.Z };
+            return new TriangleMesh([.. vertices], [.. indices]) { AuthoredUpAxis = ModelUpAxis.Z };
         }
 
         private int Index(Vector3 v)

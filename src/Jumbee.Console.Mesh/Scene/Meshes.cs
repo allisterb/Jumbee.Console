@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 using System.Threading;
@@ -8,12 +8,12 @@ using System.Threading;
 /// Parallel arrays again, and indexed triangles rather than loose ones: a cube's 8 corners are transformed once and
 /// referenced by its 12 triangles, so per-body work is 8 transforms rather than 36.
 /// </remarks>
-public sealed class Mesh
+public sealed class TriangleMesh
 {
     #region Constructors
     /// <summary>Creates a mesh from vertices and triangle indices (three per triangle, counter-clockwise seen from
     /// outside).</summary>
-    public Mesh(Vector3[] vertices, int[] indices)
+    public TriangleMesh(Vector3[] vertices, int[] indices)
     {
         Vertices = vertices;
         Indices = indices;
@@ -134,7 +134,7 @@ public sealed class Mesh
     /// nothing of <c>.mtl</c> files or images. <b>Every init property must be carried here</b> — a new one left out
     /// is silently dropped from every material-bearing mesh, and the harness checks each one survives.</remarks>
     /// <exception cref="ArgumentException"><paramref name="materials"/> does not parallel <see cref="MaterialNames"/>.</exception>
-    public Mesh WithMaterials(Material[]? materials)
+    public TriangleMesh WithMaterials(Material[]? materials)
     {
         if (materials is not null && materials.Length != (MaterialNames?.Length ?? 0))
             throw new ArgumentException(
@@ -159,12 +159,12 @@ public static class Meshes
 {
     #region Properties
     /// <summary>A cube spanning ±1 on each axis, so scaling by a body's half extents gives its box exactly.</summary>
-    public static Mesh Cube { get; } = BuildCube();
+    public static TriangleMesh Cube { get; } = BuildCube();
 
     /// <summary>A unit-radius sphere. Flat shading leaves it visibly faceted, which is the intent — it reads as a
     /// solid object at terminal resolution, and smooth normals would cost the shade quantisation that makes the
     /// whole thing cheap to emit.</summary>
-    public static Mesh Sphere { get; } = BuildSphere(rings: 6, segments: 10);
+    public static TriangleMesh Sphere { get; } = BuildSphere(rings: 6, segments: 10);
     #endregion
 
     #region Methods
@@ -182,7 +182,7 @@ public static class Meshes
     /// is one writer and no lock. Meshes are never removed, so an id stays valid for the life of the process.
     /// </para>
     /// </remarks>
-    public static int Register(Mesh mesh, string name)
+    public static int Register(TriangleMesh mesh, string name)
     {
         var next = Volatile.Read(ref loaded);
         Volatile.Write(ref loaded, [.. next, (mesh, name)]);
@@ -190,7 +190,7 @@ public static class Meshes
     }
 
     /// <summary>A registered mesh by id.</summary>
-    public static Mesh Get(int id) => Volatile.Read(ref loaded)[id].Mesh;
+    public static TriangleMesh Get(int id) => Volatile.Read(ref loaded)[id].Mesh;
 
     /// <summary>The display name a mesh was registered under.</summary>
     public static string NameOf(int id) => Volatile.Read(ref loaded)[id].Name;
@@ -206,7 +206,7 @@ public static class Meshes
     /// compared on — uniform boxes and spheres flatter every renderer equally — and it means the mesh path is
     /// exercisable with no third-party asset and no licensing question attached.
     /// </remarks>
-    public static Mesh TorusKnot(int p = 2, int q = 3, int segments = 120, int sides = 10, float radius = 0.5f)
+    public static TriangleMesh TorusKnot(int p = 2, int q = 3, int segments = 120, int sides = 10, float radius = 0.5f)
     {
         // One extra ring around the curve and one extra around the tube, each an exact duplicate of the seam it
         // closes against. The geometry is unchanged — the duplicated vertices coincide — but it lets the UVs run
@@ -270,7 +270,7 @@ public static class Meshes
             for (var i = 0; i < vertices.Length; i++) vertices[i] *= s;
         }
 
-        return new Mesh(vertices, indices) { Uvs = uvs };
+        return new TriangleMesh(vertices, indices) { Uvs = uvs };
     }
     #endregion
 
@@ -281,7 +281,7 @@ public static class Meshes
         return new Vector3(r * MathF.Cos(p * u), -MathF.Sin(q * u), r * MathF.Sin(p * u));
     }
 
-    private static Mesh BuildCube()
+    private static TriangleMesh BuildCube()
     {
         Vector3[] v =
         [
@@ -300,12 +300,12 @@ public static class Meshes
             3, 7, 6, 3, 6, 2,   // +Y
         ];
 
-        return new Mesh(v, i);
+        return new TriangleMesh(v, i);
     }
 
-    private static (Mesh Mesh, string Name)[] loaded = [];   // replaced whole, never edited — see Register
+    private static (TriangleMesh Mesh, string Name)[] loaded = [];   // replaced whole, never edited — see Register
 
-    private static Mesh BuildSphere(int rings, int segments)
+    private static TriangleMesh BuildSphere(int rings, int segments)
     {
         // A UV sphere: `rings` latitude bands between the poles, `segments` around. Poles are single vertices, so the
         // top and bottom bands are triangles and the rest are quads split in two.
@@ -340,7 +340,7 @@ public static class Meshes
         }
 
         for (var s = 0; s < segments; s++) indices.AddRange([south, Ring(rings - 1, s + 1), Ring(rings - 1, s)]);
-        return new Mesh([.. vertices], [.. indices]);
+        return new TriangleMesh([.. vertices], [.. indices]);
     }
     #endregion
 }

@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Threading;
 
@@ -98,7 +98,7 @@ public sealed class ModelLoadDialog : CompositeControl
     // The loader thread: parse each file, report progress, and hand everything back in one go.
     private void Run(Dialog dialog, Action<ModelLoadResult> done)
     {
-        var loaded = new List<(string Path, Mesh Mesh)>(files.Length);
+        var loaded = new List<(string Path, TriangleMesh Mesh)>(files.Length);
         var failures = new List<(string File, string Reason)>();
 
         for (var i = 0; i < files.Length && !stop; i++)
@@ -135,7 +135,7 @@ public sealed class ModelLoadDialog : CompositeControl
         progress.Description = $"{index + 1}/{files.Length}  {Path.GetFileName(path)}";
     }
 
-    private void Finish(Dialog dialog, List<(string Path, Mesh Mesh)> loaded, List<(string File, string Reason)> failures,
+    private void Finish(Dialog dialog, List<(string Path, TriangleMesh Mesh)> loaded, List<(string File, string Reason)> failures,
                         bool stopped, Action<ModelLoadResult> done)
     {
         progress.Value = files.Length;

@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 /// <summary>
 /// A mouse control for the orbit camera: a four-way D-pad, with zoom and reset alongside its middle row.
@@ -10,7 +10,7 @@ namespace Jumbee.Console.SandboxDemo;
 /// scene once, which is not a control. Fine adjustment stays on the keys and the drag.
 /// </para>
 /// <para>
-/// <b>Every button hands focus back to whatever <paramref name="moved"/> refocuses</b> — the viewport. Leaving
+/// <b>Every button hands focus back to whatever the <c>moved</c> callback refocuses</b> — the viewport. Leaving
 /// focus on the button means the arrow keys stop orbiting the moment you nudge the camera once with the mouse,
 /// which is a dead end you meet within seconds of finding the pad.
 /// </para>
@@ -46,6 +46,9 @@ public sealed class CameraPad : CompositeControl
     /// <summary>The rows the pad occupies, for the panel that frames it.</summary>
     public const int Rows = 3;
 
+    /// <summary>The columns the pad occupies: a panel two columns wider fits it inside a border.</summary>
+    public const int Columns = 30;
+
     /// <inheritdoc/>
     protected override bool TabNavigatesChildren => true;
     #endregion
@@ -72,7 +75,7 @@ public sealed class CameraPad : CompositeControl
     private readonly Action moved;
 
     // Six columns across the panel interior: three for the pad, then zoom and reset. 5+5+5+4+4+7 = 30.
-    private const int Interior = SidebarPanel.Columns - 2;
+    private const int Interior = Columns;
     private const int Arrow = 5;
     private const int Step = 4;
     private const int Wide = Interior - (3 * Arrow) - (2 * Step);

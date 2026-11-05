@@ -1,5 +1,6 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
 using Jumbee.Console.Snapshot;
 
 /// <summary>

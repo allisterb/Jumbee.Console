@@ -6,6 +6,8 @@ using System.Numerics;
 
 using Box3D;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// Owns the physics world and steps it on its own thread at a fixed 1/60 s, publishing one
 /// <see cref="SceneSnapshot"/> per tick for the UI thread to render.

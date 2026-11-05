@@ -6,6 +6,8 @@ using System.Numerics;
 using ConsoleGUI.Input;
 using ConsoleGUI.Space;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// The viewport: pulls the newest physics snapshot and hands it to whichever <see cref="ISceneRenderer"/> is
 /// active, and owns the camera, the selection and the sandbox interactions.

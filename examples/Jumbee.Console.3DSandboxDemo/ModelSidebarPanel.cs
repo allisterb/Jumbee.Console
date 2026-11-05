@@ -2,6 +2,8 @@ namespace Jumbee.Console.SandboxDemo;
 
 using System.Numerics;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// The model viewer's sidebar: which asset is showing, its triangle count, and sliders for the per-axis scale and
 /// shear the keyboard drives with <c>xyz</c>/<c>XYZ</c> and <c>,.</c>/<c>;'</c>.

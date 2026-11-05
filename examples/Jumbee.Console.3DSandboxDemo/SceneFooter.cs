@@ -3,6 +3,8 @@ namespace Jumbee.Console.SandboxDemo;
 using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>Two lines under the viewport: what the simulation is doing, and what the keys will do to it.</summary>
 public sealed class SceneFooter : Control
 {

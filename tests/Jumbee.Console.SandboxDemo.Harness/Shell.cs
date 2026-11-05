@@ -3,6 +3,7 @@ namespace Render3d;
 using System.Numerics;
 
 using Jumbee.Console;
+using Jumbee.Console.Mesh;
 using Jumbee.Console.SandboxDemo;
 using Jumbee.Console.Snapshot;
 

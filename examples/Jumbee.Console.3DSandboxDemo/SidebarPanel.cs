@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// The right-hand sidebar: what the scene is doing, and every control needed to change it with the mouse alone.
 /// </summary>

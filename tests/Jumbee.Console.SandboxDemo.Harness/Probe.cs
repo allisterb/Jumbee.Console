@@ -2,6 +2,7 @@ namespace Probe;
 
 using System.Numerics;
 
+using Jumbee.Console.Mesh;
 using Jumbee.Console.SandboxDemo;
 
 /// <summary>

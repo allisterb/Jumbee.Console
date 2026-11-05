@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// Assembles a scene's whole user interface — renderers, viewport, sidebar, menu, footer and key bindings — and
 /// hands back the root layout plus the pieces a caller needs to drive it.

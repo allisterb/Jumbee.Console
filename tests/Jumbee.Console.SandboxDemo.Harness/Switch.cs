@@ -8,6 +8,7 @@ using ConsoleGUI.Data;
 using ConsoleGUI.Space;
 
 using Jumbee.Console;
+using Jumbee.Console.Mesh;
 using Jumbee.Console.SandboxDemo;
 
 /// <summary>

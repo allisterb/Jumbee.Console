@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 
@@ -9,7 +9,7 @@ using Ply.Net;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PLY is the reason the renderers grew <see cref="Mesh.FaceColors"/>. OBJ needs a side-car <c>.mtl</c> (and in
+/// PLY is the reason the renderers grew <see cref="TriangleMesh.FaceColors"/>. OBJ needs a side-car <c>.mtl</c> (and in
 /// practice a texture with it, which nothing here can sample) and STL carries no colour at all, so before this
 /// every model took a flat palette tint. A PLY file states its own colours inline, per vertex or per face, with no
 /// second file to find.
@@ -62,7 +62,7 @@ public static class PlyLoader
     /// the file carries any.</summary>
     /// <exception cref="InvalidDataException">The file holds no usable geometry, is truncated, or is in a form this
     /// reader does not support.</exception>
-    public static Mesh Load(string path, float radius = 0.5f)
+    public static TriangleMesh Load(string path, float radius = 0.5f)
     {
         using var stream = File.OpenRead(path);
         return Parse(stream, radius);
@@ -70,7 +70,7 @@ public static class PlyLoader
 
     /// <summary>Parses PLY from a stream. Split out so it can be tested without a file.</summary>
     /// <exception cref="InvalidDataException">As <see cref="Load"/>.</exception>
-    public static Mesh Parse(Stream stream, float radius = 0.5f)
+    public static TriangleMesh Parse(Stream stream, float radius = 0.5f)
     {
         // The parser reports a short read through this callback rather than by throwing -- see the truncation note
         // above. Capture the first complaint and fail on it once the parse is done.
@@ -145,7 +145,7 @@ public static class PlyLoader
 
         // NO UP-AXIS GUESS, and the absence is deliberate -- see the class remarks. The mesh reports none, the
         // viewer defaults to Y, and the `a` key fixes the ones that are wrong.
-        return new Mesh([.. vertices], [.. indices]) { FaceColors = colors };
+        return new TriangleMesh([.. vertices], [.. indices]) { FaceColors = colors };
     }
     #endregion
 

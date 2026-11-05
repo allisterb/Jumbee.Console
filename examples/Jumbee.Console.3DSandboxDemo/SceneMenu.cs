@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// Builds the application menu — a mouse-reachable home for every command the key bindings already offer, and the
 /// place a user finds out those bindings exist.

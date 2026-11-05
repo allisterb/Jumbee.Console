@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Jumbee.Console;
+using Jumbee.Console.Mesh;
 using Jumbee.Console.SandboxDemo;
 using Jumbee.Console.Snapshot;
 
@@ -165,7 +166,7 @@ if (args.Contains("--texture"))
         var map = Texture.Load(texImage, texReduce);
         // One material over every triangle, so the map applies whatever materials the model came with (or none, for
         // the knot). This is the explicit-override path; without image= a model's own .mtl is resolved by ModelLoader.
-        texMesh = new Mesh(texMesh.Vertices, texMesh.Indices)
+        texMesh = new TriangleMesh(texMesh.Vertices, texMesh.Indices)
         {
             AuthoredUpAxis = texMesh.AuthoredUpAxis,
             Uvs = texMesh.Uvs,
@@ -855,7 +856,7 @@ Check("negative (relative) indices parse", relative.TriangleCount == 1, $"{relat
 // arrays. The pairing is the contract and the arrays are one representation of it (a 1:1 file stores no UV index
 // buffer at all), so a check on the arrays would pass for a loader that stored them faithfully and paired them wrong.
 Console.WriteLine("\ntexture coordinates:");
-static (int V, Vector2 Uv)[] Corners(Mesh m) =>
+static (int V, Vector2 Uv)[] Corners(TriangleMesh m) =>
     m.Uvs is not { } uvs ? [] : [.. m.Indices.Select((v, k) => (v, uvs[(m.UvIndices ?? m.Indices)[k]]))];
 
 string[] tri = ["v 0 0 0", "v 1 0 0", "v 0 1 0", "vt 0 0", "vt 1 0", "vt 0 1"];
@@ -1081,7 +1082,7 @@ Check("detail coarser than a baked texel scores near 1 retained", halves.Retain 
 // WithMaterials must carry every OTHER init property, or a material-bearing mesh silently loses one. Checked by
 // reflection over the setters Mesh actually has, against a source with every one of them set -- so a property added
 // later is caught here without anyone remembering to extend the check.
-var carried = new Mesh([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2])
+var carried = new TriangleMesh([new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)], [0, 1, 2])
 {
     AuthoredUpAxis = ModelUpAxis.Z,
     FaceColors = [red],
@@ -1095,9 +1096,9 @@ Material[] replacement = [new Material("m", blue, tall)];
 var withMap = carried.WithMaterials(replacement);
 // Every property is compared, not only the settable ones, so a copy that forgot to pass Vertices or Indices to the
 // constructor fails too. The settable ones must also all be SET on the source, or a dropped null passes vacuously.
-var meshProps = typeof(Mesh).GetProperties();
+var meshProps = typeof(TriangleMesh).GetProperties();
 var unset = meshProps.Where(p => p.SetMethod is not null && p.GetValue(carried) is null).Select(p => p.Name).ToArray();
-var lost = meshProps.Where(p => p.Name != nameof(Mesh.Materials) && !Equals(p.GetValue(carried), p.GetValue(withMap)))
+var lost = meshProps.Where(p => p.Name != nameof(TriangleMesh.Materials) && !Equals(p.GetValue(carried), p.GetValue(withMap)))
                     .Select(p => p.Name).ToArray();
 Check("WithMaterials carries every other property",
     unset.Length == 0 && lost.Length == 0 && ReferenceEquals(withMap.Materials, replacement),
@@ -1305,12 +1306,12 @@ finally
 // the same material drawn flat.
 {
     var knotBase = Meshes.TorusKnot();
-    Mesh Dressed(Material? material) => material is null ? knotBase : new Mesh(knotBase.Vertices, knotBase.Indices)
+    TriangleMesh Dressed(Material? material) => material is null ? knotBase : new TriangleMesh(knotBase.Vertices, knotBase.Indices)
     {
         Uvs = knotBase.Uvs, MaterialNames = [material.Name], MaterialIds = new int[knotBase.TriangleCount],
     }.WithMaterials([material]);
 
-    int[] Cells(Mesh mesh, TextureMode mode)
+    int[] Cells(TriangleMesh mesh, TextureMode mode)
     {
         var snap = new SceneSnapshot(1) { Count = 1, AwakeCount = 1 };
         snap.Ids[0] = 1;

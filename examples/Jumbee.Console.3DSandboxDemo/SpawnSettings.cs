@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>What the spawn and launch keys produce. UI-thread owned; read when a command is posted.</summary>
 /// <remarks>Raises <see cref="Changed"/> on every mutation so the sidebar's widgets can follow the keys, and the
 /// keys the widgets — see <c>SidebarPanel</c>, which is the only subscriber that matters.</remarks>

@@ -1,5 +1,7 @@
 namespace Jumbee.Console.SandboxDemo;
 
+using Jumbee.Console.Mesh;
+
 /// <summary>
 /// The draw-a-frame-right-now call this harness was written against, kept alive as a shim.
 /// </summary>

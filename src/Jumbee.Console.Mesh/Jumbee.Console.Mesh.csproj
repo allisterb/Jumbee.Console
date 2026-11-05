@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyVersion>$(ProjectAssemblyVersion)</AssemblyVersion>
+    <FileVersion>$(ProjectAssemblyVersion)</FileVersion>
+    <Version>$(ProjectAssemblyVersion)</Version>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- Add-on library: 3D model viewing (OBJ+MTL, STL, PLY; textures; wireframe/solid/shaded renderers) for
+       Jumbee.Console. Extracted from the 3D sandbox demo; see docs/internal/agent/Mesh Library Plan.md.
+       NOT packable yet: the public surface is still the demo's and is locked down before it ships. -->
+  <PropertyGroup Label="Packaging">
+    <IsPackable>false</IsPackable>
+    <Description>3D model viewing for Jumbee.Console TUIs: load OBJ, STL and PLY models with their materials and textures, and render them wireframe, solid or shaded in the terminal.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PLY reader. Chosen over tinyply.net because it is reflection-free and so survives PublishAot;
+         tinyply raises 8 IL3050 warnings (Marshal.PtrToStructure(Type), Type.MakeGenericType). The trade is
+         binary_big_endian, which Ply.Net rejects outright; see PlyLoader for why that is an acceptable loss. -->
+    <PackageReference Include="Ply.Net" Version="5.6.3" />
+    <!-- PNG and JPEG decoders for texture maps. Both have known defects on damaged input (a hang on truncation,
+         a silent decode), mitigated inside Texture; see the ledger in reference/README.md. -->
+    <PackageReference Include="PngSharp" Version="0.6.0" />
+    <PackageReference Include="BitMiracle.LibJpeg.NET" Version="1.5.324" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Jumbee.Console\Jumbee.Console.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Temporary, until the surface is locked down: the demo and its harness still call the few members that are
+         internal (Texture.Decode/Bake/ValidatePngStructure, ObjLoader.Normalise). -->
+    <InternalsVisibleTo Include="Jumbee.Console.3DSandboxDemo" />
+    <InternalsVisibleTo Include="render3d" />
+  </ItemGroup>
+
+</Project>

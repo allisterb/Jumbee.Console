@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 
@@ -80,7 +80,7 @@ public abstract class MeshRenderer : ISceneRenderer
     /// The texture's counterpart to <see cref="ShadeLevels"/>: that dial quantises the <em>lighting</em> and never a
     /// texel's colour, so a map's own gradients band at whatever this is, however smooth the shading. Paid for the
     /// same way, in broken ANSI runs. Changes only how maps are drawn — which maps the gate draws is decided at
-    /// <see cref="SandboxDemo.Texture.DefaultLevels"/>, whatever this is set to.
+    /// <see cref="Mesh.Texture.DefaultLevels"/>, whatever this is set to.
     /// </remarks>
     public float TextureLevels
     {

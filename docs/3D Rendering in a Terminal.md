@@ -59,7 +59,7 @@ and a list of triangles (triples of indices into that vertex list). Triangles, s
 the only polygon guaranteed to be flat and convex — which makes every operation below simple and total.
 
 ```csharp
-public sealed class Mesh
+public sealed class TriangleMesh
 {
     public Vector3[] Vertices { get; }   // points, in the model's own local space
     public int[] Indices { get; }        // three per triangle, into Vertices
@@ -976,16 +976,20 @@ Choosing between them:
 
 ## Where to look in the code
 
+The renderer, camera and model loaders are in the
+[`Jumbee.Console.Mesh`](../src/Jumbee.Console.Mesh) library. The physics, and the UI built on top of it, are in the
+[3D sandbox demo](../examples/Jumbee.Console.3DSandboxDemo).
+
 | File | What it holds |
 |---|---|
-| `Camera.cs` | `OrbitCamera`, `CameraView`, `Viewport`, `Projection` — all the spaces and transforms |
-| `HalfBlockSurface.cs` | the sub-pixel colour + depth buffer, edge detection, contact shading, compositing |
-| `MeshRenderer.cs` | the shared rasteriser: transform, cull, edge functions, interpolation |
-| `SolidRenderer.cs` / `ShadedRenderer.cs` | the two shading models, and nothing else |
-| `WireframeRenderer.cs` | projection to lines on a braille `Canvas` |
-| `Meshes.cs` / `ObjLoader.cs` | primitives, a generated torus knot, and a Wavefront OBJ reader |
-| `PhysicsRunner.cs` | the physics thread, the fixed-step loop, snapshot publication |
-| `SceneSnapshot.cs` | the immutable parallel-array tick handed to the renderer |
+| `Mesh/Scene/Camera.cs` | `OrbitCamera`, `CameraView`, `Viewport`, `Projection` — all the spaces and transforms |
+| `Mesh/Rendering/HalfBlockSurface.cs` | the sub-pixel colour + depth buffer, edge detection, contact shading, compositing |
+| `Mesh/Rendering/MeshRenderer.cs` | the shared rasteriser: transform, cull, edge functions, interpolation |
+| `Mesh/Rendering/SolidRenderer.cs` / `ShadedRenderer.cs` | the two shading models, and nothing else |
+| `Mesh/Rendering/WireframeRenderer.cs` | projection to lines on a braille `Canvas` |
+| `Mesh/Scene/Meshes.cs` / `Mesh/Loaders/ObjLoader.cs` | primitives, a generated torus knot, and a Wavefront OBJ reader |
+| `Mesh/Scene/SceneSnapshot.cs` | the immutable parallel-array tick handed to the renderer |
+| demo: `PhysicsRunner.cs` | the physics thread, the fixed-step loop, snapshot publication |
 
 Every measurement quoted here, plus the reasoning behind each decision and the bugs met on the way, is recorded
 milestone by milestone in [`docs/internal/agent/3D Sandbox Plan.md`](internal/agent/3D%20Sandbox%20Plan.md).

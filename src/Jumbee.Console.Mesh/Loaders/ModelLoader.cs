@@ -1,4 +1,4 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 
@@ -19,7 +19,7 @@ public static class ModelLoader
     /// <param name="withUvs">Read texture coordinates even when no material needs them — for the harness, which maps
     /// procedural sources through a model's UVs. An OBJ whose materials have a map gets them regardless. Only OBJ
     /// has UVs here: STL has no such concept and PLY's multi-texture scheme is out of scope.</param>
-    /// <param name="withMaterials">Resolve an OBJ's <c>mtllib</c>/<c>usemtl</c> into <see cref="Mesh.Materials"/>,
+    /// <param name="withMaterials">Resolve an OBJ's <c>mtllib</c>/<c>usemtl</c> into <see cref="TriangleMesh.Materials"/>,
     /// loading any maps. On by default.</param>
     /// <exception cref="InvalidDataException">The file holds no usable geometry, or a map its materials name exists
     /// but cannot be decoded.</exception>
@@ -36,7 +36,7 @@ public static class ModelLoader
     /// Drawing it untextured instead would be a parse failure read as no data.
     /// </para>
     /// </remarks>
-    public static Mesh Load(string path, float radius = 0.5f, bool withUvs = false, bool withMaterials = true) =>
+    public static TriangleMesh Load(string path, float radius = 0.5f, bool withUvs = false, bool withMaterials = true) =>
         Extension(path) switch
         {
             ".stl" => StlLoader.Load(path, radius),
@@ -52,7 +52,7 @@ public static class ModelLoader
     #region Private methods
     private static string Extension(string path) => Path.GetExtension(path).ToLowerInvariant();
 
-    private static Mesh LoadObj(string path, float radius, bool withUvs, bool withMaterials)
+    private static TriangleMesh LoadObj(string path, float radius, bool withUvs, bool withMaterials)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
         var library = withMaterials ? ReadMaterialLibraries(path, directory) : [];

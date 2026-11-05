@@ -9,6 +9,7 @@ using ConsoleGUI.Input;
 using ConsoleGUI.Space;
 
 using Jumbee.Console;
+using Jumbee.Console.Mesh;
 using Jumbee.Console.SandboxDemo;
 
 /// <summary>
@@ -44,7 +45,9 @@ internal static class LoadChecks
         try
         {
             File.Copy(big, Path.Combine(dir, "a-dragon.obj"));
-            File.Copy(Path.Combine(models, "teapot.obj"), Path.Combine(dir, "b-teapot.obj"));
+            // The demo's models were renumbered (0_teapot.obj) so the viewer opens on them first; accept either name.
+            var teapot = new[] { "0_teapot.obj", "teapot.obj" }.Select(n => Path.Combine(models, n)).First(File.Exists);
+            File.Copy(teapot, Path.Combine(dir, "b-teapot.obj"));
             File.Copy(Path.Combine(models, "cali-bee.stl"), Path.Combine(dir, "c-bee.stl"));
             File.WriteAllText(Path.Combine(dir, "d-broken.obj"), "this is not a model\n");
             var set = ModelLibrary.Resolve(dir);

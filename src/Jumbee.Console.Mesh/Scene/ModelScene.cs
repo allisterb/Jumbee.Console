@@ -1,9 +1,9 @@
-namespace Jumbee.Console.SandboxDemo;
+namespace Jumbee.Console.Mesh;
 
 using System.Numerics;
 using System.Threading;
 
-/// <summary>Anything <see cref="SceneView"/> can read a snapshot from — a live simulation, or a static scene.</summary>
+/// <summary>Anything <c>SceneView</c> can read a snapshot from — a live simulation, or a static scene.</summary>
 public interface ISceneSource
 {
     /// <summary>The scene as it stands. Read every frame; must never be null.</summary>
@@ -63,7 +63,7 @@ public sealed class ModelScene : ISceneSource
     public int MeshId { get; private set; }
 
     /// <summary>The mesh currently shown.</summary>
-    public Mesh Mesh => Meshes.Get(MeshId);
+    public TriangleMesh Mesh => Meshes.Get(MeshId);
 
     /// <summary>Display name of the mesh currently shown.</summary>
     public string Name => Meshes.RegisteredCount > 0 ? Meshes.NameOf(MeshId) : "none";
